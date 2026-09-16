@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useState } from "react";
-import { App, Checkbox, Empty, Input, Modal, Popconfirm, Spin, Tag } from "antd";
+import { App, Checkbox, Drawer, Empty, Input, Popconfirm, Spin, Tag } from "antd";
 import { saveAs } from "file-saver";
 import { Download, Image as ImageIcon, Plus, Search, Trash2, Video } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -288,12 +288,12 @@ export const CanvasGenerationLogsTab = memo(function CanvasGenerationLogsTab({ o
                     <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("workbench.noLogs")} className="pt-16" />
                 )}
             </div>
-            <Modal
+            <Drawer
                 open={Boolean(preview)}
                 title={preview?.title || preview?.model || t("workbench.logs")}
-                onCancel={() => setPreview(null)}
-                footer={null}
-                width={720}
+                onClose={() => setPreview(null)}
+                placement="right"
+                size="large"
                 destroyOnHidden
             >
                 {preview ? (
@@ -306,7 +306,7 @@ export const CanvasGenerationLogsTab = memo(function CanvasGenerationLogsTab({ o
                         onDownloadFile={(file) => void handleDownload(preview, file)}
                     />
                 ) : null}
-            </Modal>
+            </Drawer>
         </div>
     );
 });
