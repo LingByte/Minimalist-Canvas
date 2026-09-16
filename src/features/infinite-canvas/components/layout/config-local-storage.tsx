@@ -1,11 +1,12 @@
 import { Alert, App, Button, Progress, Spin } from "antd";
 import type { TFunction } from "i18next";
-import { Database, FolderOpen, HardDrive, Layers3, RefreshCw, Trash2 } from "lucide-react";
+import { Database, FolderOpen, HardDrive, Layers3, RefreshCw, Trash2, FolderCog } from "lucide-react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { clearSyncedLocalData } from "@canvas/services/clear-synced-local-data";
 import { readLocalStorageUsage, type LocalStorageUsage } from "@canvas/services/local-storage-usage";
+import { useConfigStore } from "@canvas/stores/use-config-store";
 
 const storeLabelKeys: Record<string, string> = {
     app_state: "appState",
@@ -100,30 +101,73 @@ export function ConfigLocalStorage({ active }: { active: boolean }) {
                         showIcon
                         title={t("config.localStorage.dataPath")}
                         description={
-                            <div className="flex items-center gap-2">
-                                <code className="flex-1 text-xs break-all">{usage.dataPath}</code>
-                                <Button
-                                    size="small"
-                                    icon={<FolderOpen className="size-3.5" />}
-                                    onClick={async () => {
-                                        const path = usage.dataPath!;
-                                        try {
-                                            const { openPath } = await import("@tauri-apps/plugin-opener");
-                                            await openPath(path);
-                                        } catch (err) {
-                                            // Directory may not exist yet; try opening parent directory
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                    <code className="flex-1 text-xs break-all">{usage.dataPath}</code>
+                                    <Button
+                                        size="small"
+                                        icon={<FolderOpen className="size-3.5" />}
+                                        onClick={async () => {
+                                            const path = usage.dataPath!;
                                             try {
-                                                const parentPath = path.split("/").slice(0, -1).join("/") || "/Users";
                                                 const { openPath } = await import("@tauri-apps/plugin-opener");
-                                                await openPath(parentPath);
-                                            } catch (err2) {
-                                                message.error(t("config.localStorage.openPathFailed") + ": " + String(err));
+                                                await openPath(path);
+                                            } catch (err) {
+                                                try {
+                                                    const parentPath = path.split("/").slice(0, -1).join("/") || "/Users";
+                                                    const { openPath } = await import("@tauri-apps/plugin-opener");
+                                                    await openPath(parentPath);
+                                                } catch (err2) {
+                                                    message.error(t("config.localStorage.openPathFailed") + ": " + String(err));
+                                                }
                                             }
-                                        }
-                                    }}
-                                >
-                                    {t("config.localStorage.openPath")}
-                                </Button>
+                                        }}
+                                    >
+                                        {t("config.localStorage.openPath")}
+                                    </Button>
+                                </div>
+                                <div className="border-t border-stone-200 pt-2 dark:border-stone-700">
+                                    <div className="mb-1.5 text-xs font-medium text-stone-600 dark:text-stone-400">
+                                        {t("config.localStorage.customDataDir")}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <code className="flex-1 text-xs break-all text-stone-500 dark:text-stone-500">
+                                            {useConfigStore.getState().config.customDataDir || t("config.localStorage.customDataDirEmpty")}
+                                        </code>
+                                        <Button
+                                            size="small"
+                                            icon={<FolderCog className="size-3.5" />}
+                                            onClick={async () => {
+                                                try {
+                                                    const { open } = await import("@tauri-apps/plugin-dialog");
+                                                    const selected = await open({ directory: true, multiple: false });
+                                                    if (typeof selected === "string" && selected) {
+                                                        useConfigStore.getState().updateConfig("customDataDir", selected);
+                                                        message.success(t("config.localStorage.customDataDirSet"));
+                                                    }
+                                                } catch (err) {
+                                                    message.error(t("config.localStorage.openPathFailed") + ": " + String(err));
+                                                }
+                                            }}
+                                        >
+                                            {t("config.localStorage.changeDataDir")}
+                                        </Button>
+                                        {useConfigStore.getState().config.customDataDir ? (
+                                            <Button
+                                                size="small"
+                                                onClick={() => {
+                                                    useConfigStore.getState().updateConfig("customDataDir", "");
+                                                    message.success(t("config.localStorage.customDataDirReset"));
+                                                }}
+                                            >
+                                                {t("config.localStorage.resetDataDir")}
+                                            </Button>
+                                        ) : null}
+                                    </div>
+                                    <div className="mt-1 text-[11px] text-stone-400 dark:text-stone-500">
+                                        {t("config.localStorage.customDataDirHint")}
+                                    </div>
+                                </div>
                             </div>
                         }
                     />

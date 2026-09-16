@@ -55,6 +55,7 @@ export type AiConfig = {
     background: string;
     count: string;
     canvasImageCount: string;
+    customDataDir: string;
 };
 
 export type WebdavSyncConfig = {
@@ -112,6 +113,7 @@ export const defaultConfig: AiConfig = {
     background: "",
     count: "1",
     canvasImageCount: "1",
+    customDataDir: "",
 };
 
 export const defaultWebdavSyncConfig: WebdavSyncConfig = {
@@ -266,6 +268,7 @@ export const useConfigStore = create<ConfigStore>()(
                         videoWatermark: config.videoWatermark || "false",
                         imageResolution: config.imageResolution || "2K",
                         canvasImageCount: config.canvasImageCount || "1",
+                        customDataDir: config.customDataDir || "",
                     },
                 };
             },
