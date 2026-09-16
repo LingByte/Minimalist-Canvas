@@ -2353,7 +2353,7 @@
     "footer.columns.related.links.oneApi": "One API",
     "footer.columns.related.title": "相关项目",
     "footer.defaultCopyright": "版权所有。",
-    "footer.new\u0061pi.projectAttributionSuffix": "版权所有，由项目贡献者设计与开发。",
+    "footer.newapi.projectAttributionSuffix": "版权所有，由项目贡献者设计与开发。",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "对于 2025 年 5 月 10 日之后添加的渠道，在部署时无需从模型名称中移除 \".\"",
     "For private deployments, format: https://fastgpt.run/api/openapi": "对于私有部署，格式为：https://fastgpt.run/api/openapi",
     "For rein_ voice routing choose TTS / ASR / Mixed; for /v1/moderations choose Censor.": "rein_ 音色路由请选择 TTS / ASR / Mixed；/v1/moderations 请选择审核。",
@@ -5943,6 +5943,12 @@
     "Zero retention": "零数据保留",
     "Zhipu": "智谱",
     "Zhipu V4": "智谱 V4",
-    "Zoom": "缩放"
+    "Zoom": "缩放",
+    "API Token": "API 令牌",
+    "Top up": "充值",
+    "Joined": "注册于",
+    "Open profile on site": "打开站点个人中心",
+    "Token regenerated": "令牌已重新生成",
+    "Failed to regenerate token": "重新生成令牌失败"
   }
 }

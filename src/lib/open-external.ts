@@ -1,12 +1,9 @@
-import { useConfigStore } from "@canvas/stores/use-config-store";
+/** Fixed backend site for this desktop build — auth, prompts, assets APIs. */
+export const SITE_BASE_URL = "https://canvas.lingecho.com";
 
 /** Resolve the configured backend site base URL (no trailing slash). */
 export function siteBaseUrl(): string {
-    const { config } = useConfigStore.getState();
-    const explicit = (config.serverUrl || "").trim().replace(/\/+$/, "");
-    if (explicit) return explicit;
-    const channel = config.channels.find((c) => c.id === "default") || config.channels[0];
-    return (channel?.baseUrl || "").trim().replace(/\/+$/, "").replace(/\/v1$/, "");
+    return SITE_BASE_URL;
 }
 
 /** Build an absolute URL on the configured site, e.g. siteUrl("/profile"). */

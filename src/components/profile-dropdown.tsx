@@ -18,28 +18,25 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { Avatar, Button, Dropdown } from 'antd'
 import type { MenuProps } from 'antd'
-import { User, Wallet, LogOut, Settings, ExternalLink } from 'lucide-react'
+import { User, Wallet, LogOut } from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 
 import { SignOutDialog } from '@/components/sign-out-dialog'
 import useDialogState from '@/hooks/use-dialog'
-import { useIsSidebarModuleVisible } from '@/hooks/use-sidebar-config'
 import { useUserDisplay } from '@/hooks/use-user-display'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
-import { openSitePage } from '@/lib/open-external'
-import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
 
 const avatarFallbackClassName = 'font-semibold text-white'
 
 export function ProfileDropdown() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [open, setOpen] = useDialogState()
   const user = useAuthStore((state) => state.auth.user)
   const { displayName, roleLabel } = useUserDisplay(user)
-  const isSuperAdmin = user?.role === ROLE.SUPER_ADMIN
-  const isWalletVisible = useIsSidebarModuleVisible('/wallet')
   const avatarName = user?.username || displayName
   const avatarFallback = getUserAvatarFallback(avatarName)
   const avatarFallbackStyle = useMemo(
@@ -87,33 +84,15 @@ export function ProfileDropdown() {
         key: 'profile',
         icon: <User className='size-4' />,
         label: t('Profile'),
-        onClick: () => void openSitePage('/profile'),
+        onClick: () => navigate('/profile'),
       },
       {
-        key: 'console',
-        icon: <ExternalLink className='size-4' />,
-        label: t('Console'),
-        onClick: () => void openSitePage('/console'),
-      },
-    ]
-
-    if (isWalletVisible) {
-      menu.push({
         key: 'wallet',
         icon: <Wallet className='size-4' />,
         label: t('Wallet'),
-        onClick: () => void openSitePage('/wallet'),
-      })
-    }
-
-    if (isSuperAdmin) {
-      menu.push({
-        key: 'settings',
-        icon: <Settings className='size-4' />,
-        label: t('System Settings'),
-        onClick: () => void openSitePage('/system-settings/site/system-info'),
-      })
-    }
+        onClick: () => navigate('/profile'),
+      },
+    ]
 
     menu.push(
       { type: 'divider' },
@@ -131,8 +110,7 @@ export function ProfileDropdown() {
     avatarFallback,
     avatarFallbackStyle,
     displayName,
-    isSuperAdmin,
-    isWalletVisible,
+    navigate,
     roleLabel,
     setOpen,
     t,

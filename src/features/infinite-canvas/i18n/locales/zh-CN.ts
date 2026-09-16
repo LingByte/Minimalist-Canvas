@@ -372,6 +372,7 @@ export default {
     },
     topNav: {
         openMenu: "打开导航菜单",
+        openSite: "打开站点",
         menu: "导航菜单",
         navigation: "导航",
         openAgent: "打开 Agent",
@@ -417,7 +418,7 @@ export default {
         modalDescription: "渠道聚合、默认模型、同步与本地存储",
         serverUrl: {
             title: "服务器地址",
-            description: "后端 API 地址，用于提示词、资产等接口调用。留空则使用相对路径。",
+            description: "后端 API 地址，用于登录、提示词、资产等接口调用（内置固定）。",
         },
         tabs: {
             channels: "渠道",

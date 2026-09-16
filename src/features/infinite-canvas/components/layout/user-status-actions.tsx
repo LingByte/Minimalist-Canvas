@@ -1,11 +1,12 @@
 import type { CSSProperties, ReactNode } from "react";
 import { Dropdown, Tooltip } from "antd";
-import { Keyboard, MoreHorizontal, Puzzle, Settings2 } from "lucide-react";
+import { Globe, Keyboard, MoreHorizontal, Puzzle, Settings2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { ProfileDropdown } from "@/components/profile-dropdown";
 import { ThemeSwitch } from "@/components/theme-switch";
+import { openSitePage } from "@/lib/open-external";
 
 import { AnimatedThemeToggler } from "@canvas/components/ui/animated-theme-toggler";
 import { useCanvasHost } from "@canvas/integration/canvas-host-context";
@@ -177,6 +178,17 @@ export function UserStatusActions({
                     </button>
                 </Dropdown>
             ) : null}
+            <Tooltip title={t("topNav.openSite")} mouseEnterDelay={0.2}>
+                <button
+                    type="button"
+                    className={cn(naturalIconClass, desktopOnlyClass)}
+                    style={iconStyle}
+                    onClick={() => void openSitePage("/")}
+                    aria-label={t("topNav.openSite")}
+                >
+                    <Globe className="size-4" />
+                </button>
+            </Tooltip>
             <ProfileDropdown />
         </div>
     );

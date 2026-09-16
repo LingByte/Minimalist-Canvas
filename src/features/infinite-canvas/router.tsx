@@ -9,6 +9,7 @@ import ConfigPage from "@canvas/pages/config";
 import HomePage from "@canvas/pages/home";
 import ImagePage from "@canvas/pages/image";
 import NotFound from "@canvas/pages/not-found";
+import ProfilePage from "@canvas/pages/profile";
 import PromptsPage from "@canvas/pages/prompts";
 import VideoPage from "@canvas/pages/video";
 
@@ -45,6 +46,7 @@ const canvasRoutes: RouteObject[] = [
             { path: "canvas", element: <CanvasPage /> },
             { path: "canvas/:id", element: <CanvasProjectPage /> },
             { path: "config", element: <ConfigPage /> },
+            { path: "profile", element: <ProfilePage /> },
         ],
     },
     { path: "sign-in", element: <SignIn /> },

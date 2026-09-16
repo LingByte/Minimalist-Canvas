@@ -372,6 +372,7 @@ export default {
     },
     topNav: {
         openMenu: "Open navigation menu",
+        openSite: "Open site",
         menu: "Navigation menu",
         navigation: "Navigation",
         openAgent: "Open Agent",
@@ -417,7 +418,7 @@ export default {
         modalDescription: "Providers, default models, sync, and local storage",
         serverUrl: {
             title: "Server URL",
-            description: "Backend API address for prompts, assets, and other endpoints. Leave empty to use relative paths.",
+            description: "Backend API address for sign-in, prompts, assets, and other endpoints (built-in, fixed).",
         },
         tabs: {
             channels: "Providers",

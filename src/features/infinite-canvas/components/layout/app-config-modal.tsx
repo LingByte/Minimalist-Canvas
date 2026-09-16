@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { ModelPicker } from "@canvas/components/model-picker";
 import { ChannelEditorDrawer } from "@canvas/components/layout/channel-editor-drawer";
 import { ConfigLocalStorage } from "@canvas/components/layout/config-local-storage";
+import { SITE_BASE_URL } from "@/lib/open-external";
 import type { AppLocale } from "@canvas/i18n";
 import { exportAppConfig, importAppConfig } from "@canvas/services/config-file";
 import { syncAppDataToWebdav, type AppSyncDomainKey, type AppSyncProgressEvent } from "@canvas/services/app-sync";
@@ -211,11 +212,9 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                                 <div className="mb-4 rounded-lg border border-stone-200 p-4 dark:border-stone-800">
                                     <div className="mb-1 text-sm font-semibold">{t("config.serverUrl.title")}</div>
                                     <div className="mb-2 text-xs text-stone-500">{t("config.serverUrl.description")}</div>
-                                    <Input
-                                        placeholder="https://canvas.lingecho.com"
-                                        value={config.serverUrl}
-                                        onChange={(e) => updateConfig("serverUrl", e.target.value)}
-                                    />
+                                    <div className="rounded-md bg-stone-50 px-3 py-2 font-mono text-sm text-stone-700 dark:bg-stone-900 dark:text-stone-300">
+                                        {SITE_BASE_URL}
+                                    </div>
                                 </div>
                                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                                     <div className="text-xs text-stone-500">{t("config.channels.description")}</div>
