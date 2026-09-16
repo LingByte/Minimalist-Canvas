@@ -11,6 +11,12 @@
     "opener:allow-open-path",
     "opener:allow-reveal-item-in-dir",
     "opener:default",
-    "http:default"
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://canvas.lingecho.com/*" },
+        { "url": "https://*.lingecho.com/*" }
+      ]
+    }
   ]
 }
