@@ -1,4 +1,4 @@
-import { Outlet, createBrowserRouter, type RouteObject } from "react-router-dom";
+import { Outlet, createBrowserRouter, useSearchParams, type RouteObject } from "react-router-dom";
 
 import { AnalyticsTracker } from "@canvas/components/layout/analytics-tracker";
 import UserLayout from "@canvas/layouts/user-layout";
@@ -12,15 +12,29 @@ import NotFound from "@canvas/pages/not-found";
 import PromptsPage from "@canvas/pages/prompts";
 import VideoPage from "@canvas/pages/video";
 
+import { SignIn } from "@/features/auth/sign-in";
+import { SignUp } from "@/features/auth/sign-up";
+import { ForgotPassword } from "@/features/auth/forgot-password";
+import { Otp } from "@/features/auth/otp";
+import { ResetPasswordConfirm } from "@/features/auth/reset-password-confirm";
+import { RequireAuth } from "@/features/auth/require-auth";
+
 import { CANVAS_BASENAME } from "./integration/constants";
+
+function ResetPasswordConfirmPage() {
+    const [params] = useSearchParams();
+    return <ResetPasswordConfirm email={params.get("email") || undefined} token={params.get("token") || undefined} />;
+}
 
 const canvasRoutes: RouteObject[] = [
     {
         element: (
-            <UserLayout>
-                <AnalyticsTracker />
-                <Outlet />
-            </UserLayout>
+            <RequireAuth>
+                <UserLayout>
+                    <AnalyticsTracker />
+                    <Outlet />
+                </UserLayout>
+            </RequireAuth>
         ),
         children: [
             { index: true, element: <HomePage /> },
@@ -33,6 +47,11 @@ const canvasRoutes: RouteObject[] = [
             { path: "config", element: <ConfigPage /> },
         ],
     },
+    { path: "sign-in", element: <SignIn /> },
+    { path: "sign-up", element: <SignUp /> },
+    { path: "forgot-password", element: <ForgotPassword /> },
+    { path: "otp", element: <Otp /> },
+    { path: "reset-password", element: <ResetPasswordConfirmPage /> },
     { path: "*", element: <NotFound /> },
 ];
 
