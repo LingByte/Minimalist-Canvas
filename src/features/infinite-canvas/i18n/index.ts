@@ -3,6 +3,8 @@ import { initReactI18next, setI18n } from "react-i18next";
 
 import hostI18n from "@/i18n/config";
 import { normalizeInterfaceLanguage } from "@/i18n/languages";
+import enHost from "@/i18n/locales/en.json";
+import zhHost from "@/i18n/locales/zh.json";
 
 import enUS from "@canvas/i18n/locales/en-US";
 import zhCN from "@canvas/i18n/locales/zh-CN";
@@ -40,8 +42,10 @@ export const canvasI18n = createInstance();
 
 canvasI18n.use(initReactI18next).init({
     resources: {
-        "zh-CN": { translation: zhCN },
-        "en-US": { translation: enUS },
+        // Merge host flat keys (auth.*, Sign in, ...) with canvas nested keys.
+        // Canvas keys take precedence on top-level collisions.
+        "zh-CN": { translation: { ...zhHost.translation, ...zhCN } },
+        "en-US": { translation: { ...enHost.translation, ...enUS } },
     },
     lng: initialCanvasLocale(),
     fallbackLng: "zh-CN",

@@ -13,6 +13,7 @@ import { ClientRootInit } from "@canvas/components/layout/client-root-init";
 import canvasI18n, { type AppLocale } from "@canvas/i18n";
 import { getAntThemeConfig } from "@canvas/lib/app-theme";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
+import { useSystemConfig } from "@/hooks/use-system-config";
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -36,6 +37,8 @@ function AppProvidersInner({ children, embedded = false, rootId }: AppProvidersP
     const theme = useThemeStore((state) => state.theme);
     const dark = theme === "dark";
     const locale = i18n.resolvedLanguage as AppLocale;
+    // Load system config (system name, logo) once at app root so auth pages show them.
+    useSystemConfig({ autoLoad: !embedded });
 
     useEffect(() => {
         if (embedded) {

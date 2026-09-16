@@ -104,13 +104,9 @@ export function mapStatusDataToConfig(
 
 // Fetch system config from API
 async function fetchSystemConfig(): Promise<Partial<SystemConfig>> {
-  const response = await fetch('/api/status')
-  if (!response.ok) throw new Error('Failed to fetch status')
-
-  const data: StatusApiResponse = await response.json()
-  if (!data.success) throw new Error('API returned error')
-
-  return mapStatusDataToConfig(data.data)
+  const { getStatus } = await import('@/lib/api')
+  const data = await getStatus()
+  return mapStatusDataToConfig(data as StatusApiResponse['data'])
 }
 
 // Preload image and return cleanup function
