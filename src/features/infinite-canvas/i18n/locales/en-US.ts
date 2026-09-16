@@ -62,6 +62,10 @@ export default {
         loading: "Loading...",
         loadMore: "Scroll down to load more",
         end: "You've reached the end",
+        sync: "Sync",
+        syncSuccess: "Synced {{added}} new, {{total}} total",
+        syncFailed: "Sync failed",
+        lastSynced: "Last synced: {{time}}",
     },
     assets: {
         title: "My Assets",

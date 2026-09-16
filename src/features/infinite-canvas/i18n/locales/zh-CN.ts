@@ -62,6 +62,10 @@ export default {
         loading: "加载中...",
         loadMore: "继续向下滚动加载更多",
         end: "已经到底了",
+        sync: "同步",
+        syncSuccess: "同步完成，新增 {{added}} 条，共 {{total}} 条",
+        syncFailed: "同步失败",
+        lastSynced: "上次同步：{{time}}",
     },
     assets: {
         title: "我的资产",
