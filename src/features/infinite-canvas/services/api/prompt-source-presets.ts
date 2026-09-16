@@ -10,8 +10,8 @@ export type PromptSource = {
 };
 
 export const PROMPT_REGISTRY_HOMEPAGE = "https://github.com/yukkcat/image-prompts";
-// Produced by: go run ./scripts/mirror-prompt-sources
-const PROMPT_REGISTRY_SOURCE_BASE = "https://cdn.lingecho.com/prompt-sources";
+// Original source JSON files on jsDelivr (GitHub raw, no auth needed)
+const PROMPT_REGISTRY_SOURCE_BASE = "https://cdn.jsdelivr.net/gh/yukkcat/image-prompts@main/dist/sources";
 
 export function createPromptSource(source?: Partial<PromptSource>): PromptSource {
     return {

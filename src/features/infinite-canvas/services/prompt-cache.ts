@@ -3,7 +3,6 @@ import localforage from "localforage";
 import type { Prompt, PromptListResponse } from "./api/prompts";
 import { ALL_PROMPTS_OPTION } from "./api/prompts";
 import { DEFAULT_PROMPT_SOURCES } from "./api/prompt-source-presets";
-
 const PROMPT_SOURCE_BASE = "https://cdn.lingecho.com/prompt-sources";
 
 const store = localforage.createInstance({
