@@ -111,7 +111,14 @@ export function ConfigLocalStorage({ active }: { active: boolean }) {
                                             const { openPath } = await import("@tauri-apps/plugin-opener");
                                             await openPath(path);
                                         } catch (err) {
-                                            message.error(t("config.localStorage.openPathFailed") + ": " + String(err));
+                                            // Directory may not exist yet; try opening parent directory
+                                            try {
+                                                const parentPath = path.split("/").slice(0, -1).join("/") || "/Users";
+                                                const { openPath } = await import("@tauri-apps/plugin-opener");
+                                                await openPath(parentPath);
+                                            } catch (err2) {
+                                                message.error(t("config.localStorage.openPathFailed") + ": " + String(err));
+                                            }
                                         }
                                     }}
                                 >
