@@ -8,6 +8,7 @@ import { fetchPrompts, type Prompt } from "@canvas/services/api/prompts";
 import { navigationTools } from "@canvas/constant/navigation-tools";
 import i18n from "@canvas/i18n";
 import { cn } from "@canvas/lib/utils";
+import { SmartImage } from "@canvas/components/common/smart-image";
 
 function Highlighter({ action, color, children }: { action: "highlight" | "underline"; color: string; children?: ReactNode }) {
     return (
@@ -84,7 +85,7 @@ export default function IndexPage() {
                                     index === 3 && "md:col-span-2",
                                 )}
                             >
-                                <img src={item.coverUrl} alt={item.title} className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]" />
+                                <SmartImage src={item.coverUrl} alt={item.title} className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]" fallbackClassName="h-full w-full" />
                                 <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/35 to-transparent p-4 text-white">
                                     <div className="mb-2 flex flex-wrap gap-1.5">
                                         {item.tags.slice(0, 2).map((tag) => (

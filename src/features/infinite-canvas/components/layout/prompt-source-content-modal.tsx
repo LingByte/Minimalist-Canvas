@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PromptDetailDialog } from "@canvas/pages/prompts/components/prompt-detail-dialog";
+import { SmartImage } from "@canvas/components/common/smart-image";
 import { useCopyText } from "@canvas/hooks/use-copy-text";
 import { useAssetStore } from "@canvas/stores/use-asset-store";
 import { fetchAllSourcePrompts, type Prompt } from "@canvas/services/api/prompts";
@@ -72,7 +73,7 @@ export function PromptSourceContentModal({ source, onClose }: { source: PromptSo
                             title: t("config.promptSources.content.cover"),
                             dataIndex: "coverUrl",
                             width: 72,
-                            render: (coverUrl: string) => (coverUrl ? <img src={coverUrl} alt="" className="size-12 rounded object-cover" /> : <div className="size-12 rounded bg-stone-100 dark:bg-stone-800" />),
+                            render: (coverUrl: string) => <SmartImage src={coverUrl} alt="" className="size-12 rounded object-cover" fallbackClassName="size-12 rounded" fallbackIconClassName="size-4" />,
                         },
                         {
                             title: t("config.promptSources.content.titleColumn"),

@@ -4,6 +4,7 @@ import { Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "@canvas/lib/utils";
+import { SmartImage } from "@canvas/components/common/smart-image";
 import { useAssetStore, type Asset } from "@canvas/stores/use-asset-store";
 
 export type InsertAssetPayload = { kind: "text"; content: string; title: string } | { kind: "image"; dataUrl: string; title: string; storageKey?: string } | { kind: "video"; url: string; title: string; storageKey?: string; width?: number; height?: number };
@@ -37,7 +38,7 @@ function PickerCard({ title, kind, cover, onClick }: { title: string; kind: stri
             onClick={onClick}
         >
             {cover ? (
-                <img src={cover} alt={title} className="aspect-[4/3] w-full object-cover" />
+                <SmartImage src={cover} alt={title} className="aspect-[4/3] w-full object-cover" fallbackClassName="aspect-[4/3] w-full" fallbackIconClassName="size-6" />
             ) : (
                 <div className="flex aspect-[4/3] items-center justify-center bg-stone-100 p-3 text-center text-xs leading-5 text-stone-500 dark:bg-stone-800 dark:text-stone-400">{title}</div>
             )}

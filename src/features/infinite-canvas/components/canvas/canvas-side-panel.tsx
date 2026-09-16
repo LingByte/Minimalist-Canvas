@@ -11,6 +11,7 @@ import { canvasThemes, type CanvasTheme } from "@canvas/lib/canvas-theme";
 import { exportCanvasNodes } from "@canvas/lib/canvas/canvas-export";
 import { getNodeDefinition } from "@canvas/lib/canvas/node-registry";
 import { cn } from "@canvas/lib/utils";
+import { SmartImage } from "@canvas/components/common/smart-image";
 import { PromptDetailDialog } from "@canvas/pages/prompts/components/prompt-detail-dialog";
 import { fetchSourcePrompts, type Prompt } from "@canvas/services/api/prompts";
 import { uploadMediaFile } from "@canvas/services/file-storage";
@@ -537,10 +538,10 @@ function AssetCard({ asset, theme, onInsert, onRemove }: { asset: Asset; theme: 
 function AssetCover({ asset }: { asset: Asset }) {
     if (asset.kind === "text") return <div className="size-full overflow-hidden whitespace-pre-wrap break-words p-2.5 text-[11px] leading-snug opacity-80">{asset.data.content}</div>;
     if (asset.kind === "video") {
-        if (asset.coverUrl) return <img src={asset.coverUrl} alt="" className="size-full object-cover transition duration-300 group-hover:scale-[1.04]" />;
+        if (asset.coverUrl) return <SmartImage src={asset.coverUrl} alt="" className="size-full object-cover transition duration-300 group-hover:scale-[1.04]" fallbackClassName="size-full" fallbackIconClassName="size-5" />;
         return <video src={`${asset.data.url}#t=0.1`} muted playsInline preload="metadata" className="size-full object-cover transition duration-300 group-hover:scale-[1.04]" />;
     }
-    return <img src={asset.coverUrl || asset.data.dataUrl} alt="" className="size-full object-cover transition duration-300 group-hover:scale-[1.04]" />;
+    return <SmartImage src={asset.coverUrl || asset.data.dataUrl} alt="" className="size-full object-cover transition duration-300 group-hover:scale-[1.04]" fallbackClassName="size-full" fallbackIconClassName="size-5" />;
 }
 
 // ---------------------------------------------------------------------------
@@ -687,7 +688,7 @@ function PromptRow({ item, theme, onInsert, onView }: { item: Prompt; theme: Can
     return (
         <div className="group relative flex items-center gap-2.5 rounded-lg px-2 py-2 transition hover:bg-black/5 dark:hover:bg-white/5">
             {item.coverUrl ? (
-                <img src={item.coverUrl} alt="" className="size-10 shrink-0 rounded-md object-cover" loading="lazy" />
+                <SmartImage src={item.coverUrl} alt="" className="size-10 shrink-0 rounded-md object-cover" fallbackClassName="size-10 shrink-0 rounded-md" fallbackIconClassName="size-4" />
             ) : (
                 <span className="grid size-10 shrink-0 place-items-center rounded-md" style={{ background: theme.node.panel }}>
                     <FileText className="size-4 opacity-50" />

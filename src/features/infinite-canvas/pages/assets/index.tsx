@@ -8,6 +8,7 @@ import { useCopyText } from "@canvas/hooks/use-copy-text";
 import { formatBytes, readFileAsDataUrl } from "@canvas/lib/image-utils";
 import { uploadImage } from "@canvas/services/image-storage";
 import { cn } from "@canvas/lib/utils";
+import { SmartImage } from "@canvas/components/common/smart-image";
 import { useAssetStore, type Asset, type AssetKind, type ImageAsset } from "@canvas/stores/use-asset-store";
 import { exportAssets, readAssetPackage } from "./asset-transfer";
 
@@ -343,7 +344,7 @@ export default function AssetsPage() {
                         <Typography.Text strong>{t("assets.preview")}</Typography.Text>
                         <div className="mt-3 overflow-hidden rounded-lg border border-stone-200 bg-background dark:border-stone-800">
                             {coverUrl || imageDraft?.dataUrl ? (
-                                <img src={coverUrl || imageDraft?.dataUrl} alt="" className="aspect-[4/3] w-full object-cover" />
+                                <SmartImage src={coverUrl || imageDraft?.dataUrl} alt="" className="aspect-[4/3] w-full object-cover" fallbackClassName="aspect-[4/3] w-full" fallbackIconClassName="size-8" />
                             ) : (
                                 <div className="flex aspect-[4/3] items-center justify-center bg-stone-100 p-5 text-center text-sm text-stone-500 dark:bg-stone-900">{content || t("assets.noCover")}</div>
                             )}
@@ -411,7 +412,7 @@ function AssetCard({ asset, onOpen, onEdit, onCopy, onDownload, onDelete }: { as
             cover={
                 <button type="button" className="block w-full text-left" onClick={onOpen}>
                     {cover ? (
-                        <img src={cover} alt={asset.title} className="aspect-[4/3] w-full object-cover" />
+                        <SmartImage src={cover} alt={asset.title} className="aspect-[4/3] w-full object-cover" fallbackClassName="aspect-[4/3] w-full" fallbackIconClassName="size-8" />
                     ) : (
                         <div className="flex aspect-[4/3] items-center justify-center bg-stone-100 p-5 text-center text-sm leading-6 text-stone-600 dark:bg-stone-900 dark:text-stone-300">{asset.kind === "text" ? asset.data.content : t("assets.noCover")}</div>
                     )}
