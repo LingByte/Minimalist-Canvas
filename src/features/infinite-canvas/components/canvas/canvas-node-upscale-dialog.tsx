@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import { readImageMeta } from "@canvas/lib/image-utils";
 import { MAX_UPSCALE_LONG_EDGE, resolveUpscaleSize, type ImageUpscaleAlgorithm, type ImageUpscaleParams } from "@canvas/lib/canvas/canvas-image-data";
+import { SmartImage } from "@/components/smart-image";
 
 export type CanvasImageUpscaleParams = ImageUpscaleParams;
 
@@ -56,7 +57,7 @@ export function CanvasNodeUpscaleDialog({ dataUrl, open, onClose, onConfirm }: {
                 <div className="grid gap-6 md:grid-cols-[minmax(260px,1fr)_360px]">
                     <div className="rounded-xl border p-4">
                         <div className="grid min-h-[280px] place-items-center rounded-lg bg-black/5">
-                            <img src={dataUrl} alt="" className="max-h-[320px] max-w-full rounded-lg object-contain shadow-xl" draggable={false} />
+                            <SmartImage src={dataUrl} alt="" className="max-h-[320px] max-w-full rounded-lg object-contain shadow-xl" draggable={false} />
                         </div>
                         <div className="mt-3 flex items-center justify-between text-sm">
                             <span className="opacity-60">{t("canvas.editors.source")}</span>

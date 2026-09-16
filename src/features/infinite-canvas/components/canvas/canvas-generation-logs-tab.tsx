@@ -14,6 +14,7 @@ import {
 } from "@canvas/services/api/generation-assets";
 import { summarizeMirrorStatus } from "@/features/generation-assets/mirror-status";
 import { useGenerationLogsBadgeStore } from "@canvas/stores/use-generation-logs-badge-store";
+import { SmartImage } from "@/components/smart-image";
 
 import type { InsertAssetPayload } from "./asset-picker-modal";
 
@@ -351,7 +352,7 @@ function GenerationLogRow({
                         asset.kind === "video" ? (
                             <video src={`${cover}#t=0.1`} muted playsInline preload="metadata" className="size-12 shrink-0 rounded-md object-cover" />
                         ) : (
-                            <img src={cover} alt="" className="size-12 shrink-0 rounded-md object-cover" loading="lazy" />
+                            <SmartImage src={cover} alt="" className="size-12 shrink-0 rounded-md object-cover" fallbackIconClassName="size-4" />
                         )
                     ) : (
                         <span className="grid size-12 shrink-0 place-items-center rounded-md" style={{ background: theme.node.panel }}>
@@ -481,7 +482,7 @@ function GenerationLogPreview({
                             {asset.kind === "video" ? (
                                 <video src={file.url} controls className="max-h-80 w-full bg-black object-contain" />
                             ) : (
-                                <img src={file.url} alt="" className="w-full object-cover" />
+                                <SmartImage src={file.url} alt="" className="w-full object-cover" />
                             )}
                             <button
                                 type="button"

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button, Modal, Segmented, Slider } from "antd";
 import { RotateCcw, WandSparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { SmartImage } from "@/components/smart-image";
 
 export type CanvasImageAngleParams = {
     horizontalAngle: number;
@@ -38,7 +39,7 @@ export function CanvasNodeAngleDialog({ dataUrl, open, onClose, onConfirm }: { d
                     <div className="flex min-h-[300px] flex-col justify-between rounded-xl border p-4">
                         <div className="grid flex-1 place-items-center">
                             <div className="relative">
-                                <img src={dataUrl} alt="" className="size-48 rounded-2xl object-cover shadow-2xl" draggable={false} style={{ transform: previewTransform(params) }} />
+                                <SmartImage src={dataUrl} alt="" className="size-48 rounded-2xl object-cover shadow-2xl" draggable={false} style={{ transform: previewTransform(params) }} />
                                 <div className="absolute -bottom-6 left-1/2 h-10 w-24 -translate-x-1/2 rounded-full border bg-black/20 backdrop-blur" />
                             </div>
                         </div>

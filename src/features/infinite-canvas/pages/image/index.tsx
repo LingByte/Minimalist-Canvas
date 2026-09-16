@@ -22,6 +22,7 @@ import { useAssetStore } from "@canvas/stores/use-asset-store";
 import { useWorkbenchAgentStore } from "@canvas/stores/use-workbench-agent-store";
 import type { ReferenceImage } from "@canvas/types/image";
 import i18n from "@canvas/i18n";
+import { SmartImage } from "@/components/smart-image";
 
 type GeneratedImage = {
     id: string;
@@ -471,7 +472,7 @@ export default function ImagePage() {
                                 >
                                     {references.map((item, index) => (
                                         <div key={item.id} className="group relative size-20 shrink-0 overflow-hidden rounded-md border border-stone-200 dark:border-stone-800">
-                                            <img src={item.dataUrl} alt={item.name} className="size-full object-cover" />
+                                            <SmartImage src={item.dataUrl} alt={item.name} className="size-full object-cover" fallbackClassName="size-full" fallbackIconClassName="size-4" />
                                             <span className="absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">{imageReferenceLabel(index)}</span>
                                             <ReferenceOrderButtons index={index} total={references.length} onMove={(offset) => setReferences((value) => moveListItem(value, index, offset))} />
                                             <button
@@ -754,7 +755,7 @@ function LogCard({ log, selected, active, onSelectedChange, onClick }: { log: Ge
                         {thumbnails.length ? (
                             <div className="mt-2 flex gap-1 overflow-hidden">
                                 {thumbnails.map((image, index) => (
-                                    <img key={`${log.id}-${index}`} src={image} alt="" className="size-8 shrink-0 rounded-md object-cover" />
+                                    <SmartImage key={`${log.id}-${index}`} src={image} alt="" className="size-8 shrink-0 rounded-md object-cover" fallbackIconClassName="size-3" />
                                 ))}
                             </div>
                         ) : null}

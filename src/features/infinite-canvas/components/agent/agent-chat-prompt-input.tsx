@@ -11,6 +11,7 @@ import { useAgentSkillStore } from "@canvas/stores/use-agent-skill-store";
 import { useAgentStore, type AgentCanvasReference, type AgentSkillReference } from "@canvas/stores/use-agent-store";
 import { AgentCanvasReferencePreview, canvasReferenceIcon, canvasReferenceKindLabel } from "./agent-canvas-reference-preview";
 import { agentInlineTokenClass, agentInlineTokenMediaClass, agentReferenceMarker, agentSkillMarker, parseAgentInlineTokens } from "./agent-chat-inline-tokens";
+import { SmartImage } from "@/components/smart-image";
 
 type ComposerCommand = { type: "skill" | "resource"; query: string; length: number };
 type ComposerCandidate = { type: "skill"; skill: AgentSkillSummary } | { type: "resource"; reference: CanvasResourceReference };
@@ -270,7 +271,7 @@ function AgentCommandMenu({ command, candidates, activeIndex, loading, theme, on
 }
 
 function ReferencePreview({ reference }: { reference: CanvasResourceReference }) {
-    if (reference.kind === "image" && reference.previewUrl) return <img src={reference.previewUrl} alt="" className="size-9 rounded-md object-cover" />;
+    if (reference.kind === "image" && reference.previewUrl) return <SmartImage src={reference.previewUrl} alt="" className="size-9 rounded-md object-cover" fallbackIconClassName="size-4" />;
     const Icon = canvasReferenceIcon(reference.kind);
     return <span className="grid size-9 shrink-0 place-items-center"><Icon className="size-4" /></span>;
 }

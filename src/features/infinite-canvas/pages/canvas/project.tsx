@@ -78,6 +78,7 @@ import {
     sourceNodeReferenceImages,
 } from "@canvas/lib/canvas/canvas-generation-helpers";
 import { getNodeDefinition, isBuiltinNodeType as isBuiltinType, useNodeRegistryVersion } from "@canvas/lib/canvas/node-registry";
+import { SmartImage } from "@/components/smart-image";
 import { registerBuiltinNodes } from "@canvas/components/canvas/nodes/builtin-nodes";
 import { CanvasPluginManagerModal } from "@canvas/components/canvas/canvas-plugin-manager-modal";
 import { CanvasRefreshShell } from "@canvas/components/canvas/canvas-refresh-shell";
@@ -3914,7 +3915,7 @@ function InfiniteCanvasPage() {
                     width="auto"
                     styles={{ body: { padding: 0, display: "flex", justifyContent: "center", alignItems: "center", maxHeight: "80vh" } }}
                 >
-                    {previewContent ? <img src={previewContent} alt={previewNode?.title || t("assets.kinds.image")} style={{ maxWidth: "100%", maxHeight: "80vh", objectFit: "contain" }} /> : null}
+                    {previewContent ? <SmartImage src={previewContent} alt={previewNode?.title || t("assets.kinds.image")} style={{ maxWidth: "100%", maxHeight: "80vh", objectFit: "contain" }} /> : null}
                 </Modal>
 
                 <Modal

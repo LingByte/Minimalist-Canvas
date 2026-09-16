@@ -8,7 +8,7 @@ import { fetchPrompts, type Prompt } from "@canvas/services/api/prompts";
 import { navigationTools } from "@canvas/constant/navigation-tools";
 import i18n from "@canvas/i18n";
 import { cn } from "@canvas/lib/utils";
-import { SmartImage } from "@canvas/components/common/smart-image";
+import { SmartImage } from "@/components/smart-image";
 
 function Highlighter({ action, color, children }: { action: "highlight" | "underline"; color: string; children?: ReactNode }) {
     return (

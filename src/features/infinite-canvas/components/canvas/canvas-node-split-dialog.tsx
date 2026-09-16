@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { readImageMeta } from "@canvas/lib/image-utils";
 import type { ImageSplitParams } from "@canvas/lib/canvas/canvas-image-data";
 import { useImageEditorViewport } from "@canvas/components/canvas/use-image-editor-viewport";
+import { SmartImage } from "@/components/smart-image";
 
 export type CanvasImageSplitParams = ImageSplitParams;
 
@@ -165,7 +166,7 @@ export function CanvasNodeSplitDialog({ dataUrl, open, onClose, onConfirm }: { d
                             <div className="relative" style={viewport.contentStyle}>
                                 <div ref={previewRef} className="absolute isolate overflow-hidden rounded-lg bg-black [backface-visibility:hidden] [contain:layout_paint] [transform:translateZ(0)]" style={viewport.stageStyle}>
                                     <div className="absolute left-0 top-0 [backface-visibility:hidden]" style={viewport.mediaStyle}>
-                                        <img src={dataUrl} alt="" className="block h-full w-full object-contain" draggable={false} />
+                                        <SmartImage src={dataUrl} alt="" className="block h-full w-full object-contain" draggable={false} fallbackClassName="h-full w-full" />
                                     </div>
                                     <SplitGrid horizontalLines={horizontalLines} verticalLines={verticalLines} active={active} onPointerDown={startDrag} />
                                 </div>

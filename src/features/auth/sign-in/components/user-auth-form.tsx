@@ -55,6 +55,7 @@ import {
 import { getServerErrorMessageKey } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
+import { SmartImage } from '@/components/smart-image'
 
 export function UserAuthForm({
   className,
@@ -473,7 +474,7 @@ export function UserAuthForm({
           </p>
           {wechatQrCodeUrl ? (
             <div className='mb-4 flex justify-center'>
-              <img
+              <SmartImage
                 src={wechatQrCodeUrl}
                 alt={t('WeChat login QR code')}
                 className='h-40 w-40 rounded-md border object-contain'

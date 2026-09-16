@@ -2,7 +2,7 @@ import { Copy, FolderPlus } from "lucide-react";
 import { Button, Modal, Space, Tag } from "antd";
 import { useTranslation } from "react-i18next";
 
-import { SmartImage } from "@canvas/components/common/smart-image";
+import { SmartImage } from "@/components/smart-image";
 import { formatPromptDate, type Prompt } from "@canvas/services/api/prompts";
 
 export function PromptDetailDialog({ prompt, onClose, onCopy, onSaveAsset }: { prompt: Prompt | null; onClose: () => void; onCopy: (prompt: string) => void; onSaveAsset?: (prompt: Prompt) => void }) {

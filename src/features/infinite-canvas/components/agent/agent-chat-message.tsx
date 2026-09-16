@@ -11,6 +11,7 @@ import { useAgentStore, type AgentCanvasReference, type AgentPendingApproval, ty
 import { resolveAgentMessageAssetUrl, revealAgentLocalFile } from "@canvas/services/api/canvas-agent";
 import { AgentCanvasReferencePreview, canvasReferenceIcon, canvasReferenceKindLabel } from "./agent-canvas-reference-preview";
 import { agentInlineTokenClass, agentInlineTokenIconClass, agentInlineTokenMediaClass, agentReferenceMarker, parseAgentInlineTokens } from "./agent-chat-inline-tokens";
+import { SmartImage } from "@/components/smart-image";
 
 const streamdownProps = () => ({
     className: "agent-streamdown",
@@ -176,7 +177,7 @@ function AgentCanvasMention({ reference, theme }: { reference: AgentCanvasRefere
                 aria-label={i18n.t("agent.composer.mentions.referenceLabel", { kind: canvasReferenceKindLabel(reference.kind), title: reference.title })}
             >
                 {reference.kind === "image" && previewUrl
-                    ? <img src={previewUrl} alt="" className={agentInlineTokenMediaClass} />
+                    ? <SmartImage src={previewUrl} alt="" className={agentInlineTokenMediaClass} fallbackIconClassName="size-4" />
                     : <Icon className={agentInlineTokenIconClass} />}
                 <span>{agentReferenceMarker(reference)}</span>
             </span>
@@ -499,13 +500,14 @@ function AgentMessageAttachments({ attachments, alignRight }: { attachments: Age
         <>
             <div className={`mt-1.5 flex flex-wrap gap-1.5 ${alignRight ? "justify-end" : "justify-start"}`}>
                 {attachments.map((item) => (
-                    <img
+                    <SmartImage
                         key={item.id}
                         src={item.url}
                         alt={item.name}
                         title={t("agent.message.viewLarge")}
                         className="size-10 cursor-zoom-in rounded-lg object-cover"
                         draggable={false}
+                        fallbackIconClassName="size-4"
                         onClick={() => setPreviewUrl(item.url)}
                     />
                 ))}

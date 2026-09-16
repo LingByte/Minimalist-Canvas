@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 
 import { readImageMeta } from "@canvas/lib/image-utils";
 import { useImageEditorViewport } from "@canvas/components/canvas/use-image-editor-viewport";
+import { SmartImage } from "@/components/smart-image";
 
 export type CanvasImageMaskEditPayload = {
     prompt: string;
@@ -223,7 +224,7 @@ export function CanvasNodeMaskEditDialog({ dataUrl, open, onClose, onConfirm }: 
                                 <>
                                     <canvas ref={maskCanvasRef} width={image.width} height={image.height} className="hidden" />
                                     <div className="absolute left-0 top-0 [backface-visibility:hidden]" style={viewport.mediaStyle}>
-                                        <img src={dataUrl} alt="" className="absolute inset-0 block h-full w-full bg-transparent object-contain" draggable={false} />
+                                        <SmartImage src={dataUrl} alt="" className="absolute inset-0 block h-full w-full bg-transparent object-contain" draggable={false} fallbackClassName="absolute inset-0 h-full w-full" />
                                         <canvas
                                             ref={previewCanvasRef}
                                             width={image.width}

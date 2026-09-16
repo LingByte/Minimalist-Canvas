@@ -8,6 +8,7 @@ import { getNodeDefinition } from "@canvas/lib/canvas/node-registry";
 import { buildNodeContext } from "@canvas/lib/canvas/plugin-node-context";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { CanvasResourceMentionTextarea } from "./canvas-resource-mention-textarea";
+import { SmartImage } from "@/components/smart-image";
 import { CanvasNodeType, type CanvasNodeData, type CanvasNodeImage, type Position } from "@canvas/types/canvas";
 import type { CanvasNodeContext, CanvasPluginHost } from "@canvas/types/canvas-plugin";
 import type { CanvasResourceReference } from "@canvas/lib/canvas/canvas-resource-references";
@@ -1019,12 +1020,14 @@ function ImageContent({
                 : null}
             <div className="h-full w-full overflow-hidden rounded-3xl">
                 {primaryContent ? (
-                    <img
+                    <SmartImage
                         src={primaryContent}
                         alt={node.title}
                         draggable={false}
+                        loading="eager"
                         onDragStart={(event) => event.preventDefault()}
                         className={`pointer-events-none block h-full w-full select-none ${node.metadata?.freeResize ? "object-fill" : "object-contain"}`}
+                        fallbackClassName="h-full w-full"
                     />
                 ) : (
                     <ImageSlotStatus image={primaryImage} />
@@ -1096,7 +1099,7 @@ function ExpandedImageCard({ node, image, index, onView, onSetPrimary, onDuplica
                 onView();
             }}
         >
-            {image.content ? <img src={image.content} alt={node.title} draggable={false} className="pointer-events-none h-full w-full select-none object-contain" /> : <ImageSlotStatus image={image} />}
+            {image.content ? <SmartImage src={image.content} alt={node.title} draggable={false} loading="eager" className="pointer-events-none h-full w-full select-none object-contain" /> : <ImageSlotStatus image={image} />}
             {image.content ? (
                 <div className="absolute inset-x-2 top-2 flex items-center gap-1">
                     <button type="button" className="flex h-8 min-w-0 flex-1 items-center justify-center gap-1 rounded-lg border px-1.5 text-[10px] font-medium shadow-[0_6px_18px_rgba(15,23,42,.16)] backdrop-blur-md transition hover:scale-[1.02]" style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.toolbar.activeText }} title={t("common.download")} onClick={(event) => (event.stopPropagation(), onDownload())}>

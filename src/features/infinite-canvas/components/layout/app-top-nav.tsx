@@ -7,6 +7,7 @@ import { navigationTools, type NavigationToolSlug } from "@canvas/constant/navig
 import { AppConfigModal } from "@canvas/components/layout/app-config-modal";
 import { MobileNavDrawer } from "@canvas/components/layout/mobile-nav-drawer";
 import { UserStatusActions } from "@canvas/components/layout/user-status-actions";
+import { SmartImage } from "@/components/smart-image";
 import { useCanvasHost } from "@canvas/integration/canvas-host-context";
 import { cn } from "@canvas/lib/utils";
 import { useEffect, useRef, useState } from "react";
@@ -46,7 +47,7 @@ export function AppTopNav() {
                         <div className="flex min-w-0 items-center">
                             {embedded ? (
                                 <a href={homeHref} className="flex h-full shrink-0 items-center gap-2 text-sm font-semibold leading-none tracking-tight text-stone-950 transition hover:text-stone-600 dark:text-stone-100 dark:hover:text-stone-300">
-                                    <img src={logo} alt={brandName} className="h-7 w-auto max-w-[2.75rem] object-contain" />
+                                    <SmartImage src={logo} alt={brandName} className="h-7 w-auto max-w-[2.75rem] object-contain" fallbackIconClassName="size-4" />
                                     <span className="min-w-0">
                                         <span className="block truncate text-base font-medium">{brandName}</span>
                                         {brandTagline ? <span className="mt-0.5 block truncate text-[10px] font-medium tracking-[0.18em] text-stone-500 uppercase dark:text-stone-400">{brandTagline}</span> : null}
@@ -54,7 +55,7 @@ export function AppTopNav() {
                                 </a>
                             ) : (
                                 <Link to="/" className="flex h-full shrink-0 items-center gap-2 text-sm font-semibold leading-none tracking-tight text-stone-950 transition hover:text-stone-600 dark:text-stone-100 dark:hover:text-stone-300">
-                                    <img src={logo} alt={brandName} className="h-7 w-auto max-w-[2.75rem] object-contain" />
+                                    <SmartImage src={logo} alt={brandName} className="h-7 w-auto max-w-[2.75rem] object-contain" fallbackIconClassName="size-4" />
                                     <span className="text-base font-medium">{t("meta.title")}</span>
                                 </Link>
                             )}

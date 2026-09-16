@@ -7,6 +7,7 @@ import { canvasThemes } from "@canvas/lib/canvas-theme";
 import { isImeComposing, isPlainEnterKey } from "@canvas/lib/keyboard-event";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import type { CanvasResourceReference } from "@canvas/lib/canvas/canvas-resource-references";
+import { SmartImage } from "@/components/smart-image";
 
 type MentionState = {
     start: number;
@@ -280,7 +281,7 @@ function MentionMenu({ textarea, caretIndex, references, activeIndex, theme, onS
 }
 
 function ReferencePreview({ reference }: { reference: CanvasResourceReference }) {
-    if (reference.kind === "image" && reference.previewUrl) return <img src={reference.previewUrl} alt="" className="size-9 rounded-md object-cover" />;
+    if (reference.kind === "image" && reference.previewUrl) return <SmartImage src={reference.previewUrl} alt="" className="size-9 rounded-md object-cover" fallbackIconClassName="size-4" />;
     if (reference.kind === "video" && reference.previewUrl) return <video src={reference.previewUrl} className="size-9 rounded-md bg-black object-cover" muted preload="metadata" />;
     const Icon = reference.kind === "audio" ? Music2 : reference.kind === "video" ? Video : reference.kind === "image" ? ImageIcon : FileText;
     return (

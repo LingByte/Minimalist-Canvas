@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import i18n from "@canvas/i18n";
 import { cn } from "@canvas/lib/utils";
 import { modelDescriptionOf, modelOptionLabel, modelOptionName, selectableModelsByCapability, type AiConfig, type ModelCapability } from "@canvas/stores/use-config-store";
+import { SmartImage } from "@/components/smart-image";
 
 type ModelPickerProps = {
     config: AiConfig;
@@ -194,7 +195,7 @@ function ModelLabel({ config, model }: { config: AiConfig; model: string }) {
 
 function ModelIcon({ model }: { model: string }) {
     const icon = resolveModelIcon(modelOptionName(model));
-    return icon ? <img src={icon} alt="" className="size-4 shrink-0 dark:invert" /> : <Cpu className="size-4 shrink-0 opacity-70" />;
+    return icon ? <SmartImage src={icon} alt="" className="size-4 shrink-0 dark:invert" fallbackIconClassName="size-3" /> : <Cpu className="size-4 shrink-0 opacity-70" />;
 }
 
 function resolveModelIcon(model: string) {

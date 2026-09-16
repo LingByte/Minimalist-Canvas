@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PromptDetailDialog } from "@canvas/pages/prompts/components/prompt-detail-dialog";
-import { SmartImage } from "@canvas/components/common/smart-image";
+import { SmartImage } from "@/components/smart-image";
 import { useCopyText } from "@canvas/hooks/use-copy-text";
 import { useAssetStore } from "@canvas/stores/use-asset-store";
 import { fetchAllSourcePrompts, type Prompt } from "@canvas/services/api/prompts";

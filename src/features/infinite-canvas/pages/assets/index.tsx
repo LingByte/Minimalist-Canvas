@@ -8,7 +8,7 @@ import { useCopyText } from "@canvas/hooks/use-copy-text";
 import { formatBytes, readFileAsDataUrl } from "@canvas/lib/image-utils";
 import { uploadImage } from "@canvas/services/image-storage";
 import { cn } from "@canvas/lib/utils";
-import { SmartImage } from "@canvas/components/common/smart-image";
+import { SmartImage } from "@/components/smart-image";
 import { useAssetStore, type Asset, type AssetKind, type ImageAsset } from "@canvas/stores/use-asset-store";
 import { exportAssets, readAssetPackage } from "./asset-transfer";
 

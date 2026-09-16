@@ -25,6 +25,7 @@ import {
   DEFAULT_SYSTEM_TAGLINE,
 } from '@/lib/constants'
 import { cn } from '@/lib/utils'
+import { SmartImage } from "@/components/smart-image"
 
 type BrandIdentitySize = 'sm' | 'md' | 'lg'
 
@@ -95,10 +96,11 @@ export function BrandIdentity({
 
   return (
     <div className={cn('flex min-w-0 items-center', styles.gap, className)}>
-      <img
+      <SmartImage
         src={logo}
         alt={t('Logo')}
         className={cn('shrink-0 object-contain', styles.logo)}
+        fallbackIconClassName="size-4"
       />
       <div className='min-w-0 text-left leading-tight'>
         <div

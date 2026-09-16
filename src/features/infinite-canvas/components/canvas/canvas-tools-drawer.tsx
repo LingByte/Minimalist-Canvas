@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { cn } from "@canvas/lib/utils";
+import { SmartImage } from "@/components/smart-image";
 
 type ToolId = "home" | "image-compress" | "to-png";
 
@@ -567,7 +568,7 @@ function ToolWorkspace({
                                 className="flex gap-3 rounded-lg border p-2"
                                 style={{ borderColor: theme.toolbar.border, background: theme.toolbar.panel }}
                             >
-                                <img src={item.resultPreviewUrl || item.previewUrl} alt={item.name} className="size-16 shrink-0 rounded-md object-cover" />
+                                <SmartImage src={item.resultPreviewUrl || item.previewUrl} alt={item.name} className="size-16 shrink-0 rounded-md object-cover" fallbackIconClassName="size-4" />
                                 <div className="min-w-0 flex-1">
                                     <div className="truncate text-sm font-medium">{item.name}</div>
                                     <div className="mt-1 text-xs opacity-60">

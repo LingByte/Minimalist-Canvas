@@ -1,9 +1,8 @@
 import localforage from "localforage";
 
 import type { Prompt, PromptListResponse } from "./api/prompts";
-import { ALL_PROMPTS_OPTION } from "./api/prompts";
+import { ALL_PROMPTS_OPTION, fetchAllSourcePrompts, fetchPromptSources } from "./api/prompts";
 import { DEFAULT_PROMPT_SOURCES } from "./api/prompt-source-presets";
-const PROMPT_SOURCE_BASE = "https://cdn.lingecho.com/prompt-sources";
 
 const store = localforage.createInstance({
     name: "minimalist-canvas",
@@ -109,9 +108,22 @@ async function tauriFetch(url: string): Promise<Response> {
     }
 }
 
-/** Fetch all prompts from public CDN prompt-source JSON files (no auth needed). */
+/** Fetch all prompts from the configured backend API (auth attached via api interceptor). */
 async function fetchAllRemotePrompts(): Promise<Prompt[]> {
+    const sources = (await fetchPromptSources()).filter((source) => source.enabled);
     const allItems: Prompt[] = [];
+    for (const source of sources) {
+        try {
+            const items = await fetchAllSourcePrompts(source.id);
+            allItems.push(...items.map((item) => ({ ...item, sourceId: item.sourceId || source.id })));
+        } catch {
+            // skip failed sources
+        }
+    }
+    if (allItems.length) return allItems;
+
+    // Fallback: public registry JSONs keep prompts working when the API
+    // is unreachable (logged-out, offline dev, etc.).
     for (const source of DEFAULT_PROMPT_SOURCES) {
         try {
             const res = await tauriFetch(source.url);

@@ -4,7 +4,7 @@ import { Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "@canvas/lib/utils";
-import { SmartImage } from "@canvas/components/common/smart-image";
+import { SmartImage } from "@/components/smart-image";
 import { useAssetStore, type Asset } from "@canvas/stores/use-asset-store";
 
 export type InsertAssetPayload = { kind: "text"; content: string; title: string } | { kind: "image"; dataUrl: string; title: string; storageKey?: string } | { kind: "video"; url: string; title: string; storageKey?: string; width?: number; height?: number };

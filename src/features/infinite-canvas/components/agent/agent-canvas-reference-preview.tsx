@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import i18n from "@canvas/i18n";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
 import type { AgentCanvasReference } from "@canvas/stores/use-agent-store";
+import { SmartImage } from "@/components/smart-image";
 
 export function AgentCanvasReferencePreview({ reference, previewUrl, previewText, theme }: { reference: AgentCanvasReference; previewUrl?: string; previewText?: string; theme: (typeof canvasThemes)[keyof typeof canvasThemes] }) {
     const { t } = useTranslation();
@@ -14,7 +15,7 @@ export function AgentCanvasReferencePreview({ reference, previewUrl, previewText
                 <Icon className="size-4 shrink-0" style={{ color: theme.node.muted }} />
                 <span className="truncate text-sm font-medium">{reference.title}</span>
             </div>
-            {reference.kind === "image" && previewUrl ? <img src={previewUrl} alt={reference.title} className="max-h-64 w-full rounded-md object-contain" /> : null}
+            {reference.kind === "image" && previewUrl ? <SmartImage src={previewUrl} alt={reference.title} className="max-h-64 w-full rounded-md object-contain" /> : null}
             {reference.kind === "video" && previewUrl ? <video src={previewUrl} controls preload="metadata" className="max-h-64 w-full rounded-md" /> : null}
             {reference.kind === "audio" && previewUrl ? <audio src={previewUrl} controls preload="metadata" className="w-full" /> : null}
             {reference.kind === "text" && previewText ? (

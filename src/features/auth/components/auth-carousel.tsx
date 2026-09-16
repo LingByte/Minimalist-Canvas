@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next'
 
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { DEFAULT_LOGO } from '@/lib/constants'
+import { SmartImage } from '@/components/smart-image'
 
 const ICONS = [
   '/icons/icons/openai_icon_svg.svg',
@@ -160,12 +161,13 @@ export function AuthCarousel() {
           className='absolute top-1/2 left-1/2 z-20 flex h-[118px] w-[118px] items-center justify-center overflow-hidden rounded-full bg-white shadow-[0_0_0_12px_rgba(255,255,255,0.9),0_12px_40px_rgba(15,23,42,0.12)]'
           style={{ transform: 'translate(-50%, -50%)' }}
         >
-          <img
+          <SmartImage
             src={logoUrl}
             alt=''
-            aria-hidden='true'
             draggable={false}
+            loading="eager"
             className='h-full w-full object-contain p-4'
+            fallbackClassName='h-full w-full'
           />
         </div>
 
@@ -210,12 +212,13 @@ export function AuthCarousel() {
                 }}
                 className='absolute top-1/2 left-1/2 grid h-[44px] w-[44px] place-items-center rounded-full bg-white/88 shadow-[0_10px_24px_rgba(0,0,0,0.08)] backdrop-blur-xl transition-[box-shadow,background-color] duration-300 hover:bg-white hover:shadow-[0_14px_28px_rgba(22,113,239,0.22)]'
               >
-                <img
+                <SmartImage
                   src={icon}
                   alt=''
-                  aria-hidden='true'
                   draggable={false}
+                  loading="eager"
                   className='relative z-10 h-[70%] w-[70%] object-contain opacity-95 mix-blend-multiply'
+                  fallbackIconClassName='size-4'
                 />
               </div>
             )

@@ -8,6 +8,7 @@ import i18n from "@canvas/i18n";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import type { NodeGenerationInput } from "./canvas-node-generation";
+import { SmartImage } from "@/components/smart-image";
 
 type CanvasConfigComposerProps = {
     value: string;
@@ -223,7 +224,7 @@ function MentionMenu({ inputs, allInputs, activeIndex, theme, onSelect }: { inpu
 }
 
 function ResourcePreview({ input }: { input: NodeGenerationInput }) {
-    if (input.type === "image" && input.image) return <img src={input.image.dataUrl} alt="" className="size-9 rounded-md object-cover" />;
+    if (input.type === "image" && input.image) return <SmartImage src={input.image.dataUrl} alt="" className="size-9 rounded-md object-cover" fallbackIconClassName="size-4" />;
     if (input.type === "video" && input.video) return <video src={input.video.url} className="size-9 rounded-md bg-black object-cover" muted preload="metadata" />;
     const Icon = input.type === "audio" ? Music2 : input.type === "video" ? Video : input.type === "image" ? ImageIcon : FileText;
     return (

@@ -49,6 +49,7 @@ import { useStatus } from '@/hooks/use-status'
 import { isAuthBundle } from '@/lib/api'
 import { getServerErrorMessageKey } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
+import { SmartImage } from '@/components/smart-image'
 
 export function SignUpForm({
   className,
@@ -426,7 +427,7 @@ export function SignUpForm({
           </p>
           {wechatQrCodeUrl ? (
             <div className='mb-4 flex justify-center'>
-              <img
+              <SmartImage
                 src={wechatQrCodeUrl}
                 alt={t('WeChat login QR code')}
                 className='h-40 w-40 rounded-md border object-contain'

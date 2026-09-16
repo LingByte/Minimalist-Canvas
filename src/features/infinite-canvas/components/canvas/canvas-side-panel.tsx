@@ -11,7 +11,7 @@ import { canvasThemes, type CanvasTheme } from "@canvas/lib/canvas-theme";
 import { exportCanvasNodes } from "@canvas/lib/canvas/canvas-export";
 import { getNodeDefinition } from "@canvas/lib/canvas/node-registry";
 import { cn } from "@canvas/lib/utils";
-import { SmartImage } from "@canvas/components/common/smart-image";
+import { SmartImage } from "@/components/smart-image";
 import { PromptDetailDialog } from "@canvas/pages/prompts/components/prompt-detail-dialog";
 import { fetchSourcePrompts, type Prompt } from "@canvas/services/api/prompts";
 import { uploadMediaFile } from "@canvas/services/file-storage";
@@ -151,7 +151,7 @@ export function CanvasSidePanel({ nodes, selectedNodeIds, onFocusNode, onPreview
                         title={t("canvas.projects")}
                         aria-label={t("canvas.projects")}
                     >
-                        <img src={logo} alt={brandName} className="h-7 w-7 shrink-0 rounded object-contain" />
+                        <SmartImage src={logo} alt={brandName} className="h-7 w-7 shrink-0 rounded object-contain" fallbackIconClassName="size-4" />
                         <span className="min-w-0 truncate text-sm font-semibold tracking-tight">{brandName}</span>
                     </button>
                 </div>
@@ -323,7 +323,7 @@ function CanvasNodesTab({ nodes, selectedNodeIds, onFocusNode, onPreviewNode, th
                                     <button type="button" onClick={() => (selectMode ? toggleChecked(node.id) : onFocusNode(node.id))} className="flex min-w-0 flex-1 items-center gap-3 px-2 py-2 text-left" title={selectMode ? undefined : t("canvas.sidePanel.focusNode")}>
                                         {selectMode ? <CheckMark checked={isChecked} theme={theme} /> : null}
                                         <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-md">
-                                            {isImage ? <img src={node.metadata!.content} alt={node.title} className="size-full object-cover" /> : <Icon className="size-5 opacity-60" />}
+                                            {isImage ? <SmartImage src={node.metadata!.content} alt={node.title} className="size-full object-cover" fallbackClassName="size-full" fallbackIconClassName="size-4" /> : <Icon className="size-5 opacity-60" />}
                                         </span>
                                         <span className="min-w-0 flex-1 space-y-0.5">
                                             <span className="block truncate text-sm font-medium leading-snug">{node.title || getNodeDefinition(node.type)?.title || t("canvas.node.untitled")}</span>
