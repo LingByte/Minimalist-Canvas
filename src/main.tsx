@@ -15,15 +15,26 @@ import { createCanvasRouter } from "@canvas/router";
 const router = createCanvasRouter("/");
 
 // Apply configured server URL to axios baseURL for /api/* calls
-function applyServerUrl(url: string) {
-    api.defaults.baseURL = (url || "").trim().replace(/\/+$/, "");
+// Falls back to the default channel's baseUrl when serverUrl is empty
+function resolveServerUrl(): string {
+    const { config } = useConfigStore.getState();
+    const explicit = (config.serverUrl || "").trim().replace(/\/+$/, "");
+    if (explicit) return explicit;
+    const channel = config.channels.find((c) => c.id === "default") || config.channels[0];
+    return (channel?.baseUrl || "").trim().replace(/\/+$/, "").replace(/\/v1$/, "");
+}
+function applyServerUrl() {
+    api.defaults.baseURL = resolveServerUrl();
 }
 let prevServerUrl = useConfigStore.getState().config.serverUrl;
-applyServerUrl(prevServerUrl);
+let prevChannelBaseUrl = useConfigStore.getState().config.channels[0]?.baseUrl || "";
+applyServerUrl();
 useConfigStore.subscribe((state) => {
-    if (state.config.serverUrl !== prevServerUrl) {
+    const channelBaseUrl = state.config.channels.find((c) => c.id === "default")?.baseUrl || state.config.channels[0]?.baseUrl || "";
+    if (state.config.serverUrl !== prevServerUrl || channelBaseUrl !== prevChannelBaseUrl) {
         prevServerUrl = state.config.serverUrl;
-        applyServerUrl(prevServerUrl);
+        prevChannelBaseUrl = channelBaseUrl;
+        applyServerUrl();
     }
 });
 

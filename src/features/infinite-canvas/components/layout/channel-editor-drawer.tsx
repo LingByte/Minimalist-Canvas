@@ -69,7 +69,7 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
     return (
         <Drawer
             open={open}
-            styles={{ content: { width: 640 } }}
+            styles={{ section: { width: 640 } }}
             title={t("config.channelEditor.title")}
             onClose={onClose}
             mask={!tourActive}

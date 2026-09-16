@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import axios, { type AxiosRequestConfig } from 'axios'
+import axios, { type AxiosAdapter, type AxiosRequestConfig, type AxiosResponse } from 'axios'
 import { t } from 'i18next'
 import { toast } from 'sonner'
 
@@ -41,12 +41,65 @@ declare module 'axios' {
 
 export type ApiRequestConfig = AxiosRequestConfig
 
+// Check if running inside Tauri (desktop app)
+const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+
+// Custom axios adapter using Tauri HTTP plugin (bypasses CORS)
+function createTauriAdapter(): AxiosAdapter | null {
+  if (!isTauri) return null
+  return async (config) => {
+    const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
+    const url = buildFullURL(config)
+    const method = (config.method || 'get').toUpperCase()
+    const headers: Record<string, string> = {}
+    if (config.headers) {
+      for (const [key, value] of Object.entries(config.headers)) {
+        if (value != null) headers[key] = String(value)
+      }
+    }
+    const init: RequestInit = { method, headers }
+    if (config.data && method !== 'GET' && method !== 'HEAD') {
+      init.body = typeof config.data === 'string' ? config.data : JSON.stringify(config.data)
+      if (!headers['Content-Type'] && typeof config.data === 'object') {
+        headers['Content-Type'] = 'application/json'
+      }
+    }
+    const res = await tauriFetch(url, init)
+    const responseHeaders: Record<string, string> = {}
+    res.headers.forEach((value, key) => { responseHeaders[key] = value })
+    const responseData = await res.text()
+    let parsed: unknown = responseData
+    const contentType = responseHeaders['content-type'] || ''
+    if (contentType.includes('application/json') || responseData.startsWith('{') || responseData.startsWith('[')) {
+      try { parsed = JSON.parse(responseData) } catch { /* keep text */ }
+    }
+    return {
+      data: parsed,
+      status: res.status,
+      statusText: res.statusText,
+      headers: responseHeaders,
+      config,
+      request: {},
+    } as AxiosResponse
+  }
+}
+
+function buildFullURL(config: AxiosRequestConfig): string {
+  const baseURL = config.baseURL || ''
+  const url = config.url || ''
+  if (/^https?:\/\//.test(url)) return url
+  return `${baseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`
+}
+
+const tauriAdapter = createTauriAdapter()
+
 export const api = axios.create({
   baseURL: '',
   withCredentials: true,
   headers: {
     'Cache-Control': 'no-store',
   },
+  ...(tauriAdapter ? { adapter: tauriAdapter } : {}),
 })
 
 const inFlightGet = new Map<string, Promise<unknown>>()
