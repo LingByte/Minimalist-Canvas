@@ -383,7 +383,7 @@ export default {
     },
     home: {
         promptError: "Failed to load prompts",
-        description: "Generate, connect, and reshape <content>images, text, and graphics</content> in <canvas>Minimalist Canvas</canvas>, turning one-off generations into a continuous creative process.",
+        description: "Generate, connect, and reshape <content>images, text, and graphics</content>, turning one-off generations into a continuous creative process.",
         start: "Get started",
         openCanvas: "Open canvas",
         showcaseTitle: "Keep every great result",
@@ -411,6 +411,10 @@ export default {
         invalidFile: "The settings file format is invalid",
         description: "Providers, model selection, sync, and local storage",
         modalDescription: "Providers, default models, sync, and local storage",
+        serverUrl: {
+            title: "Server URL",
+            description: "Backend API address for prompts, assets, and other endpoints. Leave empty to use relative paths.",
+        },
         tabs: {
             channels: "Providers",
             preferences: "Preferences",

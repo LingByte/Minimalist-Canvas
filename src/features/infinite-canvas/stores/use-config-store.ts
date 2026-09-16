@@ -32,6 +32,7 @@ export type AiConfig = {
     apiKey: string;
     apiFormat: ApiCallFormat;
     channels: ModelChannel[];
+    serverUrl: string;
     model: string;
     imageModel: string;
     videoModel: string;
@@ -77,6 +78,7 @@ export const defaultConfig: AiConfig = {
     baseUrl: DEFAULT_OPENAI_BASE_URL,
     apiKey: "",
     apiFormat: "openai",
+    serverUrl: "",
     channels: [
         {
             id: "default",

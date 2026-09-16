@@ -208,6 +208,15 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                         label: <span data-tour="config-tab-channels">{t("config.tabs.channels")}</span>,
                         children: (
                             <div data-tour="config-channels-panel">
+                                <div className="mb-4 rounded-lg border border-stone-200 p-4 dark:border-stone-800">
+                                    <div className="mb-1 text-sm font-semibold">{t("config.serverUrl.title")}</div>
+                                    <div className="mb-2 text-xs text-stone-500">{t("config.serverUrl.description")}</div>
+                                    <Input
+                                        placeholder="https://canvas.lingecho.com"
+                                        value={config.serverUrl}
+                                        onChange={(e) => updateConfig("serverUrl", e.target.value)}
+                                    />
+                                </div>
                                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                                     <div className="text-xs text-stone-500">{t("config.channels.description")}</div>
                                     <Button type="primary" icon={<Plus className="size-4" />} onClick={addChannel}>

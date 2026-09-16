@@ -383,7 +383,7 @@ export default {
     },
     home: {
         promptError: "获取提示词失败",
-        description: "在 <canvas>至简画布</canvas> 中生成、连接和重组 <content>图片、文字与图形</content>，让创作从单次生成变成连续推演。",
+        description: "生成、连接和重组 <content>图片、文字与图形</content>，让创作从单次生成变成连续推演。",
         start: "开始使用",
         openCanvas: "打开画布",
         showcaseTitle: "沉淀每一次好结果",
@@ -411,6 +411,10 @@ export default {
         invalidFile: "配置文件格式不正确",
         description: "渠道聚合、模型选择、同步与本地存储",
         modalDescription: "渠道聚合、默认模型、同步与本地存储",
+        serverUrl: {
+            title: "服务器地址",
+            description: "后端 API 地址，用于提示词、资产等接口调用。留空则使用相对路径。",
+        },
         tabs: {
             channels: "渠道",
             preferences: "偏好设置",
