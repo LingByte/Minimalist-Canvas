@@ -18,8 +18,8 @@ const defaultValue: CanvasHostContextValue = {
   embedded: false,
   homeHref: '/',
   logo: '/logo.png',
-  brandName: 'Infinite Canvas',
-  brandTagline: '',
+  brandName: '至简画布',
+  brandTagline: 'MINIMALIST CANVAS',
 }
 
 const CanvasHostContext = createContext<CanvasHostContextValue>(defaultValue)

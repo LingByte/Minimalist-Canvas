@@ -54,13 +54,7 @@ export function AppTopNav() {
                                 </a>
                             ) : (
                                 <Link to="/" className="flex h-full shrink-0 items-center gap-2 text-sm font-semibold leading-none tracking-tight text-stone-950 transition hover:text-stone-600 dark:text-stone-100 dark:hover:text-stone-300">
-                                    <span
-                                        className="size-5 shrink-0 bg-current"
-                                        style={{
-                                            mask: `url(${logo}) center / contain no-repeat`,
-                                            WebkitMask: `url(${logo}) center / contain no-repeat`,
-                                        }}
-                                    />
+                                    <img src={logo} alt={brandName} className="h-7 w-auto max-w-[2.75rem] object-contain" />
                                     <span className="text-base font-medium">{t("meta.title")}</span>
                                 </Link>
                             )}

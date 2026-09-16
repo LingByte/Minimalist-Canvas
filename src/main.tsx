@@ -7,7 +7,10 @@ import { RouterProvider } from "react-router-dom";
 import { AppProviders } from "@canvas/components/layout/app-providers";
 import "@/i18n/config";
 import { initAnalytics } from "@canvas/lib/analytics";
-import { router } from "@canvas/router";
+import { createCanvasRouter } from "@canvas/router";
+
+// Desktop app runs at root, not under /canvas
+const router = createCanvasRouter("/");
 
 initAnalytics();
 

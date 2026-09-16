@@ -8,6 +8,6 @@ export const LOCAL_PLUGIN_REGISTRY_URL = "/plugins/official-plugins.json";
 /** Upstream official registry on jsDelivr; used when local manifest is empty. */
 export const REMOTE_PLUGIN_REGISTRY_URL =
     import.meta.env.VITE_PLUGIN_REGISTRY_FALLBACK_URL ||
-    "https://cdn.jsdelivr.net/gh/basketikun/infinite-canvas@plugins-dist/official-plugins.json";
+    "https://cdn.jsdelivr.net/gh/LingByte/Minimalist-Canvas@plugins-dist/official-plugins.json";
 
 export const PLUGIN_REGISTRY_URL = import.meta.env.VITE_PLUGIN_REGISTRY_URL || LOCAL_PLUGIN_REGISTRY_URL;
