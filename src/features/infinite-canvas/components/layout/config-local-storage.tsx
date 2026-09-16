@@ -106,15 +106,16 @@ export function ConfigLocalStorage({ active }: { active: boolean }) {
                                     size="small"
                                     icon={<FolderOpen className="size-3.5" />}
                                     onClick={async () => {
+                                        const path = usage.dataPath!;
                                         try {
-                                            const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
-                                            await revealItemInDir(usage.dataPath!);
-                                        } catch (err) {
+                                            const { openPath } = await import("@tauri-apps/plugin-opener");
+                                            await openPath(path);
+                                        } catch (err1) {
                                             try {
-                                                const { openPath } = await import("@tauri-apps/plugin-opener");
-                                                await openPath(usage.dataPath!);
-                                            } catch {
-                                                message.error(t("config.localStorage.openPathFailed"));
+                                                const { open } = await import("@tauri-apps/plugin-shell");
+                                                await open(path);
+                                            } catch (err2) {
+                                                message.error(t("config.localStorage.openPathFailed") + ": " + String(err2 || err1));
                                             }
                                         }
                                     }}
