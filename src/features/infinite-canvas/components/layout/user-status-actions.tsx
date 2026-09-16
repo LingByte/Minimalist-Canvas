@@ -8,8 +8,6 @@ import { ProfileDropdown } from "@/components/profile-dropdown";
 import { ThemeSwitch } from "@/components/theme-switch";
 
 import { AnimatedThemeToggler } from "@canvas/components/ui/animated-theme-toggler";
-import { GitHubLink } from "@canvas/components/layout/github-link";
-import { VersionReleaseModal } from "@canvas/components/layout/version-release-modal";
 import { useCanvasHost } from "@canvas/integration/canvas-host-context";
 import { changeAppLocale, type AppLocale } from "@canvas/i18n";
 import { cn } from "@canvas/lib/utils";
@@ -151,13 +149,6 @@ export function UserStatusActions({
                         aria-label={t(theme === "dark" ? "topNav.lightTheme" : "topNav.darkTheme")}
                         title={t(theme === "dark" ? "topNav.lightTheme" : "topNav.darkTheme")}
                     />
-                    <span className={cn(desktopOnlyClass)}>
-                        <VersionReleaseModal style={iconStyle} />
-                    </span>
-                    <GitHubLink
-                        className={cn("bg-transparent hover:bg-transparent dark:hover:bg-transparent", "size-8 text-base", desktopOnlyClass)}
-                        style={iconStyle}
-                    />
                 </>
             )}
             {onOpenShortcuts ? (
@@ -186,7 +177,7 @@ export function UserStatusActions({
                     </button>
                 </Dropdown>
             ) : null}
-            {embedded ? <ProfileDropdown /> : null}
+            <ProfileDropdown />
         </div>
     );
 }

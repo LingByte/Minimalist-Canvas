@@ -18,8 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { Avatar, Button, Dropdown } from 'antd'
 import type { MenuProps } from 'antd'
-import { useNavigate } from '@tanstack/react-router'
-import { User, Wallet, LogOut, Settings } from 'lucide-react'
+import { User, Wallet, LogOut, Settings, ExternalLink } from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -28,6 +27,7 @@ import useDialogState from '@/hooks/use-dialog'
 import { useIsSidebarModuleVisible } from '@/hooks/use-sidebar-config'
 import { useUserDisplay } from '@/hooks/use-user-display'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
+import { openSitePage } from '@/lib/open-external'
 import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -35,7 +35,6 @@ const avatarFallbackClassName = 'font-semibold text-white'
 
 export function ProfileDropdown() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const [open, setOpen] = useDialogState()
   const user = useAuthStore((state) => state.auth.user)
   const { displayName, roleLabel } = useUserDisplay(user)
@@ -88,7 +87,13 @@ export function ProfileDropdown() {
         key: 'profile',
         icon: <User className='size-4' />,
         label: t('Profile'),
-        onClick: () => navigate({ to: '/profile' }),
+        onClick: () => void openSitePage('/profile'),
+      },
+      {
+        key: 'console',
+        icon: <ExternalLink className='size-4' />,
+        label: t('Console'),
+        onClick: () => void openSitePage('/console'),
       },
     ]
 
@@ -97,7 +102,7 @@ export function ProfileDropdown() {
         key: 'wallet',
         icon: <Wallet className='size-4' />,
         label: t('Wallet'),
-        onClick: () => navigate({ to: '/wallet' }),
+        onClick: () => void openSitePage('/wallet'),
       })
     }
 
@@ -106,11 +111,7 @@ export function ProfileDropdown() {
         key: 'settings',
         icon: <Settings className='size-4' />,
         label: t('System Settings'),
-        onClick: () =>
-          navigate({
-            to: '/system-settings/site/$section',
-            params: { section: 'system-info' },
-          }),
+        onClick: () => void openSitePage('/system-settings/site/system-info'),
       })
     }
 
@@ -132,7 +133,6 @@ export function ProfileDropdown() {
     displayName,
     isSuperAdmin,
     isWalletVisible,
-    navigate,
     roleLabel,
     setOpen,
     t,
