@@ -110,13 +110,8 @@ export function ConfigLocalStorage({ active }: { active: boolean }) {
                                         try {
                                             const { openPath } = await import("@tauri-apps/plugin-opener");
                                             await openPath(path);
-                                        } catch (err1) {
-                                            try {
-                                                const { open } = await import("@tauri-apps/plugin-shell");
-                                                await open(path);
-                                            } catch (err2) {
-                                                message.error(t("config.localStorage.openPathFailed") + ": " + String(err2 || err1));
-                                            }
+                                        } catch (err) {
+                                            message.error(t("config.localStorage.openPathFailed") + ": " + String(err));
                                         }
                                     }}
                                 >
