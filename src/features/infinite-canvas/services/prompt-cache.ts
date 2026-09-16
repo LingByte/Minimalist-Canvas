@@ -103,22 +103,15 @@ export async function filterCachedPrompts(params: {
 async function fetchAllRemotePrompts(): Promise<Prompt[]> {
     const items: Prompt[] = [];
     let page = 1;
+    const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
     for (;;) {
         const params = new URLSearchParams();
         params.set("p", String(page));
         params.set("page_size", "100");
         const url = `${PROMPT_REGISTRY_BASE}/api/prompts/?${params.toString()}`;
-        let body: any;
-        try {
-            const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
-            const res = await tauriFetch(url);
-            if (!res.ok) throw new Error(`Failed to fetch prompts: ${res.status}`);
-            body = await res.json();
-        } catch {
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(`Failed to fetch prompts: ${res.status}`);
-            body = await res.json();
-        }
+        const res = await tauriFetch(url);
+        if (!res.ok) throw new Error(`Failed to fetch prompts: ${res.status}`);
+        const body = await res.json();
         if (!body?.success || !body.data) throw new Error(body?.message || "Failed to load prompts");
         const pageItems: Prompt[] = (body.data.items || []).map((item: Prompt) => ({
             ...item,

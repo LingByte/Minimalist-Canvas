@@ -27,6 +27,13 @@
     },
     "macOSPrivateApi": true
   },
+  "plugins": {
+    "http": {
+      "scope": {
+        "allow": ["https://canvas.lingecho.com/*", "https://*.lingecho.com/*"]
+      }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": ["dmg", "app"],
