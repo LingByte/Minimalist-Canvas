@@ -437,6 +437,8 @@ export default {
             quotaProgress: "Site quota usage",
             mainDatabase: "Minimalist Canvas data",
             dataPath: "Data storage location",
+            openPath: "Open",
+            openPathFailed: "Failed to open directory",
             records: "{{count}} records",
             refresh: "Refresh usage",
             readFailed: "Failed to read local storage",

@@ -1,6 +1,6 @@
 import { Alert, App, Button, Progress, Spin } from "antd";
 import type { TFunction } from "i18next";
-import { Database, HardDrive, Layers3, RefreshCw, Trash2 } from "lucide-react";
+import { Database, FolderOpen, HardDrive, Layers3, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -92,19 +92,40 @@ export function ConfigLocalStorage({ active }: { active: boolean }) {
                         </Button>
                     </div>
                 </div>
-                <Alert className="mt-4" type="info" showIcon message={t("config.localStorage.syncedHint")} />
+                <Alert className="mt-4" type="info" showIcon title={t("config.localStorage.syncedHint")} />
                 {usage?.dataPath ? (
                     <Alert
                         className="mt-4"
                         type="info"
                         showIcon
-                        message={t("config.localStorage.dataPath")}
+                        title={t("config.localStorage.dataPath")}
                         description={
-                            <code className="text-xs break-all">{usage.dataPath}</code>
+                            <div className="flex items-center gap-2">
+                                <code className="flex-1 text-xs break-all">{usage.dataPath}</code>
+                                <Button
+                                    size="small"
+                                    icon={<FolderOpen className="size-3.5" />}
+                                    onClick={async () => {
+                                        try {
+                                            const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
+                                            await revealItemInDir(usage.dataPath!);
+                                        } catch (err) {
+                                            try {
+                                                const { openPath } = await import("@tauri-apps/plugin-opener");
+                                                await openPath(usage.dataPath!);
+                                            } catch {
+                                                message.error(t("config.localStorage.openPathFailed"));
+                                            }
+                                        }
+                                    }}
+                                >
+                                    {t("config.localStorage.openPath")}
+                                </Button>
+                            </div>
                         }
                     />
                 ) : null}
-                {error ? <Alert className="mt-4" type="error" showIcon message={t("config.localStorage.readFailed")} description={error} /> : null}
+                {error ? <Alert className="mt-4" type="error" showIcon title={t("config.localStorage.readFailed")} description={error} /> : null}
                 {!usage && loading ? (
                     <div className="flex min-h-48 items-center justify-center"><Spin /></div>
                 ) : usage ? (
