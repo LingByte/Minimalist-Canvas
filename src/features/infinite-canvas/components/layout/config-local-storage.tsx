@@ -93,6 +93,17 @@ export function ConfigLocalStorage({ active }: { active: boolean }) {
                     </div>
                 </div>
                 <Alert className="mt-4" type="info" showIcon message={t("config.localStorage.syncedHint")} />
+                {usage?.dataPath ? (
+                    <Alert
+                        className="mt-4"
+                        type="info"
+                        showIcon
+                        message={t("config.localStorage.dataPath")}
+                        description={
+                            <code className="text-xs break-all">{usage.dataPath}</code>
+                        }
+                    />
+                ) : null}
                 {error ? <Alert className="mt-4" type="error" showIcon message={t("config.localStorage.readFailed")} description={error} /> : null}
                 {!usage && loading ? (
                     <div className="flex min-h-48 items-center justify-center"><Spin /></div>

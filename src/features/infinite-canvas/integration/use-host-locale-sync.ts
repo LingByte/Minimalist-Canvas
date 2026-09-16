@@ -11,7 +11,7 @@ export function useHostLocaleSync(enabled: boolean) {
     const syncFromHost = (lng?: string) => {
       const locale = hostToCanvasLocale(lng || i18next.language)
       if (canvasI18n.language !== locale) {
-        localStorage.setItem('infinite-canvas:locale', locale)
+        localStorage.setItem('minimalist-canvas:locale', locale)
         void canvasI18n.changeLanguage(locale)
       }
     }

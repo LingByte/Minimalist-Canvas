@@ -9,7 +9,7 @@ import zhCN from "@canvas/i18n/locales/zh-CN";
 
 export type AppLocale = "zh-CN" | "en-US";
 
-const LOCALE_STORAGE_KEY = "infinite-canvas:locale";
+const LOCALE_STORAGE_KEY = "minimalist-canvas:locale";
 
 function hostToCanvasLocale(hostLang?: string | null): AppLocale {
     const normalized = normalizeInterfaceLanguage(hostLang);

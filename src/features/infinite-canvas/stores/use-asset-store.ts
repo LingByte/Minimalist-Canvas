@@ -35,7 +35,7 @@ type AssetStore = {
     cleanupImages: (extra?: unknown) => void;
 };
 
-const ASSET_STORE_KEY = "infinite-canvas:asset_store";
+const ASSET_STORE_KEY = "minimalist-canvas:asset_store";
 
 function queueSyncUserAsset(asset: Asset) {
     void import("@canvas/services/user-asset-sync").then(({ syncUserAsset }) => syncUserAsset(asset));

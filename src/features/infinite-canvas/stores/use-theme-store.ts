@@ -16,6 +16,6 @@ export const useThemeStore = create<ThemeStore>()(
             theme: "light",
             setTheme: (theme) => set({ theme }),
         }),
-        { name: "infinite-canvas:theme_store" },
+        { name: "minimalist-canvas:theme_store" },
     ),
 );

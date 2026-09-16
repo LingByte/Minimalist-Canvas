@@ -1,10 +1,23 @@
 export type IndexedDbStoreUsage = { name: string; records: number; bytes: number };
 export type IndexedDbDatabaseUsage = { name: string; version: number; bytes: number; stores: IndexedDbStoreUsage[] };
-export type LocalStorageUsage = { usage: number; quota: number; contentBytes: number; databases: IndexedDbDatabaseUsage[] };
+export type LocalStorageUsage = { usage: number; quota: number; contentBytes: number; databases: IndexedDbDatabaseUsage[]; dataPath: string };
+
+async function readDataPath(): Promise<string> {
+    try {
+        const { appDataDir } = await import("@tauri-apps/api/path");
+        return await appDataDir();
+    } catch {
+        return "";
+    }
+}
 
 export async function readLocalStorageUsage(): Promise<LocalStorageUsage> {
-    const [estimate, database] = await Promise.all([navigator.storage.estimate(), readDatabaseUsage("infinite-canvas")]);
-    return { usage: estimate.usage!, quota: estimate.quota!, contentBytes: database.bytes, databases: [database] };
+    const [estimate, database, dataPath] = await Promise.all([
+        navigator.storage.estimate(),
+        readDatabaseUsage("minimalist-canvas"),
+        readDataPath(),
+    ]);
+    return { usage: estimate.usage!, quota: estimate.quota!, contentBytes: database.bytes, databases: [database], dataPath };
 }
 
 function readDatabaseUsage(name: string) {

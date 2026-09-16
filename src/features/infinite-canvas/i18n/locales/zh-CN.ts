@@ -436,6 +436,7 @@ export default {
             quotaHint: "由浏览器动态分配",
             quotaProgress: "站点配额使用率",
             mainDatabase: "至简画布 主数据",
+            dataPath: "数据存储位置",
             records: "{{count}} 条",
             refresh: "刷新统计",
             readFailed: "读取本地存储失败",

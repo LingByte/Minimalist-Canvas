@@ -1437,7 +1437,7 @@ function acquireAgentClientId() {
         }
         while (true) {
             const acquired = await new Promise<boolean>((resolve, reject) => {
-                void navigator.locks.request(`infinite-canvas-agent:${clientId}`, { ifAvailable: true }, async (lock) => {
+                void navigator.locks.request(`minimalist-canvas-agent:${clientId}`, { ifAvailable: true }, async (lock) => {
                     if (!lock) return resolve(false);
                     resolve(true);
                     await new Promise<void>(() => undefined);

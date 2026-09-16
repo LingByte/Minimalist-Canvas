@@ -14,9 +14,9 @@ export type UploadedImage = {
     mimeType: string;
 };
 
-const store = localforage.createInstance({ name: "infinite-canvas", storeName: "image_files" });
-const imageLogStore = localforage.createInstance({ name: "infinite-canvas", storeName: "image_generation_logs" });
-const videoLogStore = localforage.createInstance({ name: "infinite-canvas", storeName: "video_generation_logs" });
+const store = localforage.createInstance({ name: "minimalist-canvas", storeName: "image_files" });
+const imageLogStore = localforage.createInstance({ name: "minimalist-canvas", storeName: "image_generation_logs" });
+const videoLogStore = localforage.createInstance({ name: "minimalist-canvas", storeName: "video_generation_logs" });
 const objectUrls = new Map<string, string>();
 
 export async function uploadImage(input: string | Blob): Promise<UploadedImage> {

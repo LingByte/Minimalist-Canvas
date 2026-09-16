@@ -3,8 +3,8 @@ import localforage from "localforage";
 import { hydrateUserAssetsFromServer } from "@canvas/services/user-asset-sync";
 import { useAssetStore } from "@canvas/stores/use-asset-store";
 
-const imageLogStore = localforage.createInstance({ name: "infinite-canvas", storeName: "image_generation_logs" });
-const videoLogStore = localforage.createInstance({ name: "infinite-canvas", storeName: "video_generation_logs" });
+const imageLogStore = localforage.createInstance({ name: "minimalist-canvas", storeName: "image_generation_logs" });
+const videoLogStore = localforage.createInstance({ name: "minimalist-canvas", storeName: "video_generation_logs" });
 
 export type ClearedSyncedLocalData = {
   imageLogs: number;

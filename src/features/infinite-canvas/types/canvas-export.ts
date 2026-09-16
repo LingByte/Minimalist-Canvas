@@ -1,7 +1,7 @@
 import type { CanvasProject } from "@canvas/stores/canvas/use-canvas-store";
 
 export type CanvasExportFile = {
-    app: "infinite-canvas";
+    app: "minimalist-canvas";
     version: 3;
     exportedAt: string;
     projects: CanvasProjectExportItem[];

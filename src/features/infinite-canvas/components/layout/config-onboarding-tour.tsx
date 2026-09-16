@@ -84,7 +84,7 @@ export function ConfigOnboardingTour() {
         if (!forceTour && hasSeenConfigOnboarding()) return;
         if (forceTour) {
             try {
-                window.localStorage.removeItem("infinite-canvas:config-onboarding-v1");
+                window.localStorage.removeItem("minimalist-canvas:config-onboarding-v1");
             } catch {
                 // ignore
             }
