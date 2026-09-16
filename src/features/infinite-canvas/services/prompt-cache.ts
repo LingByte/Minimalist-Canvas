@@ -2,8 +2,9 @@ import localforage from "localforage";
 
 import type { Prompt, PromptListResponse } from "./api/prompts";
 import { ALL_PROMPTS_OPTION } from "./api/prompts";
+import { DEFAULT_PROMPT_SOURCES } from "./api/prompt-source-presets";
 
-const PROMPT_REGISTRY_BASE = "https://canvas.lingecho.com";
+const PROMPT_SOURCE_BASE = "https://cdn.lingecho.com/prompt-sources";
 
 const store = localforage.createInstance({
     name: "minimalist-canvas",
@@ -100,38 +101,43 @@ export async function filterCachedPrompts(params: {
     };
 }
 
-async function fetchAllRemotePrompts(): Promise<Prompt[]> {
-    const items: Prompt[] = [];
-    let page = 1;
-    const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
-    for (;;) {
-        const params = new URLSearchParams();
-        params.set("p", String(page));
-        params.set("page_size", "100");
-        const url = `${PROMPT_REGISTRY_BASE}/api/prompts/?${params.toString()}`;
-        const res = await tauriFetch(url);
-        if (!res.ok) throw new Error(`Failed to fetch prompts: ${res.status}`);
-        const body = await res.json();
-        if (!body?.success || !body.data) throw new Error(body?.message || "Failed to load prompts");
-        const pageItems: Prompt[] = (body.data.items || []).map((item: Prompt) => ({
-            ...item,
-            description: item.description || "",
-            referenceImageUrls: Array.isArray(item.referenceImageUrls) ? item.referenceImageUrls : [],
-            tags: Array.isArray(item.tags) ? item.tags : [],
-            preview: item.preview || "",
-            createdAt: item.createdAt || "",
-            updatedAt: item.updatedAt || "",
-            coverUrl: item.coverUrl || "",
-            githubUrl: item.githubUrl || "",
-            category: item.category || "",
-            sourceId: item.sourceId || "",
-        }));
-        items.push(...pageItems);
-        if (pageItems.length < 100) break;
-        page++;
-        if (page > 50) break;
+async function tauriFetch(url: string): Promise<Response> {
+    try {
+        const { fetch } = await import("@tauri-apps/plugin-http");
+        return await fetch(url);
+    } catch {
+        return await fetch(url);
     }
-    return items;
+}
+
+/** Fetch all prompts from public CDN prompt-source JSON files (no auth needed). */
+async function fetchAllRemotePrompts(): Promise<Prompt[]> {
+    const allItems: Prompt[] = [];
+    for (const source of DEFAULT_PROMPT_SOURCES) {
+        try {
+            const res = await tauriFetch(source.url);
+            if (!res.ok) continue;
+            const items: Prompt[] = await res.json();
+            for (const item of items) {
+                allItems.push({
+                    ...item,
+                    description: item.description || "",
+                    referenceImageUrls: Array.isArray(item.referenceImageUrls) ? item.referenceImageUrls : [],
+                    tags: Array.isArray(item.tags) ? item.tags : [],
+                    preview: item.preview || "",
+                    createdAt: item.createdAt || "",
+                    updatedAt: item.updatedAt || "",
+                    coverUrl: item.coverUrl || "",
+                    githubUrl: item.githubUrl || "",
+                    category: item.category || "",
+                    sourceId: item.sourceId || source.id,
+                });
+            }
+        } catch {
+            // skip failed sources
+        }
+    }
+    return allItems;
 }
 
 export async function syncPromptsFromRemote(): Promise<{ added: number; total: number }> {

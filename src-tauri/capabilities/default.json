@@ -14,7 +14,7 @@
     {
       "identifier": "http:default",
       "allow": [
-        { "url": "https://canvas.lingecho.com/*" },
+        { "url": "https://cdn.lingecho.com/*" },
         { "url": "https://*.lingecho.com/*" }
       ]
     }
