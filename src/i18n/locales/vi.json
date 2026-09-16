@@ -5949,6 +5949,9 @@
     "Joined": "Tham gia",
     "Open profile on site": "Mở hồ sơ trên trang web",
     "Token regenerated": "Đã tạo lại token",
-    "Failed to regenerate token": "Không thể tạo lại token"
+    "Failed to regenerate token": "Không thể tạo lại token",
+    "Sign out of this device": "Đăng xuất khỏi thiết bị này",
+    "Manage API tokens for upstream calls": "Quản lý token API cho các lệnh gọi",
+    "Security settings, sessions, and more on the web": "Cài đặt bảo mật, phiên đăng nhập và hơn nữa trên web"
   }
 }

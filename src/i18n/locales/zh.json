@@ -5949,6 +5949,9 @@
     "Joined": "注册于",
     "Open profile on site": "打开站点个人中心",
     "Token regenerated": "令牌已重新生成",
-    "Failed to regenerate token": "重新生成令牌失败"
+    "Failed to regenerate token": "重新生成令牌失败",
+    "Sign out of this device": "退出当前设备登录",
+    "Manage API tokens for upstream calls": "管理上游调用的 API 令牌",
+    "Security settings, sessions, and more on the web": "安全设置、登录会话等更多功能在网页端"
   }
 }

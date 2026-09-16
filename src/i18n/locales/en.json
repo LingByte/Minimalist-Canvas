@@ -5949,6 +5949,9 @@
     "Joined": "Joined",
     "Open profile on site": "Open profile on site",
     "Token regenerated": "Token regenerated",
-    "Failed to regenerate token": "Failed to regenerate token"
+    "Failed to regenerate token": "Failed to regenerate token",
+    "Sign out of this device": "Sign out of this device",
+    "Manage API tokens for upstream calls": "Manage API tokens for upstream calls",
+    "Security settings, sessions, and more on the web": "Security settings, sessions, and more on the web"
   }
 }

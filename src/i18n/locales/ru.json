@@ -5949,6 +5949,9 @@
     "Joined": "Регистрация",
     "Open profile on site": "Открыть профиль на сайте",
     "Token regenerated": "Токен перегенерирован",
-    "Failed to regenerate token": "Не удалось перегенерировать токен"
+    "Failed to regenerate token": "Не удалось перегенерировать токен",
+    "Sign out of this device": "Выйти на этом устройстве",
+    "Manage API tokens for upstream calls": "Управление API-токенами для вызовов",
+    "Security settings, sessions, and more on the web": "Настройки безопасности, сессии и другое — на сайте"
   }
 }

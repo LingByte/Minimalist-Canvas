@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { Avatar, Button, Dropdown } from 'antd'
 import type { MenuProps } from 'antd'
-import { User, Wallet, LogOut } from 'lucide-react'
+import { User, KeyRound, LogOut } from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -87,10 +87,10 @@ export function ProfileDropdown() {
         onClick: () => navigate('/profile'),
       },
       {
-        key: 'wallet',
-        icon: <Wallet className='size-4' />,
-        label: t('Wallet'),
-        onClick: () => navigate('/profile'),
+        key: 'keys',
+        icon: <KeyRound className='size-4' />,
+        label: t('API Keys'),
+        onClick: () => navigate('/keys'),
       },
     ]
 

@@ -5949,6 +5949,9 @@
     "Joined": "Inscrit le",
     "Open profile on site": "Ouvrir le profil sur le site",
     "Token regenerated": "Jeton régénéré",
-    "Failed to regenerate token": "Échec de la régénération du jeton"
+    "Failed to regenerate token": "Échec de la régénération du jeton",
+    "Sign out of this device": "Se déconnecter de cet appareil",
+    "Manage API tokens for upstream calls": "Gérer les jetons API pour les appels en amont",
+    "Security settings, sessions, and more on the web": "Paramètres de sécurité, sessions et plus sur le web"
   }
 }

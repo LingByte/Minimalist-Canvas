@@ -14,6 +14,7 @@ import PromptsPage from "@canvas/pages/prompts";
 import VideoPage from "@canvas/pages/video";
 
 import { SignIn } from "@/features/auth/sign-in";
+import { ApiKeys } from "@/features/keys";
 import { SignUp } from "@/features/auth/sign-up";
 import { ForgotPassword } from "@/features/auth/forgot-password";
 import { Otp } from "@/features/auth/otp";
@@ -47,6 +48,7 @@ const canvasRoutes: RouteObject[] = [
             { path: "canvas/:id", element: <CanvasProjectPage /> },
             { path: "config", element: <ConfigPage /> },
             { path: "profile", element: <ProfilePage /> },
+            { path: "keys", element: <ApiKeys /> },
         ],
     },
     { path: "sign-in", element: <SignIn /> },

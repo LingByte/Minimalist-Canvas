@@ -5949,6 +5949,9 @@
     "Joined": "登録日",
     "Open profile on site": "サイトでプロフィールを開く",
     "Token regenerated": "トークンを再生成しました",
-    "Failed to regenerate token": "トークンの再生成に失敗しました"
+    "Failed to regenerate token": "トークンの再生成に失敗しました",
+    "Sign out of this device": "このデバイスからサインアウト",
+    "Manage API tokens for upstream calls": "上流呼び出し用の API トークンを管理",
+    "Security settings, sessions, and more on the web": "セキュリティ設定、セッションなどはウェブ版で"
   }
 }

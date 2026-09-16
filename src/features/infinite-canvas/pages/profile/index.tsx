@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { App, Avatar, Button, Card, Divider, Skeleton, Tag } from "antd";
+import { App, Avatar, Button, Card, Skeleton, Tag } from "antd";
 import { useTranslation } from "react-i18next";
 import {
     CalendarDays,
-    Copy,
     ExternalLink,
     KeyRound,
     LogOut,
     Mail,
-    RefreshCw,
     ShieldCheck,
     Wallet,
 } from "lucide-react";
@@ -16,12 +14,13 @@ import {
 import { SignOutDialog } from "@/components/sign-out-dialog";
 import useDialogState from "@/hooks/use-dialog";
 import { useUserDisplay } from "@/hooks/use-user-display";
-import { api, getSelf } from "@/lib/api";
+import { getSelf } from "@/lib/api";
 import { getUserAvatarFallback, getUserAvatarStyle } from "@/lib/avatar";
 import { formatCompactNumber, formatQuota } from "@/lib/format";
 import { openSitePage } from "@/lib/open-external";
 import { getRoleLabel } from "@/lib/roles";
 import { useAuthStore, type AuthUser } from "@/stores/auth-store";
+import { useNavigate } from "react-router-dom";
 
 type SelfProfile = AuthUser & {
     created_time?: number;
@@ -31,6 +30,7 @@ type SelfProfile = AuthUser & {
 export default function ProfilePage() {
     const { t } = useTranslation();
     const { message } = App.useApp();
+    const navigate = useNavigate();
     const authUser = useAuthStore((state) => state.auth.user);
     const [profile, setProfile] = useState<SelfProfile | null>(null);
     const [loading, setLoading] = useState(true);
@@ -41,48 +41,17 @@ export default function ProfilePage() {
     const avatarFallback = getUserAvatarFallback(avatarName);
     const avatarStyle = useMemo(() => getUserAvatarStyle(avatarName), [avatarName]);
 
-    const loadProfile = async () => {
-        setLoading(true);
-        try {
-            const res = await getSelf();
-            if (res?.success && res.data) {
-                setProfile(res.data as SelfProfile);
-            }
-        } catch {
-            // fall back to auth-store user
-        } finally {
-            setLoading(false);
-        }
-    };
-
     useEffect(() => {
-        void loadProfile();
+        setLoading(true);
+        getSelf()
+            .then((res) => {
+                if (res?.success && res.data) setProfile(res.data as SelfProfile);
+            })
+            .catch(() => {
+                // fall back to auth-store user
+            })
+            .finally(() => setLoading(false));
     }, []);
-
-    const copyToken = async () => {
-        const token = profile?.access_token;
-        if (!token) return;
-        try {
-            await navigator.clipboard.writeText(token);
-            message.success(t("Copied"));
-        } catch {
-            message.error(t("Copy failed"));
-        }
-    };
-
-    const regenerateToken = async () => {
-        try {
-            const res = await api.get("/api/user/token", { params: { refresh: true } });
-            if (res.data?.success && res.data.data) {
-                setProfile((prev) => (prev ? { ...prev, access_token: String(res.data.data) } : prev));
-                message.success(t("Token regenerated"));
-            } else {
-                message.error(res.data?.message || t("Failed to regenerate token"));
-            }
-        } catch {
-            message.error(t("Failed to regenerate token"));
-        }
-    };
 
     const stats = [
         { label: t("Balance"), value: formatQuota(profile?.quota ?? authUser?.quota ?? 0) },
@@ -90,44 +59,74 @@ export default function ProfilePage() {
         { label: t("Requests"), value: formatCompactNumber(profile?.request_count ?? authUser?.request_count ?? 0) },
     ];
 
+    const quickLinks = [
+        {
+            key: "keys",
+            icon: <KeyRound className="size-4" />,
+            label: t("API Keys"),
+            description: t("Manage API tokens for upstream calls"),
+            onClick: () => navigate("/keys"),
+        },
+        {
+            key: "site-profile",
+            icon: <ExternalLink className="size-4" />,
+            label: t("Open profile on site"),
+            description: t("Security settings, sessions, and more on the web"),
+            onClick: () => void openSitePage("/profile"),
+        },
+        {
+            key: "sign-out",
+            icon: <LogOut className="size-4" />,
+            label: t("Sign out"),
+            description: t("Sign out of this device"),
+            danger: true,
+            onClick: () => setSignOutOpen(true),
+        },
+    ];
+
     return (
         <main className="h-full overflow-y-auto bg-background">
-            <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6 sm:gap-6 sm:px-6 sm:py-8">
-                {/* Header */}
-                <Card>
-                    <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
-                        <Avatar size={72} style={avatarStyle} className="shrink-0 text-2xl font-semibold text-white">
+            <div className="mx-auto grid w-full max-w-4xl gap-4 px-4 py-6 sm:gap-5 sm:px-6 sm:py-8 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.8fr)] lg:items-start">
+                {/* User info */}
+                <Card className="lg:row-span-2">
+                    <div className="flex flex-col items-center gap-4 text-center">
+                        <Avatar size={88} style={avatarStyle} className="shrink-0 text-3xl font-semibold text-white">
                             {avatarFallback}
                         </Avatar>
-                        <div className="min-w-0 flex-1">
-                            {loading && !profile ? (
-                                <Skeleton active paragraph={{ rows: 2 }} title={false} />
-                            ) : (
-                                <>
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <span className="text-xl font-semibold">{displayName}</span>
-                                        <Tag color="blue">{roleLabel || getRoleLabel(profile?.role)}</Tag>
-                                        {profile?.group ? <Tag>{String(profile.group)}</Tag> : null}
+                        {loading && !profile ? (
+                            <Skeleton active paragraph={{ rows: 3 }} title={false} className="w-full" />
+                        ) : (
+                            <>
+                                <div>
+                                    <div className="text-xl font-semibold">{displayName}</div>
+                                    <div className="mt-0.5 text-sm text-stone-500 dark:text-stone-400">
+                                        @{profile?.username || authUser?.username}
                                     </div>
-                                    <div className="mt-2 flex flex-col gap-1 text-sm text-stone-500 dark:text-stone-400">
-                                        <span className="inline-flex items-center gap-1.5">
-                                            <ShieldCheck className="size-3.5" />@{profile?.username || authUser?.username}
+                                </div>
+                                <div className="flex flex-wrap items-center justify-center gap-2">
+                                    <Tag color="blue">{roleLabel || getRoleLabel(profile?.role)}</Tag>
+                                    {profile?.group ? <Tag>{String(profile.group)}</Tag> : null}
+                                </div>
+                                <div className="flex w-full flex-col gap-2 rounded-lg bg-stone-50 p-4 text-left text-sm dark:bg-stone-900">
+                                    {(profile?.email || authUser?.email) ? (
+                                        <span className="inline-flex items-center gap-2 text-stone-600 dark:text-stone-300">
+                                            <Mail className="size-4 shrink-0 text-stone-400" />
+                                            <span className="truncate">{profile?.email || authUser?.email}</span>
                                         </span>
-                                        {(profile?.email || authUser?.email) ? (
-                                            <span className="inline-flex items-center gap-1.5">
-                                                <Mail className="size-3.5" />{profile?.email || authUser?.email}
-                                            </span>
-                                        ) : null}
-                                        {profile?.created_time ? (
-                                            <span className="inline-flex items-center gap-1.5">
-                                                <CalendarDays className="size-3.5" />
-                                                {t("Joined")} {new Date(profile.created_time * 1000).toLocaleDateString()}
-                                            </span>
-                                        ) : null}
-                                    </div>
-                                </>
-                            )}
-                        </div>
+                                    ) : null}
+                                    <span className="inline-flex items-center gap-2 text-stone-600 dark:text-stone-300">
+                                        <ShieldCheck className="size-4 shrink-0 text-stone-400" />
+                                        {t("ID")}: {profile?.id ?? authUser?.id}
+                                    </span>
+                                    {profile?.created_time ? (
+                                        <span className="inline-flex items-center gap-2 text-stone-600 dark:text-stone-300">
+                                            <CalendarDays className="size-4 shrink-0 text-stone-400" />
+                                            {t("Joined")} {new Date(profile.created_time * 1000).toLocaleDateString()}
+                                        </span>
+                                    ) : null}
+                                </div>
+                            </>
+                        )}
                     </div>
                 </Card>
 
@@ -149,47 +148,30 @@ export default function ProfilePage() {
                     <div className="grid grid-cols-3 gap-3">
                         {stats.map((item) => (
                             <div key={item.label} className="rounded-lg bg-stone-50 p-3 text-center dark:bg-stone-900">
-                                <div className="text-lg font-semibold">{item.value}</div>
+                                <div className="truncate text-lg font-semibold" title={item.value}>{item.value}</div>
                                 <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">{item.label}</div>
                             </div>
                         ))}
                     </div>
                 </Card>
 
-                {/* Access token */}
-                <Card
-                    title={
-                        <span className="inline-flex items-center gap-2">
-                            <KeyRound className="size-4" />
-                            {t("API Token")}
-                        </span>
-                    }
-                    extra={
-                        <Button size="small" icon={<RefreshCw className="size-3.5" />} onClick={() => void regenerateToken()}>
-                            {t("Regenerate")}
-                        </Button>
-                    }
-                >
-                    <div className="flex items-center gap-2">
-                        <code className="min-w-0 flex-1 truncate rounded-md bg-stone-50 px-3 py-2 font-mono text-xs dark:bg-stone-900">
-                            {profile?.access_token || "—"}
-                        </code>
-                        <Button size="small" icon={<Copy className="size-3.5" />} disabled={!profile?.access_token} onClick={() => void copyToken()}>
-                            {t("Copy")}
-                        </Button>
-                    </div>
-                </Card>
-
-                {/* Actions */}
+                {/* Quick links */}
                 <Card>
-                    <div className="flex flex-wrap items-center gap-3">
-                        <Button icon={<ExternalLink className="size-4" />} onClick={() => void openSitePage("/profile")}>
-                            {t("Open profile on site")}
-                        </Button>
-                        <Divider type="vertical" />
-                        <Button danger icon={<LogOut className="size-4" />} onClick={() => setSignOutOpen(true)}>
-                            {t("Sign out")}
-                        </Button>
+                    <div className="flex flex-col divide-y divide-stone-100 dark:divide-stone-800">
+                        {quickLinks.map((item) => (
+                            <button
+                                key={item.key}
+                                type="button"
+                                onClick={item.onClick}
+                                className="flex items-center gap-3 px-1 py-3 text-left transition hover:bg-stone-50 dark:hover:bg-stone-900/60"
+                            >
+                                <span className={item.danger ? "text-red-500" : "text-stone-500 dark:text-stone-400"}>{item.icon}</span>
+                                <span className="min-w-0 flex-1">
+                                    <span className={`block text-sm font-medium ${item.danger ? "text-red-500" : ""}`}>{item.label}</span>
+                                    <span className="block truncate text-xs text-stone-500 dark:text-stone-400">{item.description}</span>
+                                </span>
+                            </button>
+                        ))}
                     </div>
                 </Card>
             </div>
