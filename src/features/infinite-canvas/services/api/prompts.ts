@@ -138,9 +138,24 @@ export async function fetchPrompts({
   page?: number;
   pageSize?: number;
 } = {}): Promise<PromptListResponse> {
-  const { ensurePromptsCached, filterCachedPrompts } = await import("../prompt-cache");
-  await ensurePromptsCached();
-  return filterCachedPrompts({ keyword, tag, category, page, pageSize });
+  const params = new URLSearchParams();
+  params.set("p", String(Math.max(1, page)));
+  params.set("page_size", String(Math.max(1, Math.min(100, pageSize))));
+  if (keyword.trim()) params.set("keyword", keyword.trim());
+  if (category && category !== ALL_PROMPTS_OPTION && category !== "all") params.set("category", category);
+  for (const item of tag) {
+    if (item.trim()) params.append("tag", item.trim());
+  }
+  const res = await api.get<ApiEnvelope<PromptListResponse>>(`/api/prompts/?${params.toString()}`, {
+    skipErrorHandler: true,
+  });
+  const data = unwrap(res, "failed to load prompts");
+  return {
+    items: (data.items || []).map(normalizePrompt),
+    tags: data.tags || [],
+    categories: data.categories || [],
+    total: data.total || 0,
+  };
 }
 
 export async function fetchSourcePrompts(

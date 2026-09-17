@@ -63,7 +63,7 @@ export default {
         loadMore: "Scroll down to load more",
         end: "You've reached the end",
         sync: "Sync",
-        syncSuccess: "Synced {{added}} new, {{total}} total",
+        syncSuccess: "Refreshed, {{total}} prompts",
         syncFailed: "Sync failed",
         lastSynced: "Last synced: {{time}}",
     },

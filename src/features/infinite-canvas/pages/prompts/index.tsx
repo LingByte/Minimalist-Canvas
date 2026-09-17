@@ -10,7 +10,6 @@ import { useCopyText } from "@canvas/hooks/use-copy-text";
 import { cn } from "@canvas/lib/utils";
 import { useAssetStore } from "@canvas/stores/use-asset-store";
 import { ALL_PROMPTS_OPTION, type Prompt } from "@canvas/services/api/prompts";
-import { syncPromptsFromRemote, getSyncedAt } from "@canvas/services/prompt-cache";
 
 export default function PromptsPage() {
     const { message } = App.useApp();
@@ -20,22 +19,16 @@ export default function PromptsPage() {
     const [selectedCategory, setSelectedCategory] = useState(ALL_PROMPTS_OPTION);
     const [selectedPrompt, setSelectedPrompt] = useState<Prompt | null>(null);
     const [syncing, setSyncing] = useState(false);
-    const [syncedAt, setSyncedAt] = useState<string | null>(null);
     const addAsset = useAssetStore((state) => state.addAsset);
     const copyText = useCopyText();
     const { query, items: promptItems, tags: promptTags, categories: promptCategoryOptions, total: totalPrompts } = usePromptList({ keyword: titleKeyword, tags: selectedTags, category: selectedCategory });
 
-    useEffect(() => {
-        void getSyncedAt().then(setSyncedAt);
-    }, []);
-
     const handleSync = async () => {
         setSyncing(true);
         try {
-            const result = await syncPromptsFromRemote();
-            message.success(t("prompts.syncSuccess", { added: result.added, total: result.total }));
-            await query.refetch();
-            void getSyncedAt().then(setSyncedAt);
+            const result = await query.refetch();
+            if (result.isError) throw result.error;
+            message.success(t("prompts.syncSuccess", { total: result.data?.pages[0]?.total ?? totalPrompts }));
         } catch (error) {
             message.error(error instanceof Error ? error.message : t("prompts.syncFailed"));
         } finally {
@@ -81,11 +74,6 @@ export default function PromptsPage() {
                             {t("prompts.sync")}
                         </Button>
                     </div>
-                    {syncedAt ? (
-                        <div className="mt-1 text-center text-xs text-stone-400 dark:text-stone-500">
-                            {t("prompts.lastSynced", { time: new Date(syncedAt).toLocaleString() })}
-                        </div>
-                    ) : null}
                     <div className="mt-5 grid items-start gap-5 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-6">
                         <aside className="thin-scrollbar max-h-72 overflow-y-auto border-b border-stone-200 pb-5 lg:sticky lg:top-0 lg:max-h-[calc(100dvh-6rem)] lg:border-b-0 lg:border-r lg:pb-8 lg:pr-5 dark:border-stone-800">
                             <PromptFilter label={t("prompts.category")} options={promptCategoryOptions} selected={selectedCategory} onChange={setSelectedCategory} />
