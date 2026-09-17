@@ -2,7 +2,6 @@ import localforage from "localforage";
 
 import type { Prompt, PromptListResponse } from "./api/prompts";
 import { ALL_PROMPTS_OPTION, fetchAllSourcePrompts, fetchPromptSources } from "./api/prompts";
-import { DEFAULT_PROMPT_SOURCES } from "./api/prompt-source-presets";
 
 const store = localforage.createInstance({
     name: "minimalist-canvas",
@@ -99,15 +98,6 @@ export async function filterCachedPrompts(params: {
     };
 }
 
-async function tauriFetch(url: string): Promise<Response> {
-    try {
-        const { fetch } = await import("@tauri-apps/plugin-http");
-        return await fetch(url);
-    } catch {
-        return await fetch(url);
-    }
-}
-
 /** Fetch all prompts from the configured backend API (auth attached via api interceptor). */
 async function fetchAllRemotePrompts(): Promise<Prompt[]> {
     const sources = (await fetchPromptSources()).filter((source) => source.enabled);
@@ -116,34 +106,6 @@ async function fetchAllRemotePrompts(): Promise<Prompt[]> {
         try {
             const items = await fetchAllSourcePrompts(source.id);
             allItems.push(...items.map((item) => ({ ...item, sourceId: item.sourceId || source.id })));
-        } catch {
-            // skip failed sources
-        }
-    }
-    if (allItems.length) return allItems;
-
-    // Fallback: public registry JSONs keep prompts working when the API
-    // is unreachable (logged-out, offline dev, etc.).
-    for (const source of DEFAULT_PROMPT_SOURCES) {
-        try {
-            const res = await tauriFetch(source.url);
-            if (!res.ok) continue;
-            const items: Prompt[] = await res.json();
-            for (const item of items) {
-                allItems.push({
-                    ...item,
-                    description: item.description || "",
-                    referenceImageUrls: Array.isArray(item.referenceImageUrls) ? item.referenceImageUrls : [],
-                    tags: Array.isArray(item.tags) ? item.tags : [],
-                    preview: item.preview || "",
-                    createdAt: item.createdAt || "",
-                    updatedAt: item.updatedAt || "",
-                    coverUrl: item.coverUrl || "",
-                    githubUrl: item.githubUrl || "",
-                    category: item.category || "",
-                    sourceId: item.sourceId || source.id,
-                });
-            }
         } catch {
             // skip failed sources
         }
