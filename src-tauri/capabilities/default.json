@@ -8,6 +8,7 @@
     "core:webview:allow-internal-toggle-devtools",
     "shell:allow-open",
     "dialog:allow-open",
+    "dialog:allow-save",
     "opener:allow-reveal-item-in-dir",
     "opener:default",
     {
@@ -20,7 +21,27 @@
       "identifier": "http:default",
       "allow": [
         { "url": "https://cdn.jsdelivr.net/*" },
-        { "url": "https://*.lingecho.com/*" }
+        { "url": "https://*.lingecho.com/*" },
+        { "url": "https://*.zhongzhuan.chat/*" }
+      ]
+    },
+    "fs:allow-read-file",
+    "fs:allow-read-text-file",
+    "fs:allow-write-file",
+    "fs:allow-write-text-file",
+    "fs:allow-read-dir",
+    "fs:allow-mkdir",
+    "fs:allow-remove",
+    "fs:allow-exists",
+    "fs:allow-stat",
+    "fs:allow-copy-file",
+    "fs:allow-rename",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        "**",
+        "**/.*",
+        "**/.*/**"
       ]
     }
   ]

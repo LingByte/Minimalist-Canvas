@@ -27,6 +27,7 @@
         "@tanstack/react-virtual": "^3.14.5",
         "@tauri-apps/api": "^2.11.1",
         "@tauri-apps/plugin-dialog": "^2.7.3",
+        "@tauri-apps/plugin-fs": "^2.5.2",
         "@tauri-apps/plugin-http": "^2.6.1",
         "@tauri-apps/plugin-opener": "^2.5.5",
         "@tauri-apps/plugin-shell": "^2.3.6",
@@ -736,6 +737,8 @@
     "@tauri-apps/cli-win32-x64-msvc": ["@tauri-apps/cli-win32-x64-msvc@2.11.4", "https://registry.npmmirror.com/@tauri-apps/cli-win32-x64-msvc/-/cli-win32-x64-msvc-2.11.4.tgz", { "os": "win32", "cpu": "x64" }, "sha512-+vDiqBIU5dMISg/wNvX3sF+ZHfgJGJ5T0AcO+EHNXV9GGAG+P5fzodlDXD3QdKCRgZxMoCm5PPvj3BqLNjBthw=="],
 
     "@tauri-apps/plugin-dialog": ["@tauri-apps/plugin-dialog@2.7.3", "https://registry.npmmirror.com/@tauri-apps/plugin-dialog/-/plugin-dialog-2.7.3.tgz", { "dependencies": { "@tauri-apps/api": "^2.11.0" } }, "sha512-CRgE+7TP4tvq9MjBU6f04NLTFIqVMLKHk3hAqlhil00ngK9ACTrXPH3oHpKMProxILodd3YjBoKbMwSI4IEcfA=="],
+
+    "@tauri-apps/plugin-fs": ["@tauri-apps/plugin-fs@2.5.2", "https://registry.npmmirror.com/@tauri-apps/plugin-fs/-/plugin-fs-2.5.2.tgz", { "dependencies": { "@tauri-apps/api": "^2.11.0" } }, "sha512-XXvMSnFiob+G1H+YHCDf+bzWVumseQuEIhzpbOJzevUfL4k0U+sTApZWJHpoLiamggnVPJm5dJ5sDsniRyWxlg=="],
 
     "@tauri-apps/plugin-http": ["@tauri-apps/plugin-http@2.6.1", "https://registry.npmmirror.com/@tauri-apps/plugin-http/-/plugin-http-2.6.1.tgz", { "dependencies": { "@tauri-apps/api": "^2.11.0" } }, "sha512-9gtfe6eOaVKofASoMZ4Ph8E6vDYnpUTbMXrLt4FkXPzC5+O+wnGqJ9fz2koSPYcQt10bb3cx5qHkU0AU1l8tcQ=="],
 
