@@ -14,15 +14,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  macos:
-    runs-on: macos-latest
+  publish:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            args: --target universal-apple-darwin --bundles dmg
+            asset: Minimalist-Canvas-macOS.dmg
+            find: "*/bundle/dmg/*.dmg"
+          - os: windows-latest
+            args: --bundles nsis
+            asset: Minimalist-Canvas-Windows-x64.exe
+            find: "*/bundle/nsis/*.exe"
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: Cache Rust
         uses: swatinem/rust-cache@v2
@@ -43,19 +55,21 @@ jobs:
           tagName: v__VERSION__
           releaseName: Minimalist Canvas v__VERSION__
           releaseBody: |
-            macOS desktop build (Apple Silicon and Intel).
+            Desktop builds for macOS and Windows.
 
-            If macOS blocks the app, right-click the app and choose Open the first time. This build is not notarized.
+            - macOS: universal disk image (Apple Silicon and Intel). If macOS blocks the app, right-click it and choose Open. This build is not notarized.
+            - Windows: 64-bit installer for Windows 10 or later.
           releaseDraft: false
           prerelease: false
-          args: --target universal-apple-darwin
+          args: ${{ matrix.args }}
 
       - name: Upload stable download
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           version="$(bun -e 'console.log(require("./src-tauri/tauri.conf.json").version)')"
-          dmg="$(find src-tauri/target -path '*/bundle/dmg/*.dmg' -type f | head -n 1)"
-          test -n "$dmg"
-          cp "$dmg" Minimalist-Canvas-macOS.dmg
-          gh release upload "v${version}" Minimalist-Canvas-macOS.dmg --clobber
+          file="$(find src-tauri/target -path '${{ matrix.find }}' -type f | head -n 1)"
+          test -n "$file"
+          cp "$file" "${{ matrix.asset }}"
+          gh release upload "v${version}" "${{ matrix.asset }}" --clobber
