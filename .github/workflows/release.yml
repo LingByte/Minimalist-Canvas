@@ -1,0 +1,61 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build and publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: Minimalist Canvas v__VERSION__
+          releaseBody: |
+            macOS desktop build (Apple Silicon and Intel).
+
+            If macOS blocks the app, right-click the app and choose Open the first time. This build is not notarized.
+          releaseDraft: false
+          prerelease: false
+          args: --target universal-apple-darwin
+
+      - name: Upload stable download
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="$(bun -e 'console.log(require("./src-tauri/tauri.conf.json").version)')"
+          dmg="$(find src-tauri/target -path '*/bundle/dmg/*.dmg' -type f | head -n 1)"
+          test -n "$dmg"
+          cp "$dmg" Minimalist-Canvas-macOS.dmg
+          gh release upload "v${version}" Minimalist-Canvas-macOS.dmg --clobber
