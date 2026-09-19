@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 
 import i18n from "@canvas/i18n";
 import { getMediaBlob, setMediaBlob, uploadMediaFile, type UploadedFile } from "@canvas/services/file-storage";
+import { isTauri } from "@canvas/services/fs-store";
 import { getImageBlob, imageToDataUrl, resolveImageUrl } from "@canvas/services/image-storage";
 import { getObjectStorageStatus, mirrorRemoteToObjectStorage, uploadCanvasMedia, assertCanvasUploadSize } from "@canvas/services/object-storage";
 import { VIDEO_SECONDS_MAX, VIDEO_SECONDS_MIN } from "@canvas/components/video-settings-panel";
@@ -245,11 +246,12 @@ export async function storeGeneratedVideo(
     // Dola/Akamai hotlink rules (Referer) can be satisfied and the canvas gets a CDN URL.
     if (result.url && isPublicMediaUrl(result.url)) {
         const upstreamUrl = result.url;
-        void remirrorPublicVideoInBackground(upstreamUrl, result.mimeType, options?.onRemirrored);
-        void cachePublicVideoLocally(upstreamUrl, result.mimeType);
+        const localKey = `video:${nanoid()}`;
+        void remirrorPublicVideoInBackground(upstreamUrl, result.mimeType, options?.onRemirrored, localKey);
+        void cachePublicVideoLocally(localKey, upstreamUrl, result.mimeType);
         return {
             url: upstreamUrl,
-            storageKey: "",
+            storageKey: localKey,
             bytes: 0,
             mimeType: result.mimeType || "video/mp4",
         };
@@ -279,17 +281,17 @@ export async function storeGeneratedVideo(
 }
 
 /** Best-effort server remirror; updates the node via onRemirrored when CDN is ready. */
-async function remirrorPublicVideoInBackground(url: string, mimeType: string | undefined, onRemirrored?: (file: UploadedFile) => void) {
+async function remirrorPublicVideoInBackground(url: string, mimeType: string | undefined, onRemirrored: ((file: UploadedFile) => void) | undefined, localKey: string) {
     try {
         const mirrored = await mirrorRemoteToObjectStorage(url, "video");
         if (!mirrored?.accessUrl) return;
         const file: UploadedFile = {
             url: mirrored.accessUrl,
-            storageKey: mirrored.key,
+            storageKey: localKey,
             bytes: mirrored.bytes || 0,
             mimeType: mirrored.mimeType || mimeType || "video/mp4",
         };
-        void cachePublicVideoLocally(file.url, file.mimeType);
+        void cachePublicVideoLocally(localKey, file.url, file.mimeType);
         onRemirrored?.(file);
     } catch {
         // Upstream may expire; the node already shows the original public URL.
@@ -297,10 +299,13 @@ async function remirrorPublicVideoInBackground(url: string, mimeType: string | u
 }
 
 /** Best-effort local cache; never blocks the UI on object-storage uploads. */
-async function cachePublicVideoLocally(url: string, _mimeType?: string) {
+async function cachePublicVideoLocally(localKey: string, url: string, _mimeType?: string) {
     try {
-        const blob = await (await fetch(url)).blob();
-        await setMediaBlob(`video:${nanoid()}`, blob);
+        if (await getMediaBlob(localKey)) return;
+        const blob = isTauri()
+            ? await (await import("@tauri-apps/plugin-http")).fetch(url).then((res) => res.blob())
+            : await (await fetch(url)).blob();
+        if (blob.size) await setMediaBlob(localKey, blob);
     } catch {
         // Preview already uses the public URL; offline cache is optional.
     }

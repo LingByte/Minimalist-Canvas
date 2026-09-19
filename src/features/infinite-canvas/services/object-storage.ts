@@ -10,6 +10,8 @@ export const QIHUO_MAX_IMAGE_UPLOAD_BYTES = 8 * 1024 * 1024
 
 /** Hard client-side upload cap for our object-storage path (admin / audio fallback). */
 export const MAX_CANVAS_UPLOAD_BYTES = 100 * 1024 * 1024
+/** Product-level video upload cap (all storage paths). */
+export const CANVAS_MAX_VIDEO_BYTES = 50 * 1024 * 1024
 
 function bytesToMb(bytes: number) {
   return Math.max(1, Math.ceil(bytes / (1024 * 1024)))
@@ -30,11 +32,12 @@ export function assertCanvasUploadSize(size: number, backendLimit = 0): void {
   )
 }
 
-/** Throws with an image-specific hint when over 8MB, otherwise the generic / video cap. */
+/** Throws with an image-specific hint when over 8MB, videos over 50MB, otherwise the generic cap. */
 export function assertCanvasMediaUploadSize(
   size: number,
   mimeType: string,
-  filename = ''
+  filename = '',
+  backendLimit = 0
 ): void {
   const mime = canonicalizeContentType(mimeType, filename)
   if (mime.startsWith('image/')) {
@@ -47,10 +50,14 @@ export function assertCanvasMediaUploadSize(
     )
   }
   if (mime.startsWith('video/')) {
-    assertCanvasUploadSize(size, QIHUO_MAX_UPLOAD_BYTES)
+    const limit =
+      backendLimit > 0
+        ? Math.min(backendLimit, CANVAS_MAX_VIDEO_BYTES)
+        : CANVAS_MAX_VIDEO_BYTES
+    assertCanvasUploadSize(size, limit)
     return
   }
-  assertCanvasUploadSize(size)
+  assertCanvasUploadSize(size, backendLimit)
 }
 
 export type ObjectStorageStatus = {
@@ -125,8 +132,9 @@ export type CanvasMediaUploadOptions = {
 }
 
 /**
- * Canvas user media: images/videos go to 七猴图床 (browser → imageproxy).
- * Audio is rejected by that host, so it still uses our object storage.
+ * Canvas user media goes through the backend object storage (七牛 presign/proxy).
+ * The public 七猴图床 is only a fallback for when object storage is disabled;
+ * it rejects audio, so audio never uses it.
  */
 export async function uploadCanvasMedia(
   input: Blob | File,
@@ -145,6 +153,14 @@ export async function uploadCanvasMedia(
   const blob =
     input.type === mimeType ? input : new Blob([input], { type: mimeType })
   assertCanvasMediaUploadSize(blob.size, mimeType, resolvedFilename)
+
+  const stored = await uploadToObjectStorage(blob, options)
+  if (stored) return stored
+
+  // Object storage disabled — fall back to the public 七猴 host (40MB video cap).
+  if (mimeType.startsWith('video/')) {
+    assertCanvasUploadSize(blob.size, QIHUO_MAX_UPLOAD_BYTES)
+  }
 
   const form = new FormData()
   form.append('file', blob, resolvedFilename)
@@ -195,7 +211,7 @@ export async function uploadToObjectStorage(
   const blob =
     input.type === mimeType ? input : new Blob([input], { type: mimeType })
 
-  assertCanvasUploadSize(blob.size, status.max_upload_bytes)
+  assertCanvasMediaUploadSize(blob.size, mimeType, resolvedFilename, status.max_upload_bytes)
 
   const presignRes = await api.post<ApiEnvelope<PresignResult>>(
     '/api/storage/presign',

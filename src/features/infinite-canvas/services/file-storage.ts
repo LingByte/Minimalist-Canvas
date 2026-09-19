@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 
-import { blobStore } from "@canvas/services/fs-store";
+import { blobStore, isTauri } from "@canvas/services/fs-store";
 import { uploadCanvasMedia, assertCanvasMediaUploadSize } from "@canvas/services/object-storage";
 
 export type UploadedFile = { url: string; storageKey: string; bytes: number; mimeType: string; width?: number; height?: number; durationMs?: number };
@@ -9,7 +9,7 @@ const store = blobStore("media_files");
 const objectUrls = new Map<string, string>();
 
 export async function uploadMediaFile(input: string | Blob, prefix = "file"): Promise<UploadedFile> {
-    const blob = typeof input === "string" ? await (await fetch(input)).blob() : input;
+    const blob = typeof input === "string" ? await fetchBlob(input) : input;
     assertCanvasMediaUploadSize(blob.size, blob.type, input instanceof File ? input.name : "");
     const storageKey = `${prefix}:${nanoid()}`;
     await store.setItem(storageKey, blob);
@@ -38,6 +38,15 @@ export async function uploadMediaFile(input: string | Blob, prefix = "file"): Pr
         // Local blob URL remains usable for canvas preview.
     }
     return base;
+}
+
+/** Tauri fetch bypasses webview CORS so remote media actually lands in the local store. */
+async function fetchBlob(url: string): Promise<Blob> {
+    if (isTauri()) {
+        const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
+        return (await tauriFetch(url)).blob();
+    }
+    return (await fetch(url)).blob();
 }
 
 function isPubliclyReachableMediaUrl(value: string) {

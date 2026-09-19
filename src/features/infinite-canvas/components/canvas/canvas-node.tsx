@@ -9,6 +9,11 @@ import { buildNodeContext } from "@canvas/lib/canvas/plugin-node-context";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { CanvasResourceMentionTextarea } from "./canvas-resource-mention-textarea";
 import { SmartImage } from "@/components/smart-image";
+import { getGenerationAssetByClientId } from "@canvas/services/api/generation-assets";
+import { getMediaBlob, resolveMediaUrl, setMediaBlob } from "@canvas/services/file-storage";
+import { getImageBlob, resolveImageUrl, setImageBlob } from "@canvas/services/image-storage";
+import { isTauri } from "@canvas/services/fs-store";
+import { isSignedUrlExpired, signedUrlExpiresAtMs } from "@canvas/lib/signed-url";
 import { CanvasNodeType, type CanvasNodeData, type CanvasNodeImage, type Position } from "@canvas/types/canvas";
 import type { CanvasNodeContext, CanvasPluginHost } from "@canvas/types/canvas-plugin";
 import type { CanvasResourceReference } from "@canvas/lib/canvas/canvas-resource-references";
@@ -800,10 +805,131 @@ function VideoMoveControls(props: {
     );
 }
 
+/** Persist bytes for a freshly-refetched remote URL under the local storageKey, so the next expiry resolves offline. */
+async function healMediaLocally(storageKey: string, url: string) {
+    try {
+        if (!storageKey.includes(":")) return;
+        const isImage = storageKey.startsWith("image:");
+        const cached = isImage ? await getImageBlob(storageKey) : await getMediaBlob(storageKey);
+        if (cached) return;
+        const blob = isTauri()
+            ? await (await import("@tauri-apps/plugin-http")).fetch(url).then((res) => res.blob())
+            : await (await fetch(url)).blob();
+        if (!blob.size) return;
+        if (isImage) await setImageBlob(storageKey, blob);
+        else await setMediaBlob(storageKey, blob);
+    } catch {
+        // Local backup is best-effort; the fresh URL still plays.
+    }
+}
+
+/**
+ * Signed CDN URLs (COS `q-sign-time`, ~6h) stored in node metadata expire.
+ * When the remote URL is expired or fails to load, fall back to the local blob
+ * (storageKey), then to a freshly-fetched generation asset URL if the backend
+ * re-signs on read.
+ */
+function usePlayableMediaSrc(node: CanvasNodeData): { src: string; expired: boolean; markBroken: () => void } {
+    const remote = typeof node.metadata?.content === "string" ? node.metadata.content : "";
+    const expired = isSignedUrlExpired(remote);
+    const storageKey = typeof node.metadata?.storageKey === "string" ? node.metadata.storageKey : "";
+    const [broken, setBroken] = useState(false);
+    const [fallback, setFallback] = useState("");
+
+    useEffect(() => {
+        setBroken(false);
+        setFallback("");
+    }, [remote, storageKey]);
+
+    // Swap off the signed URL just before it expires so the browser never
+    // re-requests a dead link while the node stays mounted.
+    useEffect(() => {
+        if (!remote || expired) return;
+        const expiresAt = signedUrlExpiresAtMs(remote);
+        if (expiresAt === null) return;
+        const delay = Math.max(0, expiresAt - Date.now() - 60_000);
+        const timer = window.setTimeout(() => setBroken(true), delay);
+        return () => window.clearTimeout(timer);
+    }, [remote, expired]);
+
+    useEffect(() => {
+        if (fallback) return;
+        if (!remote && !storageKey) return;
+        if (remote && !expired && !broken) return;
+        let alive = true;
+        void (async () => {
+            if (storageKey) {
+                const local = await resolveMediaUrl(storageKey).catch(() => "");
+                if (!alive) return;
+                if (local && local !== remote) {
+                    setFallback(local);
+                    return;
+                }
+            }
+            const asset = await getGenerationAssetByClientId(node.id).catch(() => null);
+            const fresh = (asset?.assets || [])
+                .map((item) => item.url)
+                .find((url): url is string => Boolean(url && !isSignedUrlExpired(url)));
+            if (alive && fresh) {
+                setFallback(fresh);
+                void healMediaLocally(storageKey, fresh);
+            }
+        })();
+        return () => {
+            alive = false;
+        };
+    }, [node.id, storageKey, remote, expired, broken, fallback]);
+
+    const src = remote && !expired && !broken ? remote : fallback;
+    return { src, expired: !src && Boolean(remote), markBroken: () => setBroken(true) };
+}
+
+/**
+ * Image display src with the same expiry chain as usePlayableMediaSrc:
+ * fresh remote URL → local blob (storageKey) → refetched generation asset (healed locally).
+ */
+function useResolvedImageSrc(content: string, storageKey: string, nodeId: string): string {
+    const expired = isSignedUrlExpired(content);
+    const [resolved, setResolved] = useState("");
+
+    useEffect(() => {
+        setResolved("");
+    }, [content, storageKey]);
+
+    useEffect(() => {
+        if ((content && !expired) || (!storageKey && !nodeId)) return;
+        let alive = true;
+        void (async () => {
+            if (storageKey) {
+                const local = await resolveImageUrl(storageKey).catch(() => "");
+                if (!alive) return;
+                if (local && local !== content) {
+                    setResolved(local);
+                    return;
+                }
+            }
+            if (!nodeId) return;
+            const asset = await getGenerationAssetByClientId(nodeId).catch(() => null);
+            const fresh = (asset?.assets || [])
+                .map((item) => item.url)
+                .find((url): url is string => Boolean(url && !isSignedUrlExpired(url)));
+            if (!alive || !fresh) return;
+            setResolved(fresh);
+            void healMediaLocally(storageKey, fresh);
+        })();
+        return () => {
+            alive = false;
+        };
+    }, [content, storageKey, nodeId, expired]);
+
+    return content && !expired ? content : resolved;
+}
+
 function VideoNodeContent({ node, theme, contentInteractive = true }: NodeContentRendererProps) {
     const { t } = useTranslation();
     const videoRef = useRef<HTMLVideoElement>(null);
     const [playing, setPlaying] = useState(false);
+    const { src, expired, markBroken } = usePlayableMediaSrc(node);
 
     useEffect(() => {
         const video = videoRef.current;
@@ -818,13 +944,13 @@ function VideoNodeContent({ node, theme, contentInteractive = true }: NodeConten
             video.removeEventListener("pause", sync);
             video.removeEventListener("ended", sync);
         };
-    }, [node.metadata?.content]);
+    }, [src]);
 
-    if (!node.metadata?.content)
+    if (!src)
         return (
             <div className="flex h-full w-full flex-col items-center justify-center gap-3" style={{ color: theme.node.placeholder }}>
                 <Video className="size-7 opacity-35" />
-                <span className="text-sm">{t("canvas.node.emptyVideo")}</span>
+                <span className="text-sm">{t(expired ? "canvas.node.mediaExpired" : "canvas.node.emptyVideo")}</span>
             </div>
         );
 
@@ -841,12 +967,13 @@ function VideoNodeContent({ node, theme, contentInteractive = true }: NodeConten
         <div className="relative h-full w-full">
             <video
                 ref={videoRef}
-                src={node.metadata.content}
+                src={src}
                 controls={contentInteractive}
                 className="h-full w-full rounded-[18px] bg-black object-contain"
                 data-canvas-no-zoom
                 draggable={false}
                 onDragStart={(event) => event.preventDefault()}
+                onError={markBroken}
             />
             {!contentInteractive ? (
                 <VideoMoveControls
@@ -869,6 +996,7 @@ function AudioNodeContent({ node, theme, contentInteractive = true }: NodeConten
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const scrubbingRef = useRef(false);
+    const { src, expired, markBroken } = usePlayableMediaSrc(node);
 
     useEffect(() => {
         const audio = audioRef.current;
@@ -897,13 +1025,13 @@ function AudioNodeContent({ node, theme, contentInteractive = true }: NodeConten
             audio.removeEventListener("durationchange", syncDuration);
             audio.removeEventListener("seeked", syncTime);
         };
-    }, [node.metadata?.content]);
+    }, [src]);
 
-    if (!node.metadata?.content)
+    if (!src)
         return (
             <div className="flex h-full w-full flex-col items-center justify-center gap-2" style={{ color: theme.node.placeholder }}>
                 <Music2 className="size-7 opacity-35" />
-                <span className="text-sm">{t("canvas.node.emptyAudio")}</span>
+                <span className="text-sm">{t(expired ? "canvas.node.mediaExpired" : "canvas.node.emptyAudio")}</span>
             </div>
         );
 
@@ -928,7 +1056,7 @@ function AudioNodeContent({ node, theme, contentInteractive = true }: NodeConten
                 <span className="truncate">{t("canvas.node.audio")}</span>
             </div>
             {contentInteractive ? (
-                <audio ref={audioRef} src={node.metadata.content} controls className="w-full" data-canvas-no-zoom />
+                <audio ref={audioRef} src={src} controls className="w-full" data-canvas-no-zoom onError={markBroken} />
             ) : (
                 <div
                     className="flex items-center gap-2"
@@ -937,7 +1065,7 @@ function AudioNodeContent({ node, theme, contentInteractive = true }: NodeConten
                     onPointerDown={stopMediaControlEvent}
                     onClick={stopMediaControlEvent}
                 >
-                    <audio ref={audioRef} src={node.metadata.content} className="hidden" data-canvas-no-zoom />
+                    <audio ref={audioRef} src={src} className="hidden" data-canvas-no-zoom onError={markBroken} />
                     <button
                         type="button"
                         className="flex size-10 shrink-0 items-center justify-center rounded-full border border-current/20 bg-black/10 transition hover:bg-black/15"
@@ -1010,6 +1138,7 @@ function ImageContent({
     const primaryImageId = node.metadata?.primaryImageId || images[0]?.id;
     const primaryImage = images.find((image) => image.id === primaryImageId);
     const primaryContent = primaryImage?.content || node.metadata?.content;
+    const primarySrc = useResolvedImageSrc(primaryContent || "", primaryImage?.storageKey || node.metadata?.storageKey || "", node.id);
 
     return (
         <BatchFrame batchCount={batchCount} batchExpanded={batchExpanded}>
@@ -1021,7 +1150,7 @@ function ImageContent({
             <div className="h-full w-full overflow-hidden rounded-3xl">
                 {primaryContent ? (
                     <SmartImage
-                        src={primaryContent}
+                        src={primarySrc}
                         alt={node.title}
                         draggable={false}
                         loading="eager"
@@ -1073,6 +1202,7 @@ function ExpandedImageCard({ node, image, index, onView, onSetPrimary, onDuplica
     const row = Math.floor(slot / columns);
     const x = column * (node.width + 18);
     const y = (row - rows + 1) * (node.height + 18);
+    const imageSrc = useResolvedImageSrc(image.content || "", image.storageKey || "", node.id);
 
     return (
         <div
@@ -1099,7 +1229,7 @@ function ExpandedImageCard({ node, image, index, onView, onSetPrimary, onDuplica
                 onView();
             }}
         >
-            {image.content ? <SmartImage src={image.content} alt={node.title} draggable={false} loading="eager" className="pointer-events-none h-full w-full select-none object-contain" /> : <ImageSlotStatus image={image} />}
+            {image.content ? <SmartImage src={imageSrc || undefined} alt={node.title} draggable={false} loading="eager" className="pointer-events-none h-full w-full select-none object-contain" /> : <ImageSlotStatus image={image} />}
             {image.content ? (
                 <div className="absolute inset-x-2 top-2 flex items-center gap-1">
                     <button type="button" className="flex h-8 min-w-0 flex-1 items-center justify-center gap-1 rounded-lg border px-1.5 text-[10px] font-medium shadow-[0_6px_18px_rgba(15,23,42,.16)] backdrop-blur-md transition hover:scale-[1.02]" style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.toolbar.activeText }} title={t("common.download")} onClick={(event) => (event.stopPropagation(), onDownload())}>

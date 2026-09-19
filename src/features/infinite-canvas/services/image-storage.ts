@@ -1,7 +1,7 @@
 import { nanoid } from "nanoid";
 import i18n from "@canvas/i18n";
 import { readImageMeta } from "@canvas/lib/image-utils";
-import { blobStore, kvStore } from "@canvas/services/fs-store";
+import { blobStore, isTauri, kvStore } from "@canvas/services/fs-store";
 import { uploadCanvasMedia, assertCanvasMediaUploadSize } from "@canvas/services/object-storage";
 
 export type UploadedImage = {
@@ -24,6 +24,8 @@ export async function uploadImage(input: string | Blob): Promise<UploadedImage> 
     if (typeof input === "string" && /^https?:\/\//i.test(input)) {
         const meta = await readImageMeta(input);
         const storageKey = `image:${nanoid()}`;
+        // Remote URLs (CDN / signed object-storage links) expire — keep a local copy.
+        void cacheRemoteImageLocally(storageKey, input);
         return {
             url: input,
             storageKey,
@@ -57,6 +59,20 @@ export async function uploadImage(input: string | Blob): Promise<UploadedImage> 
     }
 
     return { url, storageKey, width: meta.width, height: meta.height, bytes: blob.size, mimeType };
+}
+
+/** Best-effort: pull a remote image URL into the local blob store under a known key. */
+async function cacheRemoteImageLocally(storageKey: string, url: string) {
+    try {
+        if (await store.getItem<Blob>(storageKey)) return;
+        const blob = isTauri()
+            ? await (await import("@tauri-apps/plugin-http")).fetch(url).then((res) => res.blob())
+            : await (await fetch(url)).blob();
+        if (!blob.size) return;
+        await setImageBlob(storageKey, blob);
+    } catch {
+        // Preview still uses the remote URL; the backup is best-effort.
+    }
 }
 
 export async function resolveImageUrl(storageKey?: string, fallback = "") {

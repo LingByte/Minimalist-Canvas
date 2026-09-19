@@ -14,6 +14,7 @@ import {
 } from "@canvas/services/api/generation-assets";
 import { summarizeMirrorStatus } from "@/features/generation-assets/mirror-status";
 import { useGenerationLogsBadgeStore } from "@canvas/stores/use-generation-logs-badge-store";
+import { isSignedUrlExpired } from "@canvas/lib/signed-url";
 import { SmartImage } from "@/components/smart-image";
 
 import type { InsertAssetPayload } from "./asset-picker-modal";
@@ -97,6 +98,8 @@ export const CanvasGenerationLogsTab = memo(function CanvasGenerationLogsTab({ o
     const loading = useGenerationLogsBadgeStore((state) => state.loading);
     const refresh = useGenerationLogsBadgeStore((state) => state.refresh);
     const markSeen = useGenerationLogsBadgeStore((state) => state.markSeen);
+    const startWatching = useGenerationLogsBadgeStore((state) => state.startWatching);
+    const stopWatching = useGenerationLogsBadgeStore((state) => state.stopWatching);
     const [keyword, setKeyword] = useState("");
     const [kindFilter, setKindFilter] = useState<KindFilter>("all");
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -105,8 +108,9 @@ export const CanvasGenerationLogsTab = memo(function CanvasGenerationLogsTab({ o
 
     useEffect(() => {
         markSeen();
-        void refresh();
-    }, [markSeen, refresh]);
+        startWatching();
+        return () => stopWatching();
+    }, [markSeen, startWatching, stopWatching]);
 
     useEffect(() => {
         markSeen();
@@ -156,6 +160,11 @@ export const CanvasGenerationLogsTab = memo(function CanvasGenerationLogsTab({ o
             message.warning(t("canvas.sidePanel.cannotInsertLog"));
             return;
         }
+        if (files.every((file) => isSignedUrlExpired(file.url))) {
+            message.warning(t("canvas.sidePanel.mediaLinkExpired"));
+            void refresh();
+            return;
+        }
         const title = asset.title || asset.prompt || t("workbench.untitled");
         if (asset.kind === "video") {
             const file = files[0];
@@ -184,6 +193,11 @@ export const CanvasGenerationLogsTab = memo(function CanvasGenerationLogsTab({ o
         const files = onlyFile ? [onlyFile] : mediaFiles(asset);
         if (!files.length || !files[0]?.url) {
             message.warning(t("canvas.sidePanel.cannotDownloadLog"));
+            return;
+        }
+        if (files.every((file) => isSignedUrlExpired(file.url))) {
+            message.warning(t("canvas.sidePanel.mediaLinkExpired"));
+            void refresh();
             return;
         }
         const base = safeDownloadName(asset.title || asset.prompt || t("workbench.untitled"));
@@ -335,7 +349,8 @@ function GenerationLogRow({
 }) {
     const { t } = useTranslation();
     const files = mediaFiles(asset);
-    const cover = files[0]?.url;
+    const coverUrl = files[0]?.url;
+    const cover = coverUrl && !isSignedUrlExpired(coverUrl) ? coverUrl : undefined;
     const canUseMedia = files.length > 0;
     const KindIcon = asset.kind === "video" ? Video : ImageIcon;
     const statusColor = asset.status === "success" ? "blue" : asset.status === "pending" ? "processing" : "red";
@@ -480,9 +495,15 @@ function GenerationLogPreview({
                     {files.map((file, index) => (
                         <div key={`${asset.id}-${index}`} className="group relative overflow-hidden rounded-lg">
                             {asset.kind === "video" ? (
-                                <video src={file.url} controls className="max-h-80 w-full bg-black object-contain" />
+                                isSignedUrlExpired(file.url) ? (
+                                    <div className="flex h-40 w-full items-center justify-center bg-black text-xs text-stone-400">
+                                        {t("canvas.sidePanel.mediaLinkExpired")}
+                                    </div>
+                                ) : (
+                                    <video src={file.url} controls className="max-h-80 w-full bg-black object-contain" />
+                                )
                             ) : (
-                                <SmartImage src={file.url} alt="" className="w-full object-cover" />
+                                <SmartImage src={isSignedUrlExpired(file.url) ? undefined : file.url} alt="" className="w-full object-cover" />
                             )}
                             <button
                                 type="button"
