@@ -5,6 +5,13 @@ export function fitNodeSize(width: number, height: number, maxWidth = 640, maxHe
     return { width: w * scale, height: h * scale };
 }
 
+export function nodeSizeToEdge(width: number, height: number, edge: number) {
+    const w = Math.max(1, width);
+    const h = Math.max(1, height);
+    const scale = edge / Math.max(w, h);
+    return { width: w * scale, height: h * scale };
+}
+
 export function nodeSizeFromRatio(size: string, baseWidth: number, baseHeight: number) {
     const match = size?.match(/^(\d+)(?:x|:)(\d+)/);
     if (!match) return null;

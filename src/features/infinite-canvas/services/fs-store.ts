@@ -540,3 +540,40 @@ export async function readStoreUsages(): Promise<{ dataPath: string; stores: Sto
     stores.sort((a, b) => b.bytes - a.bytes);
     return { dataPath: root, stores, totalBytes };
 }
+
+/** Per-canvas working directory (agent cwd, user files). Stable by project id. */
+export async function canvasWorkspaceDir(projectId: string): Promise<string> {
+    const dir = await joinPath(await storageRoot(), "workspaces", sanitizeSegment(projectId) || "default");
+    await ensureDir(dir);
+    return dir;
+}
+
+/** Mirror the live canvas snapshot into the workspace dir so the folder has real content and agents can read it as cwd context. */
+export async function writeCanvasWorkspace(projectId: string, title: string, snapshot: unknown): Promise<void> {
+    const dir = await canvasWorkspaceDir(projectId);
+    await writeText(await joinPath(dir, "canvas.json"), JSON.stringify(snapshot, null, 2));
+    const readmePath = await joinPath(dir, "README.md");
+    if (!(await pathExists(readmePath))) {
+        await writeText(readmePath, `# ${title || "Canvas"}\n\n画布工作区。canvas.json 是当前画布快照(节点/连线/视口),media/ 里是画布引用的图片/视频/音频备份,可作为 Agent 工作目录使用。\n`);
+    }
+}
+
+/** Dump the blobs referenced by canvas nodes into <workspace>/media/. Write-once per blob key. */
+export async function syncWorkspaceMedia(
+    projectId: string,
+    entries: Array<{ key: string; load: () => Promise<Blob | null> }>,
+): Promise<void> {
+    const mediaDir = await joinPath(await canvasWorkspaceDir(projectId), "media");
+    await ensureDir(mediaDir);
+    const { readDir } = await fs();
+    const existing = new Set((await readDir(mediaDir)).map((entry) => entry.name));
+    for (const entry of entries) {
+        const prefix = `${sanitizeSegment(entry.key)}.`;
+        if ([...existing].some((name) => name.startsWith(prefix))) continue;
+        const blob = await entry.load().catch(() => null);
+        if (!blob?.size) continue;
+        const file = `${prefix}${blobExtension(blob.type)}`;
+        await writeBytes(await joinPath(mediaDir, file), new Uint8Array(await blob.arrayBuffer()));
+        existing.add(file);
+    }
+}

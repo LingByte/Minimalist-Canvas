@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, Download, Home, Images, Menu, PanelLeftClose, PanelLeftOpen, Plus, Redo2, Trash2, Undo2, Upload } from "lucide-react";
+import { Bot, Download, FolderOpen, Home, Images, Menu, PanelLeftClose, PanelLeftOpen, Plus, Redo2, Trash2, Undo2, Upload } from "lucide-react";
 import { Button, Drawer, Dropdown, Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
 
@@ -23,6 +23,7 @@ export function CanvasTopBar({
     onCreateProject,
     onDeleteProject,
     onExportProject,
+    onOpenFolder,
     onImportImage,
     onOpenPlugins,
     onUndo,
@@ -45,6 +46,7 @@ export function CanvasTopBar({
     onCreateProject: () => void;
     onDeleteProject: () => void;
     onExportProject: () => void;
+    onOpenFolder?: () => void;
     onImportImage: () => void;
     onOpenPlugins: () => void;
     onUndo: () => void;
@@ -97,6 +99,7 @@ export function CanvasTopBar({
                                 { type: "divider" },
                                 { key: "import", icon: <Upload className="size-4" />, label: t("canvas.importAsset"), onClick: onImportImage },
                                 { key: "export", icon: <Download className="size-4" />, label: t("canvas.exportCurrent"), onClick: onExportProject },
+                                ...(onOpenFolder ? [{ key: "folder" as const, icon: <FolderOpen className="size-4" />, label: t("canvas.openFolder"), onClick: onOpenFolder }] : []),
                                 { type: "divider" },
                                 { key: "undo", disabled: !canUndo, icon: <Undo2 className="size-4" />, label: <MenuLabel text={t("canvas.undo")} shortcut="⌘ Z" />, onClick: onUndo },
                                 { key: "redo", disabled: !canRedo, icon: <Redo2 className="size-4" />, label: <MenuLabel text={t("canvas.redo")} shortcut="⌘ ⇧ Z / ⌘ Y" />, onClick: onRedo },

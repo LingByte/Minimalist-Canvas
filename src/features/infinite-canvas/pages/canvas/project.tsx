@@ -10,8 +10,9 @@ import { generateCanvasImage, waitForGenerationAsset } from "@canvas/services/ap
 import { getGenerationAssetByClientId } from "@canvas/services/api/generation-assets";
 import { createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, waitForVideoGenerationTask, type VideoGenerationTask } from "@canvas/services/api/video";
 import { defaultConfig, useConfigStore, useEffectiveConfig } from "@canvas/stores/use-config-store";
-import { uploadImage } from "@canvas/services/image-storage";
-import { uploadMediaFile } from "@canvas/services/file-storage";
+import { collectImageStorageKeys, getImageBlob, uploadImage } from "@canvas/services/image-storage";
+import { collectMediaStorageKeys, getMediaBlob, uploadMediaFile } from "@canvas/services/file-storage";
+import { canvasWorkspaceDir, isTauri, syncWorkspaceMedia, writeCanvasWorkspace } from "@canvas/services/fs-store";
 import { saveBlobAs } from "@canvas/lib/save-file";
 import {
     buildCanvasImageAssetConfig,
@@ -25,7 +26,7 @@ import { canvasThemes, type CanvasBackgroundMode } from "@canvas/lib/canvas-them
 import { useAssetStore } from "@canvas/stores/use-asset-store";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { cropDataUrl, splitDataUrl, upscaleDataUrl } from "@canvas/lib/canvas/canvas-image-data";
-import { fitNodeSize, nodeSizeFromRatio } from "@canvas/lib/canvas/canvas-node-size";
+import { fitNodeSize, nodeSizeFromRatio, nodeSizeToEdge } from "@canvas/lib/canvas/canvas-node-size";
 import { App, Button, Modal } from "antd";
 import { NODE_DEFAULT_SIZE, getNodeSpec } from "@canvas/constant/canvas";
 import { ActiveConnectionPath, ConnectionPath } from "@canvas/components/canvas/canvas-connections";
@@ -245,6 +246,23 @@ function InfiniteCanvasPage() {
     const localAgentConnected = useAgentStore((state) => state.connected);
     const localAgentActivity = useAgentStore((state) => state.activity);
     const localAgentEnabled = useAgentStore((state) => state.enabled);
+    const [mcpRegistered, setMcpRegistered] = useState(false);
+
+    useEffect(() => {
+        if (!isTauri()) return;
+        let disposed = false;
+        const check = async () => {
+            const { invoke } = await import("@tauri-apps/api/core");
+            const registered = await invoke<boolean>("mcp_registered").catch(() => false);
+            if (!disposed) setMcpRegistered(registered);
+        };
+        void check();
+        const timer = window.setInterval(check, 15000);
+        return () => {
+            disposed = true;
+            window.clearInterval(timer);
+        };
+    }, []);
     const agentPanelOpen = useAgentStore((state) => state.panelOpen);
     const toggleAgentPanel = useAgentStore((state) => state.togglePanel);
     const openAgentPanel = useAgentStore((state) => state.openPanel);
@@ -530,6 +548,33 @@ function InfiniteCanvasPage() {
         if (!projectLoaded || historyPausedRef.current) return;
         updateProject(projectId, { nodes, connections, chatSessions, activeChatId, backgroundMode, showImageInfo });
     }, [activeChatId, backgroundMode, chatSessions, connections, nodes, projectId, projectLoaded, showImageInfo, updateProject]);
+
+    useEffect(() => {
+        if (!projectLoaded || !isTauri()) return;
+        const timer = window.setTimeout(() => {
+            const snapshot = {
+                projectId,
+                title: currentProject?.title || "",
+                nodes: nodesRef.current,
+                connections: connectionsRef.current,
+                selectedNodeIds: Array.from(selectedNodeIdsRef.current),
+                viewport: viewportRef.current,
+                updatedAt: new Date().toISOString(),
+            };
+            void (async () => {
+                await writeCanvasWorkspace(projectId, snapshot.title, snapshot);
+                const keys = new Set([...collectImageStorageKeys(nodesRef.current), ...collectMediaStorageKeys(nodesRef.current)]);
+                await syncWorkspaceMedia(
+                    projectId,
+                    [...keys].map((key) => ({
+                        key,
+                        load: () => (key.startsWith("image:") ? getImageBlob(key) : getMediaBlob(key)),
+                    })),
+                );
+            })().catch(() => undefined);
+        }, 1500);
+        return () => window.clearTimeout(timer);
+    }, [nodes, connections, viewport, projectId, projectLoaded, currentProject?.title]);
 
     useEffect(() => {
         if (!dialogNodeId) setNodeImageSettingsOpen(false);
@@ -1112,6 +1157,16 @@ function InfiniteCanvasPage() {
         }
     }, [message, projectId, t]);
 
+    const openCanvasFolder = useCallback(async () => {
+        try {
+            const dir = await canvasWorkspaceDir(projectId);
+            const { openPath } = await import("@tauri-apps/plugin-opener");
+            await openPath(dir);
+        } catch {
+            message.error(t("canvas.openFolderFailed"));
+        }
+    }, [message, projectId, t]);
+
     const handleCanvasMouseDown = useCallback(
         (event: ReactPointerEvent<HTMLDivElement>) => {
             setContextMenu(null);
@@ -1388,7 +1443,7 @@ function InfiniteCanvasPage() {
 
     const createImageFileNode = useCallback(async (file: File, position: Position) => {
         const image = await uploadImage(file);
-        const size = fitNodeSize(image.width, image.height);
+        const size = nodeSizeToEdge(image.width, image.height, NODE_DEFAULT_SIZE[CanvasNodeType.Image].width);
         const id = `image-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         const newNode: CanvasNodeData = {
             id,
@@ -1408,7 +1463,7 @@ function InfiniteCanvasPage() {
 
     const createVideoFileNode = useCallback(async (file: File, position: Position) => {
         const video = await uploadMediaFile(file, "video");
-        const size = fitNodeSize(video.width || 1280, video.height || 720, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
+        const size = nodeSizeToEdge(video.width || 1280, video.height || 720, NODE_DEFAULT_SIZE[CanvasNodeType.Video].width);
         const id = `video-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         setNodes((prev) => [
             ...prev,
@@ -3102,7 +3157,7 @@ function InfiniteCanvasPage() {
         async (image: CanvasAssistantImage) => {
             const storedImage = image.storageKey ? { url: image.dataUrl, storageKey: image.storageKey, width: 1, height: 1, bytes: 0, mimeType: "image/png" } : await uploadImage(image.dataUrl);
             const meta = storedImage.width === 1 && storedImage.height === 1 ? await readImageMeta(storedImage.url) : storedImage;
-            const config = fitNodeSize(meta.width, meta.height);
+            const config = nodeSizeToEdge(meta.width, meta.height, NODE_DEFAULT_SIZE[CanvasNodeType.Image].width);
             const center = screenToCanvas((containerRef.current?.getBoundingClientRect().left || 0) + size.width / 2, (containerRef.current?.getBoundingClientRect().top || 0) + size.height / 2);
             const id = `image-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
             const node: CanvasNodeData = {
@@ -3679,12 +3734,13 @@ function InfiniteCanvasPage() {
                     onCreateProject={createAndOpenProject}
                     onDeleteProject={deleteCurrentProject}
                     onExportProject={exportCurrentProject}
+                    onOpenFolder={isTauri() ? openCanvasFolder : undefined}
                     onImportImage={() => handleUploadRequest()}
                     onOpenPlugins={() => setPluginManagerOpen(true)}
                     onUndo={undoCanvas}
                     onRedo={redoCanvas}
                     agentOpen={agentPanelOpen}
-                    compactAgentStatus={{ connected: localAgentConnected, enabled: localAgentEnabled, activity: localAgentActivity }}
+                    compactAgentStatus={{ connected: localAgentConnected || mcpRegistered, enabled: localAgentEnabled, activity: localAgentActivity }}
                     onToggleAgent={toggleAgentPanel}
                 />
 
