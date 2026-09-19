@@ -8,6 +8,7 @@ import { hydrateUserCanvasConfigFromServer } from "@canvas/services/user-canvas-
 import { restoreCanvasProjectsIfLocalEmpty } from "@canvas/services/user-canvas-project-sync";
 import { createModelChannel, useConfigStore } from "@canvas/stores/use-config-store";
 import { usePromptSourceStore } from "@canvas/stores/use-prompt-source-store";
+import { useAuthStore } from "@/stores/auth-store";
 
 export function ClientRootInit({ children }: { children: ReactNode }) {
     const { message } = App.useApp();
@@ -17,16 +18,15 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     const config = useConfigStore((state) => state.config);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const loadSources = usePromptSourceStore((state) => state.loadSources);
+    const isAuthenticated = useAuthStore((s) => Boolean(s.auth.user && s.auth.accessToken));
 
     useEffect(() => {
+        if (!isAuthenticated) return;
         void loadSources().catch(() => undefined);
-    }, [loadSources]);
-
-    useEffect(() => {
         void hydrateUserAssetsFromServer().catch(() => undefined);
         void hydrateUserCanvasConfigFromServer().catch(() => undefined);
         void restoreCanvasProjectsIfLocalEmpty();
-    }, []);
+    }, [isAuthenticated, loadSources]);
 
     useEffect(() => {
         if (handledConfigParams.current) return;

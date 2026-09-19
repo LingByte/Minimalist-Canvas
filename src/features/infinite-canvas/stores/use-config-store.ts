@@ -70,9 +70,9 @@ export type ConfigTabKey = "channels" | "preferences" | "webdav" | "local-storag
 
 export const CONFIG_STORE_KEY = "minimalist-canvas:ai_config_store";
 const CHANNEL_MODEL_SEPARATOR = "::";
-const DEFAULT_OPENAI_BASE_URL = "https://canvas.lingecho.com";
+const DEFAULT_OPENAI_BASE_URL = "https://simplefuture.zone";
 const LEGACY_OPENAI_BASE_URL = "https://api.openai.com";
-const LEGACY_PRODUCT_BASE_URL = "https://ai.lingecho.com";
+const LEGACY_PRODUCT_BASE_URLS = ["https://ai.lingecho.com", "https://canvas.lingecho.com"];
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
 
 export const defaultConfig: AiConfig = {
@@ -406,7 +406,7 @@ function migrateLegacyOpenAIBaseUrl(baseUrl: string) {
     if (
         !normalized ||
         normalized === LEGACY_OPENAI_BASE_URL ||
-        normalized === LEGACY_PRODUCT_BASE_URL
+        LEGACY_PRODUCT_BASE_URLS.includes(normalized)
     ) {
         return DEFAULT_OPENAI_BASE_URL;
     }

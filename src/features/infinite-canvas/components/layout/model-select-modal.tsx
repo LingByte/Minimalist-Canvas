@@ -15,7 +15,7 @@ export type ModelSelectResult = {
 };
 
 // Channel model selector: for the site gateway use /api/canvas/models (with
-// capability). External Base URLs (e.g. ai.lingecho.com) use upstream /v1/models.
+// capability). External Base URLs (e.g. simplefuture.zone) use upstream /v1/models.
 export function ModelSelectModal({
     open,
     channel,

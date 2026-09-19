@@ -8,6 +8,7 @@ import zhCN from "antd/es/locale/zh_CN";
 import dayjs from "dayjs";
 import "dayjs/locale/zh-cn";
 import { I18nextProvider, useTranslation } from "react-i18next";
+import { Toaster } from "sonner";
 
 import { ClientRootInit } from "@canvas/components/layout/client-root-init";
 import canvasI18n, { type AppLocale } from "@canvas/i18n";
@@ -74,6 +75,7 @@ function AppProvidersInner({ children, embedded = false, rootId }: AppProvidersP
                 <App>
                     <QueryClientProvider client={queryClient}>
                         <ClientRootInit>{children}</ClientRootInit>
+                        <Toaster theme={theme} richColors position="top-center" />
                     </QueryClientProvider>
                 </App>
             </ProConfigProvider>

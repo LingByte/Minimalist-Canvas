@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import axios, { type AxiosAdapter, type AxiosRequestConfig, type AxiosResponse } from 'axios'
+import axios, { type AxiosRequestConfig } from 'axios'
 import { t } from 'i18next'
 import { toast } from 'sonner'
 
@@ -25,6 +25,7 @@ import {
   clearAuthentication,
   refreshAuthentication,
 } from '@/lib/auth-session'
+import { createTauriAdapter } from '@/lib/tauri-http-adapter'
 import { getServerErrorMessageKey } from '@/lib/server-error-message'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -40,56 +41,6 @@ declare module 'axios' {
 }
 
 export type ApiRequestConfig = AxiosRequestConfig
-
-// Check if running inside Tauri (desktop app)
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-
-// Custom axios adapter using Tauri HTTP plugin (bypasses CORS)
-function createTauriAdapter(): AxiosAdapter | null {
-  if (!isTauri) return null
-  return async (config) => {
-    const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
-    const url = buildFullURL(config)
-    const method = (config.method || 'get').toUpperCase()
-    const headers: Record<string, string> = {}
-    if (config.headers) {
-      for (const [key, value] of Object.entries(config.headers)) {
-        if (value != null) headers[key] = String(value)
-      }
-    }
-    const init: RequestInit = { method, headers }
-    if (config.data && method !== 'GET' && method !== 'HEAD') {
-      init.body = typeof config.data === 'string' ? config.data : JSON.stringify(config.data)
-      if (!headers['Content-Type'] && typeof config.data === 'object') {
-        headers['Content-Type'] = 'application/json'
-      }
-    }
-    const res = await tauriFetch(url, init)
-    const responseHeaders: Record<string, string> = {}
-    res.headers.forEach((value, key) => { responseHeaders[key] = value })
-    const responseData = await res.text()
-    let parsed: unknown = responseData
-    const contentType = responseHeaders['content-type'] || ''
-    if (contentType.includes('application/json') || responseData.startsWith('{') || responseData.startsWith('[')) {
-      try { parsed = JSON.parse(responseData) } catch { /* keep text */ }
-    }
-    return {
-      data: parsed,
-      status: res.status,
-      statusText: res.statusText,
-      headers: responseHeaders,
-      config,
-      request: {},
-    } as AxiosResponse
-  }
-}
-
-function buildFullURL(config: AxiosRequestConfig): string {
-  const baseURL = config.baseURL || ''
-  const url = config.url || ''
-  if (/^https?:\/\//.test(url)) return url
-  return `${baseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`
-}
 
 const tauriAdapter = createTauriAdapter()
 
@@ -130,6 +81,46 @@ function redirectToSignIn(): void {
   }
 }
 
+// Raw backend auth failures (e.g. "Unauthorized, not logged in and no access
+// token provided") should never reach the user — swap them for a friendly,
+// localized message.
+const UNAUTHENTICATED_PATTERNS = [
+  /not logged in/i,
+  /no access token/i,
+  /unauthorized/i,
+  /unauthenticated/i,
+  /未登录/,
+  /未授权/,
+]
+
+function isUnauthenticatedMessage(message: unknown): boolean {
+  return (
+    typeof message === 'string' &&
+    UNAUTHENTICATED_PATTERNS.some((pattern) => pattern.test(message))
+  )
+}
+
+function unauthenticatedMessage(): string {
+  return useAuthStore.getState().auth.user
+    ? t('Session expired!')
+    : t('Please sign in first')
+}
+
+function resolveErrorMessage(payload: unknown, fallback?: string): string {
+  const messageKey = getServerErrorMessageKey(payload)
+  if (messageKey) return t(messageKey)
+  const data =
+    typeof payload === 'object' && payload !== null
+      ? ((payload as { response?: { data?: unknown } }).response?.data ?? payload)
+      : payload
+  const raw =
+    typeof data === 'object' && data !== null
+      ? (data as { message?: unknown }).message
+      : undefined
+  if (isUnauthenticatedMessage(raw)) return unauthenticatedMessage()
+  return typeof raw === 'string' && raw ? raw : fallback || t('Request failed')
+}
+
 api.interceptors.response.use(
   (response) => {
     if (response.config.acceptAuthRotation && response.data?.success === true) {
@@ -141,12 +132,7 @@ api.interceptors.response.use(
       typeof response.data?.success === 'boolean' &&
       !response.data.success
     ) {
-      const messageKey = getServerErrorMessageKey(response.data)
-      toast.error(
-        messageKey
-          ? t(messageKey)
-          : response.data.message || t('Request failed')
-      )
+      toast.error(resolveErrorMessage(response.data))
     }
     return response
   },
@@ -171,24 +157,18 @@ api.interceptors.response.use(
         }
 
         if (outcome.kind === 'anonymous' || outcome.kind === 'out_of_sync') {
-          if (!skipErrorHandler) toast.error(t('Session expired!'))
+          if (!skipErrorHandler) toast.error(unauthenticatedMessage())
           redirectToSignIn()
         }
       } else if (config?.authRetry) {
         clearAuthentication(false)
-        if (!skipErrorHandler) toast.error(t('Session expired!'))
+        if (!skipErrorHandler) toast.error(unauthenticatedMessage())
         redirectToSignIn()
       } else if (!skipErrorHandler) {
-        toast.error(t('Session expired!'))
+        toast.error(unauthenticatedMessage())
       }
     } else if (!skipErrorHandler) {
-      const messageKey = getServerErrorMessageKey(error)
-      const message = messageKey
-        ? t(messageKey)
-        : error?.response?.data?.message ||
-          error?.message ||
-          t('Request failed')
-      toast.error(message)
+      toast.error(resolveErrorMessage(error, error?.message))
     }
     throw error
   }

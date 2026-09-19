@@ -43,7 +43,7 @@ function applyGatewayConfig(apiKey: string) {
   })
 }
 
-/** Keep existing Base URL (e.g. ai.lingecho.com); only fill missing/invalid sk-. */
+/** Keep existing Base URL (e.g. simplefuture.zone); only fill missing/invalid sk-. */
 function applyDefaultChannelApiKey(apiKey: string) {
   useConfigStore.setState((state) => {
     if (!shouldFillDefaultChannelApiKey(state.config)) return state
@@ -73,7 +73,7 @@ function applyDefaultChannelApiKey(apiKey: string) {
 /**
  * Bridge canvas API calls to the current site gateway when the user has not
  * configured custom Base URL + API Key. Uses relay API tokens from /api/token.
- * For the product default host (canvas.lingecho.com), only fills the first sk-.
+ * For the product default host (simplefuture.zone), only fills the first sk-.
  */
 export function useGatewayBridge() {
   const accessToken = useAuthStore((s) => s.auth.accessToken)

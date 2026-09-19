@@ -1,8 +1,9 @@
 import { type AiConfig, type ModelChannel } from '@canvas/stores/use-config-store'
 
 export const GATEWAY_CHANNEL_ID = 'default'
-export const PRODUCT_DEFAULT_BASE_URL = 'https://canvas.lingecho.com'
+export const PRODUCT_DEFAULT_BASE_URL = 'https://simplefuture.zone'
 const LEGACY_PRODUCT_DEFAULT_BASE_URLS = [
+  'https://simplefuture.zone',
   'https://canvas.lingecho.com',
   'https://ai.lingecho.com',
 ]
@@ -55,7 +56,7 @@ export function hasCustomRemoteCredentials(config: AiConfig) {
 /**
  * Whether embedded gateway auto-bridge may set baseUrl/apiKey on the default channel.
  * Replaces empty keys and legacy non-sk tokens (e.g. dashboard access_token), but never
- * overwrites canvas.lingecho.com / ai.lingecho.com or another intentional remote Base URL.
+ * overwrites simplefuture.zone or another intentional remote Base URL.
  */
 export function shouldAutoApplyGateway(config: AiConfig) {
   if (hasCustomRemoteCredentials(config)) return false
@@ -77,7 +78,7 @@ export function shouldAutoApplyGateway(config: AiConfig) {
 
 /**
  * Fill the first user sk- onto the product default / gateway / placeholder channel
- * without rewriting Base URL (keeps https://canvas.lingecho.com).
+ * without rewriting Base URL (keeps https://simplefuture.zone).
  */
 export function shouldFillDefaultChannelApiKey(config: AiConfig) {
   if (hasCustomRemoteCredentials(config)) return false

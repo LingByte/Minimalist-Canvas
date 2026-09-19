@@ -1,5 +1,8 @@
 /** Fixed backend site for this desktop build — auth, prompts, assets APIs. */
-export const SITE_BASE_URL = "https://canvas.lingecho.com";
+export const SITE_BASE_URL = "https://simplefuture.zone";
+
+/** Origin accepted by the backend's auth allowlist (its configured server_address). */
+export const SITE_ORIGIN = "https://ai.lingecho.com";
 
 /** Resolve the configured backend site base URL (no trailing slash). */
 export function siteBaseUrl(): string {

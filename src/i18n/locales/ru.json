@@ -3916,6 +3916,7 @@
     "Please select items to delete": "Пожалуйста, выберите элементы для удаления",
     "Please Select user groups that can access this channel.": "Пожалуйста, выберите группы пользователей, которые могут получить доступ к этому каналу.",
     "Please set Ollama API Base URL first": "Сначала установите базовый URL-адрес API Ollama",
+    "Please sign in first": "Сначала войдите в систему",
     "Please sign in to view {{module}}.": "Войдите, чтобы просмотреть {{module}}.",
     "Please try again later": "Попробуйте позже",
     "Please try again later.": "Повторите попытку позже.",

@@ -3916,6 +3916,7 @@
     "Please select items to delete": "請選擇要刪除的項目",
     "Please Select user groups that can access this channel.": "請選擇可以存取此渠道的用戶組。",
     "Please set Ollama API Base URL first": "請先設定 Ollama API Base URL",
+    "Please sign in first": "請先登入",
     "Please sign in to view {{module}}.": "請登入後查看 {{module}}。",
     "Please try again later": "請稍後再試",
     "Please try again later.": "請稍後再試。",

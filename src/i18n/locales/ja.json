@@ -3916,6 +3916,7 @@
     "Please select items to delete": "削除する項目を選択してください",
     "Please Select user groups that can access this channel.": "このチャネルにアクセスできるユーザーグループを選択してください。",
     "Please set Ollama API Base URL first": "最初にOllama APIベースURLを設定してください",
+    "Please sign in first": "先にログインしてください",
     "Please sign in to view {{module}}.": "{{module}} を表示するにはログインしてください。",
     "Please try again later": "しばらくしてから再試行してください",
     "Please try again later.": "後でもう一度お試しください。",

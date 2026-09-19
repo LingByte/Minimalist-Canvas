@@ -21,6 +21,8 @@ import axios from 'axios'
 import { t } from 'i18next'
 
 import { publishAuthSessionEvent } from '@/lib/auth-session-sync'
+import { SITE_BASE_URL } from '@/lib/open-external'
+import { createTauriAdapter } from '@/lib/tauri-http-adapter'
 import {
   useAuthStore,
   type AuthBootstrapState,
@@ -66,12 +68,15 @@ export class AuthRotationError extends Error {
   }
 }
 
+const authTauriAdapter = createTauriAdapter()
+
 const authClient = axios.create({
-  baseURL: '',
+  baseURL: SITE_BASE_URL,
   withCredentials: true,
   headers: {
     'Cache-Control': 'no-store',
   },
+  ...(authTauriAdapter ? { adapter: authTauriAdapter } : {}),
 })
 
 const refreshRaceDelays = [80, 200, 500] as const
