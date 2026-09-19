@@ -2,7 +2,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { ChangeEvent as ReactChangeEvent, DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Group, Video } from "lucide-react";
-import { saveAs } from "file-saver";
 import { useTranslation } from "react-i18next";
 
 import { requestEdit, requestGeneration, requestImageQuestion } from "@canvas/services/api/image";
@@ -13,6 +12,7 @@ import { createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo
 import { defaultConfig, useConfigStore, useEffectiveConfig } from "@canvas/stores/use-config-store";
 import { uploadImage } from "@canvas/services/image-storage";
 import { uploadMediaFile } from "@canvas/services/file-storage";
+import { saveBlobAs } from "@canvas/lib/save-file";
 import {
     buildCanvasImageAssetConfig,
     buildCanvasVideoAssetConfig,
@@ -1693,7 +1693,7 @@ function InfiniteCanvasPage() {
         if ((node.type !== CanvasNodeType.Image && node.type !== CanvasNodeType.Video && node.type !== CanvasNodeType.Audio) || !node.metadata?.content) return;
         const url = node.metadata.content;
         if (url.startsWith("data:") || url.startsWith("blob:")) {
-            saveAs(url, `canvas-${node.type}-${node.id}.${node.type === CanvasNodeType.Video ? "mp4" : node.type === CanvasNodeType.Audio ? audioExtension(node.metadata.mimeType) : imageExtension(url)}`);
+            void saveBlobAs(url, `canvas-${node.type}-${node.id}.${node.type === CanvasNodeType.Video ? "mp4" : node.type === CanvasNodeType.Audio ? audioExtension(node.metadata.mimeType) : imageExtension(url)}`);
             return;
         }
         window.open(url, "_blank", "noopener,noreferrer");
@@ -1704,7 +1704,7 @@ function InfiniteCanvasPage() {
         if (!image?.content) return;
         const url = image.content;
         if (url.startsWith("data:") || url.startsWith("blob:")) {
-            saveAs(url, `canvas-image-${node.id}-${image.id}.${imageExtension(url)}`);
+            void saveBlobAs(url, `canvas-image-${node.id}-${image.id}.${imageExtension(url)}`);
             return;
         }
         window.open(url, "_blank", "noopener,noreferrer");

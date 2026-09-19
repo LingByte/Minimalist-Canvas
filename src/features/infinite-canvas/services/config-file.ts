@@ -1,6 +1,5 @@
-import { saveAs } from "file-saver";
-
 import i18n from "@canvas/i18n";
+import { saveBlobAs } from "@canvas/lib/save-file";
 import { useConfigStore, type AiConfig, type WebdavSyncConfig } from "@canvas/stores/use-config-store";
 import { usePromptSourceStore } from "@canvas/stores/use-prompt-source-store";
 import type { PromptSource } from "@canvas/services/api/prompt-source-presets";
@@ -16,11 +15,11 @@ type AppConfigFile = {
     };
 };
 
-export function exportAppConfig() {
+export async function exportAppConfig() {
     const { config, webdav } = useConfigStore.getState();
     const { sources } = usePromptSourceStore.getState();
     const data: AppConfigFile = { app: "minimalist-canvas", version: 1, exportedAt: new Date().toISOString(), config, webdav, promptSources: { sources } };
-    saveAs(new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" }), "minimalist-canvas-config.json");
+    await saveBlobAs(new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" }), "minimalist-canvas-config.json");
 }
 
 export async function importAppConfig(file: File) {

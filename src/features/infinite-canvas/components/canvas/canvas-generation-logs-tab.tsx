@@ -1,10 +1,10 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import { App, Checkbox, Drawer, Empty, Input, Popconfirm, Spin, Tag } from "antd";
-import { saveAs } from "file-saver";
 import { Download, Image as ImageIcon, Plus, Search, Trash2, Video } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type { CanvasTheme } from "@canvas/lib/canvas-theme";
+import { saveBlobAs } from "@canvas/lib/save-file";
 import { cn } from "@canvas/lib/utils";
 import {
     deleteGenerationAssetsByClientIds,
@@ -83,7 +83,7 @@ async function downloadMediaFile(file: GenerationAssetFile, filename: string) {
     const url = file.url?.trim();
     if (!url) throw new Error("missing url");
     if (url.startsWith("data:") || url.startsWith("blob:")) {
-        saveAs(url, filename);
+        await saveBlobAs(url, filename);
         return;
     }
     // Open the CDN URL directly in a new tab.

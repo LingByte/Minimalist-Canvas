@@ -1,10 +1,10 @@
 import { Copy, Download, PencilLine, Search, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { App, Button, Card, Drawer, Empty, Form, Image, Input, Modal, Pagination, Select, Space, Tag, Typography } from "antd";
-import { saveAs } from "file-saver";
 import { useTranslation } from "react-i18next";
 
 import { useCopyText } from "@canvas/hooks/use-copy-text";
+import { saveBlobAs } from "@canvas/lib/save-file";
 import { formatBytes, readFileAsDataUrl } from "@canvas/lib/image-utils";
 import { uploadImage } from "@canvas/services/image-storage";
 import { cn } from "@canvas/lib/utils";
@@ -146,7 +146,7 @@ export default function AssetsPage() {
 
     const downloadImage = (asset: Asset) => {
         if (asset.kind !== "image" && asset.kind !== "video") return;
-        saveAs(asset.kind === "video" ? asset.data.url : asset.data.dataUrl, `${asset.title || "asset"}.${asset.data.mimeType.split("/")[1] || "png"}`);
+        void saveBlobAs(asset.kind === "video" ? asset.data.url : asset.data.dataUrl, `${asset.title || "asset"}.${asset.data.mimeType.split("/")[1] || "png"}`);
     };
 
     const exportAllAssets = async () => {

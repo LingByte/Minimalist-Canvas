@@ -1,5 +1,4 @@
-import { saveAs } from "file-saver";
-
+import { saveBlobAs } from "@canvas/lib/save-file";
 import { createZip, readZip } from "@canvas/lib/zip";
 import { getMediaBlob, setMediaBlob } from "@canvas/services/file-storage";
 import { getImageBlob, setImageBlob } from "@canvas/services/image-storage";
@@ -39,7 +38,7 @@ export async function exportAssets(assets: Asset[], filename: string) {
 
     const data: AssetExportFile = { app: "minimalist-canvas", version: 1, exportedAt: new Date().toISOString(), assets, files };
     const zip = await createZip([{ name: "assets.json", data: JSON.stringify(data, null, 2) }, ...zipFiles]);
-    saveAs(zip, filename);
+    await saveBlobAs(zip, filename);
 }
 
 export async function readAssetPackage(file: File) {

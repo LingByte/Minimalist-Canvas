@@ -1,6 +1,5 @@
-import { saveAs } from "file-saver";
-
 import i18n from "@canvas/i18n";
+import { saveBlobAs } from "@canvas/lib/save-file";
 import { createZip } from "@canvas/lib/zip";
 import { getMediaBlob } from "@canvas/services/file-storage";
 import { getImageBlob } from "@canvas/services/image-storage";
@@ -28,7 +27,7 @@ export async function exportCanvasProjects(projects: CanvasProject[], fileName =
 
     const data: CanvasExportFile = { app: "minimalist-canvas", version: 3, exportedAt: new Date().toISOString(), projects: exportedProjects };
     const zip = await createZip([{ name: "projects.json", data: JSON.stringify(data, null, 2) }, ...zipFiles]);
-    saveAs(zip, `${safeFileName(fileName)}.zip`);
+    await saveBlobAs(zip, `${safeFileName(fileName)}.zip`);
 }
 
 export async function exportCanvasNodes(nodes: CanvasNodeData[], fileName = i18n.t("canvas.export.defaultNodesName")) {
@@ -61,7 +60,7 @@ export async function exportCanvasNodes(nodes: CanvasNodeData[], fileName = i18n
     );
 
     const zip = await createZip(zipFiles);
-    saveAs(zip, `${safeFileName(fileName)}.zip`);
+    await saveBlobAs(zip, `${safeFileName(fileName)}.zip`);
 }
 
 function collectStorageKeys(value: unknown, keys = new Set<string>()) {
