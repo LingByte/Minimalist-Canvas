@@ -1,6 +1,6 @@
 import { App, Button, Switch, Tag } from "antd";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
+import { Eye, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -9,6 +9,7 @@ import { PromptSourceContentModal } from "./prompt-source-content-modal";
 import { fetchPromptSourceStatuses } from "@canvas/services/api/prompts";
 import { usePromptSourceStore } from "@canvas/stores/use-prompt-source-store";
 import type { PromptSource } from "@canvas/services/api/prompt-source-presets";
+import { useAuthStore } from "@/stores/auth-store";
 
 const STATUS_QUERY_KEY = ["prompt-source-statuses"];
 
@@ -21,10 +22,13 @@ export function ConfigPromptSources() {
     const saveSource = usePromptSourceStore((state) => state.saveSource);
     const removeSource = usePromptSourceStore((state) => state.removeSource);
     const toggleSource = usePromptSourceStore((state) => state.toggleSource);
-    const statusQuery = useQuery({ queryKey: STATUS_QUERY_KEY, queryFn: fetchPromptSourceStatuses });
+    const syncSources = usePromptSourceStore((state) => state.syncSources);
+    const isAuthenticated = useAuthStore((s) => Boolean(s.auth.user && s.auth.accessToken));
+    const statusQuery = useQuery({ queryKey: STATUS_QUERY_KEY, queryFn: fetchPromptSourceStatuses, enabled: isAuthenticated });
 
     const [editingSource, setEditingSource] = useState<PromptSource | null>(null);
     const [viewingId, setViewingId] = useState("");
+    const [syncing, setSyncing] = useState(false);
     const viewingSource = sources.find((item) => item.id === viewingId) || null;
 
     const invalidatePrompts = async () => {
@@ -33,6 +37,19 @@ export function ConfigPromptSources() {
             queryClient.invalidateQueries({ queryKey: ["side-panel-prompts"] }),
             queryClient.invalidateQueries({ queryKey: STATUS_QUERY_KEY }),
         ]);
+    };
+
+    const handleSync = async () => {
+        setSyncing(true);
+        try {
+            const list = await syncSources();
+            await invalidatePrompts();
+            message.success(t("config.promptSources.synced", { count: list.length }));
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : t("config.promptSources.refreshFailed"));
+        } finally {
+            setSyncing(false);
+        }
     };
 
     const handleSave = async (source: PromptSource) => {
@@ -62,6 +79,9 @@ export function ConfigPromptSources() {
     return (
         <div>
             <div className="mb-4 flex flex-wrap items-center justify-end gap-3">
+                <Button icon={<RefreshCw className="size-4" />} loading={syncing} disabled={!isAuthenticated} onClick={() => void handleSync()}>
+                    {t("config.promptSources.sync")}
+                </Button>
                 <Button type="primary" icon={<Plus className="size-4" />} onClick={() => setEditingSource(addSource())}>
                     {t("config.promptSources.add")}
                 </Button>

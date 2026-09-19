@@ -2,7 +2,7 @@ import i18n from "@canvas/i18n";
 import { saveBlobAs } from "@canvas/lib/save-file";
 import { useConfigStore, type AiConfig, type WebdavSyncConfig } from "@canvas/stores/use-config-store";
 import { usePromptSourceStore } from "@canvas/stores/use-prompt-source-store";
-import type { PromptSource } from "@canvas/services/api/prompt-source-presets";
+import { createPromptSource, type PromptSource } from "@canvas/services/api/prompt-source-presets";
 
 type AppConfigFile = {
     app: "minimalist-canvas";
@@ -31,5 +31,6 @@ export async function importAppConfig(file: File) {
     }
     if (data.app !== "minimalist-canvas" || data.version !== 1 || !data.config || !data.webdav || !data.promptSources) throw new Error(i18n.t("config.invalidFile"));
     useConfigStore.setState({ config: data.config, webdav: data.webdav });
-    await usePromptSourceStore.getState().loadSources();
+    const importedSources = Array.isArray(data.promptSources.sources) ? data.promptSources.sources : [];
+    usePromptSourceStore.getState().setSources(importedSources.map((source) => createPromptSource(source)));
 }

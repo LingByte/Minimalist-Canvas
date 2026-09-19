@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { clearSyncedLocalData } from "@canvas/services/clear-synced-local-data";
-import { moveStorageRoot } from "@canvas/services/fs-store";
+import { isTauri, moveStorageRoot } from "@canvas/services/fs-store";
 import { readLocalStorageUsage, type LocalStorageUsage } from "@canvas/services/local-storage-usage";
 import { useConfigStore } from "@canvas/stores/use-config-store";
 
@@ -97,118 +97,120 @@ export function ConfigLocalStorage({ active }: { active: boolean }) {
                 </div>
                 <Alert className="mt-4" type="info" showIcon title={t("config.localStorage.syncedHint")} />
                 {usage?.dataPath ? (
-                    <Alert
-                        className="mt-4"
-                        type="info"
-                        showIcon
-                        title={t("config.localStorage.dataPath")}
-                        description={
-                            <div className="space-y-2">
-                                <div className="flex items-center gap-2">
-                                    <code className="flex-1 text-xs break-all">{usage.dataPath}</code>
+                    <div className="mt-4 rounded-lg bg-stone-100/70 p-3 dark:bg-stone-900/70">
+                        <div className="flex items-center gap-2 text-xs text-stone-500">
+                            <FolderOpen className="size-4" />
+                            {t("config.localStorage.dataPath")}
+                        </div>
+                        <div className="mt-2 flex items-center gap-2">
+                            <code className="flex-1 text-xs break-all">{usage.dataPath}</code>
+                            <Button
+                                size="small"
+                                icon={<FolderOpen className="size-3.5" />}
+                                onClick={async () => {
+                                    const path = usage.dataPath!;
+                                    try {
+                                        const { openPath } = await import("@tauri-apps/plugin-opener");
+                                        await openPath(path);
+                                    } catch (err) {
+                                        try {
+                                            const parentPath = path.split("/").slice(0, -1).join("/") || "/Users";
+                                            const { openPath } = await import("@tauri-apps/plugin-opener");
+                                            await openPath(parentPath);
+                                        } catch (err2) {
+                                            message.error(t("config.localStorage.openPathFailed") + ": " + String(err));
+                                        }
+                                    }
+                                }}
+                            >
+                                {t("config.localStorage.openPath")}
+                            </Button>
+                        </div>
+                        <div className="mt-3 border-t border-stone-200 pt-3 dark:border-stone-800">
+                            <div className="mb-1.5 text-xs font-medium text-stone-600 dark:text-stone-400">
+                                {t("config.localStorage.customDataDir")}
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <code className="flex-1 text-xs break-all text-stone-500 dark:text-stone-500">
+                                    {useConfigStore.getState().config.customDataDir || t("config.localStorage.customDataDirEmpty")}
+                                </code>
+                                <Button
+                                    size="small"
+                                    icon={<FolderCog className="size-3.5" />}
+                                    loading={movingDir}
+                                    onClick={async () => {
+                                        try {
+                                            const { open } = await import("@tauri-apps/plugin-dialog");
+                                            const selected = await open({ directory: true, multiple: false });
+                                            if (typeof selected !== "string" || !selected) return;
+                                            setMovingDir(true);
+                                            try {
+                                                await moveStorageRoot(selected);
+                                                useConfigStore.getState().updateConfig("customDataDir", selected);
+                                                message.success(t("config.localStorage.customDataDirSet"));
+                                                await refresh();
+                                            } finally {
+                                                setMovingDir(false);
+                                            }
+                                        } catch (err) {
+                                            message.error(t("config.localStorage.moveDataDirFailed") + ": " + String(err));
+                                        }
+                                    }}
+                                >
+                                    {t("config.localStorage.changeDataDir")}
+                                </Button>
+                                {useConfigStore.getState().config.customDataDir ? (
                                     <Button
                                         size="small"
-                                        icon={<FolderOpen className="size-3.5" />}
+                                        loading={movingDir}
                                         onClick={async () => {
-                                            const path = usage.dataPath!;
+                                            setMovingDir(true);
                                             try {
-                                                const { openPath } = await import("@tauri-apps/plugin-opener");
-                                                await openPath(path);
+                                                await moveStorageRoot("");
+                                                useConfigStore.getState().updateConfig("customDataDir", "");
+                                                message.success(t("config.localStorage.customDataDirReset"));
+                                                await refresh();
                                             } catch (err) {
-                                                try {
-                                                    const parentPath = path.split("/").slice(0, -1).join("/") || "/Users";
-                                                    const { openPath } = await import("@tauri-apps/plugin-opener");
-                                                    await openPath(parentPath);
-                                                } catch (err2) {
-                                                    message.error(t("config.localStorage.openPathFailed") + ": " + String(err));
-                                                }
+                                                message.error(t("config.localStorage.moveDataDirFailed") + ": " + String(err));
+                                            } finally {
+                                                setMovingDir(false);
                                             }
                                         }}
                                     >
-                                        {t("config.localStorage.openPath")}
+                                        {t("config.localStorage.resetDataDir")}
                                     </Button>
-                                </div>
-                                <div className="border-t border-stone-200 pt-2 dark:border-stone-700">
-                                    <div className="mb-1.5 text-xs font-medium text-stone-600 dark:text-stone-400">
-                                        {t("config.localStorage.customDataDir")}
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <code className="flex-1 text-xs break-all text-stone-500 dark:text-stone-500">
-                                            {useConfigStore.getState().config.customDataDir || t("config.localStorage.customDataDirEmpty")}
-                                        </code>
-                                        <Button
-                                            size="small"
-                                            icon={<FolderCog className="size-3.5" />}
-                                            loading={movingDir}
-                                            onClick={async () => {
-                                                try {
-                                                    const { open } = await import("@tauri-apps/plugin-dialog");
-                                                    const selected = await open({ directory: true, multiple: false });
-                                                    if (typeof selected !== "string" || !selected) return;
-                                                    setMovingDir(true);
-                                                    try {
-                                                        await moveStorageRoot(selected);
-                                                        useConfigStore.getState().updateConfig("customDataDir", selected);
-                                                        message.success(t("config.localStorage.customDataDirSet"));
-                                                        await refresh();
-                                                    } finally {
-                                                        setMovingDir(false);
-                                                    }
-                                                } catch (err) {
-                                                    message.error(t("config.localStorage.moveDataDirFailed") + ": " + String(err));
-                                                }
-                                            }}
-                                        >
-                                            {t("config.localStorage.changeDataDir")}
-                                        </Button>
-                                        {useConfigStore.getState().config.customDataDir ? (
-                                            <Button
-                                                size="small"
-                                                loading={movingDir}
-                                                onClick={async () => {
-                                                    setMovingDir(true);
-                                                    try {
-                                                        await moveStorageRoot("");
-                                                        useConfigStore.getState().updateConfig("customDataDir", "");
-                                                        message.success(t("config.localStorage.customDataDirReset"));
-                                                        await refresh();
-                                                    } catch (err) {
-                                                        message.error(t("config.localStorage.moveDataDirFailed") + ": " + String(err));
-                                                    } finally {
-                                                        setMovingDir(false);
-                                                    }
-                                                }}
-                                            >
-                                                {t("config.localStorage.resetDataDir")}
-                                            </Button>
-                                        ) : null}
-                                    </div>
-                                    <div className="mt-1 text-[11px] text-stone-400 dark:text-stone-500">
-                                        {t("config.localStorage.customDataDirHint")}
-                                    </div>
-                                </div>
+                                ) : null}
                             </div>
-                        }
-                    />
+                            <div className="mt-1 text-[11px] text-stone-400 dark:text-stone-500">
+                                {t("config.localStorage.customDataDirHint")}
+                            </div>
+                        </div>
+                    </div>
                 ) : null}
                 {error ? <Alert className="mt-4" type="error" showIcon title={t("config.localStorage.readFailed")} description={error} /> : null}
                 {!usage && loading ? (
                     <div className="flex min-h-48 items-center justify-center"><Spin /></div>
                 ) : usage ? (
-                    <>
+                    isTauri() ? (
                         <div className="mt-4 grid gap-3 sm:grid-cols-3">
                             <StorageMetric icon={<Database className="size-4" />} label={t("config.localStorage.indexedDbUsage")} value={formatStorageBytes(indexedDbBytes)} hint={t("config.localStorage.contentEstimate")} />
-                            <StorageMetric icon={<HardDrive className="size-4" />} label={t("config.localStorage.siteUsage")} value={formatStorageBytes(usage.usage)} hint={t("config.localStorage.siteUsageHint")} />
-                            <StorageMetric icon={<Layers3 className="size-4" />} label={t("config.localStorage.quota")} value={formatStorageBytes(usage.quota)} hint={t("config.localStorage.quotaHint")} />
                         </div>
-                        <div className="mt-4">
-                            <div className="mb-1 flex justify-between text-xs text-stone-500">
-                                <span>{t("config.localStorage.quotaProgress")}</span>
-                                <span className="tabular-nums">{percent.toFixed(2)}%</span>
+                    ) : (
+                        <>
+                            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                                <StorageMetric icon={<Database className="size-4" />} label={t("config.localStorage.indexedDbUsage")} value={formatStorageBytes(indexedDbBytes)} hint={t("config.localStorage.contentEstimate")} />
+                                <StorageMetric icon={<HardDrive className="size-4" />} label={t("config.localStorage.siteUsage")} value={formatStorageBytes(usage.usage)} hint={t("config.localStorage.siteUsageHint")} />
+                                <StorageMetric icon={<Layers3 className="size-4" />} label={t("config.localStorage.quota")} value={formatStorageBytes(usage.quota)} hint={t("config.localStorage.quotaHint")} />
                             </div>
-                            <Progress percent={percent} showInfo={false} />
-                        </div>
-                    </>
+                            <div className="mt-4">
+                                <div className="mb-1 flex justify-between text-xs text-stone-500">
+                                    <span>{t("config.localStorage.quotaProgress")}</span>
+                                    <span className="tabular-nums">{percent.toFixed(2)}%</span>
+                                </div>
+                                <Progress percent={percent} showInfo={false} />
+                            </div>
+                        </>
+                    )
                 ) : null}
             </section>
             {usage?.databases.map((database) => (
