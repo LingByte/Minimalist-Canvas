@@ -1,11 +1,11 @@
-import localforage from "localforage";
 import { nanoid } from "nanoid";
 
+import { blobStore } from "@canvas/services/fs-store";
 import { uploadCanvasMedia, assertCanvasMediaUploadSize } from "@canvas/services/object-storage";
 
 export type UploadedFile = { url: string; storageKey: string; bytes: number; mimeType: string; width?: number; height?: number; durationMs?: number };
 
-const store = localforage.createInstance({ name: "minimalist-canvas", storeName: "media_files" });
+const store = blobStore("media_files");
 const objectUrls = new Map<string, string>();
 
 export async function uploadMediaFile(input: string | Blob, prefix = "file"): Promise<UploadedFile> {

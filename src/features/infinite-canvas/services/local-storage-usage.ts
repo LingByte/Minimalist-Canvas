@@ -1,3 +1,5 @@
+import { isTauri, readStoreUsages } from "@canvas/services/fs-store";
+
 export type IndexedDbStoreUsage = { name: string; records: number; bytes: number };
 export type IndexedDbDatabaseUsage = { name: string; version: number; bytes: number; stores: IndexedDbStoreUsage[] };
 export type LocalStorageUsage = { usage: number; quota: number; contentBytes: number; databases: IndexedDbDatabaseUsage[]; dataPath: string };
@@ -12,12 +14,22 @@ async function readDataPath(): Promise<string> {
 }
 
 export async function readLocalStorageUsage(): Promise<LocalStorageUsage> {
+    if (isTauri()) {
+        const [estimate, disk] = await Promise.all([navigator.storage.estimate(), readStoreUsages()]);
+        return {
+            usage: estimate.usage || 0,
+            quota: estimate.quota || 0,
+            contentBytes: disk.totalBytes,
+            databases: [{ name: "minimalist-canvas", version: 1, bytes: disk.totalBytes, stores: disk.stores }],
+            dataPath: disk.dataPath,
+        };
+    }
     const [estimate, database, dataPath] = await Promise.all([
         navigator.storage.estimate(),
         readDatabaseUsage("minimalist-canvas"),
         readDataPath(),
     ]);
-    return { usage: estimate.usage!, quota: estimate.quota!, contentBytes: database.bytes, databases: [database], dataPath };
+    return { usage: estimate.usage || 0, quota: estimate.quota || 0, contentBytes: database.bytes, databases: [database], dataPath };
 }
 
 function readDatabaseUsage(name: string) {

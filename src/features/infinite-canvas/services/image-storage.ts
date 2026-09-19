@@ -1,8 +1,7 @@
-import localforage from "localforage";
-
 import { nanoid } from "nanoid";
 import i18n from "@canvas/i18n";
 import { readImageMeta } from "@canvas/lib/image-utils";
+import { blobStore, kvStore } from "@canvas/services/fs-store";
 import { uploadCanvasMedia, assertCanvasMediaUploadSize } from "@canvas/services/object-storage";
 
 export type UploadedImage = {
@@ -14,9 +13,9 @@ export type UploadedImage = {
     mimeType: string;
 };
 
-const store = localforage.createInstance({ name: "minimalist-canvas", storeName: "image_files" });
-const imageLogStore = localforage.createInstance({ name: "minimalist-canvas", storeName: "image_generation_logs" });
-const videoLogStore = localforage.createInstance({ name: "minimalist-canvas", storeName: "video_generation_logs" });
+const store = blobStore("image_files");
+const imageLogStore = kvStore("image_generation_logs");
+const videoLogStore = kvStore("video_generation_logs");
 const objectUrls = new Map<string, string>();
 
 export async function uploadImage(input: string | Blob): Promise<UploadedImage> {

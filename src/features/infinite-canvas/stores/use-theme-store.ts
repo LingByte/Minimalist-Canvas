@@ -1,5 +1,7 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
+
+import { localForageStorage } from "@canvas/lib/localforage-storage";
 
 export type ThemeName = "light" | "dark";
 
@@ -16,6 +18,6 @@ export const useThemeStore = create<ThemeStore>()(
             theme: "light",
             setTheme: (theme) => set({ theme }),
         }),
-        { name: "minimalist-canvas:theme_store" },
+        { name: "minimalist-canvas:theme_store", storage: createJSONStorage(() => localForageStorage) },
     ),
 );

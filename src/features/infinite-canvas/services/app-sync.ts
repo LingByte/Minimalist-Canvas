@@ -1,6 +1,5 @@
-import localforage from "localforage";
-
 import i18n from "@canvas/i18n";
+import { kvStore, type KvStore } from "@canvas/services/fs-store";
 import { getMediaBlob, resolveMediaUrl, setMediaBlob } from "@canvas/services/file-storage";
 import { getImageBlob, resolveImageUrl, setImageBlob } from "@canvas/services/image-storage";
 import { downloadWebdavFile, uploadWebdavFile, WEBDAV_MANIFEST_FILE_NAME } from "@canvas/services/webdav-sync";
@@ -76,9 +75,9 @@ export type AppSyncProgressEvent = {
 export type AppSyncProgress = (event: AppSyncProgressEvent) => void;
 
 const FILE_CONCURRENCY = 3;
-const imageLogStore = localforage.createInstance({ name: "minimalist-canvas", storeName: "image_generation_logs" });
-const videoLogStore = localforage.createInstance({ name: "minimalist-canvas", storeName: "video_generation_logs" });
-type LogStore = typeof imageLogStore;
+const imageLogStore = kvStore("image_generation_logs");
+const videoLogStore = kvStore("video_generation_logs");
+type LogStore = KvStore;
 const storageKeyPattern = /^(image|video|audio|file|video-reference|audio-reference):/;
 
 export async function syncAppDataToWebdav(config: WebdavSyncConfig, onProgress?: AppSyncProgress): Promise<AppSyncResult> {

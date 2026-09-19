@@ -161,6 +161,9 @@ function mergeBrowserCacheWithRemote(
   const models = modelOptionsFromChannels(channels);
   const config: AiConfig = {
     ...remote.config,
+    // The storage directory is a device-local setting — never let the synced
+    // remote config clobber it.
+    customDataDir: local.config.customDataDir || remote.config.customDataDir,
     channels,
     models,
     apiKey:
@@ -260,6 +263,7 @@ export async function hydrateUserCanvasConfigFromServer(): Promise<void> {
       useConfigStore.setState({
         config: {
           ...defaultConfig,
+          customDataDir: local.config.customDataDir,
           channels: defaultConfig.channels.map((channel) => ({
             ...channel,
             models: [...channel.models],

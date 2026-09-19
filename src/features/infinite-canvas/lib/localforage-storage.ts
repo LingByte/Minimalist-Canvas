@@ -1,34 +1,15 @@
-import localforage from "localforage";
 import type { StateStorage } from "zustand/middleware";
 
-localforage.config({
-    name: "minimalist-canvas",
-    storeName: "app_state",
-});
+import { appStateStorage } from "@canvas/services/fs-store";
 
+/**
+ * Persist backend for zustand stores. In the desktop app this writes JSON files
+ * under the app storage root; in plain web builds it falls back to IndexedDB.
+ */
 export const localForageStorage: StateStorage = {
-    getItem: async (name) => {
-        if (typeof window === "undefined") return null;
-        try {
-            return (await localforage.getItem<string>(name)) || null;
-        } catch {
-            return window.localStorage.getItem(name);
-        }
-    },
+    getItem: (name) => appStateStorage.getItem(name),
     setItem: async (name, value) => {
-        if (typeof window === "undefined") return;
-        try {
-            await localforage.setItem(name, value);
-        } catch {
-            window.localStorage.setItem(name, value);
-        }
+        await appStateStorage.setItem(name, value);
     },
-    removeItem: async (name) => {
-        if (typeof window === "undefined") return;
-        try {
-            await localforage.removeItem(name);
-        } catch {
-            window.localStorage.removeItem(name);
-        }
-    },
+    removeItem: (name) => appStateStorage.removeItem(name),
 };

@@ -1,10 +1,9 @@
-import localforage from "localforage";
-
+import { kvStore, type KvStore } from "@canvas/services/fs-store";
 import { hydrateUserAssetsFromServer } from "@canvas/services/user-asset-sync";
 import { useAssetStore } from "@canvas/stores/use-asset-store";
 
-const imageLogStore = localforage.createInstance({ name: "minimalist-canvas", storeName: "image_generation_logs" });
-const videoLogStore = localforage.createInstance({ name: "minimalist-canvas", storeName: "video_generation_logs" });
+const imageLogStore = kvStore("image_generation_logs");
+const videoLogStore = kvStore("video_generation_logs");
 
 export type ClearedSyncedLocalData = {
   imageLogs: number;
@@ -12,7 +11,7 @@ export type ClearedSyncedLocalData = {
   assets: number;
 };
 
-async function countStore(store: LocalForage) {
+async function countStore(store: KvStore) {
   let count = 0;
   await store.iterate(() => {
     count += 1;
@@ -21,7 +20,7 @@ async function countStore(store: LocalForage) {
 }
 
 /**
- * Clear browser copies that already live in the backend:
+ * Clear local copies that already live in the backend:
  * - image/video generation history → generation_assets
  * - my assets metadata → user_assets
  *

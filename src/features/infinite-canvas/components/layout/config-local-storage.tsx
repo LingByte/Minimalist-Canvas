@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { clearSyncedLocalData } from "@canvas/services/clear-synced-local-data";
+import { moveStorageRoot } from "@canvas/services/fs-store";
 import { readLocalStorageUsage, type LocalStorageUsage } from "@canvas/services/local-storage-usage";
 import { useConfigStore } from "@canvas/stores/use-config-store";
 
@@ -24,6 +25,7 @@ export function ConfigLocalStorage({ active }: { active: boolean }) {
     const [usage, setUsage] = useState<LocalStorageUsage | null>(null);
     const [loading, setLoading] = useState(false);
     const [clearing, setClearing] = useState(false);
+    const [movingDir, setMovingDir] = useState(false);
     const [error, setError] = useState("");
 
     const refresh = useCallback(async () => {
@@ -137,16 +139,23 @@ export function ConfigLocalStorage({ active }: { active: boolean }) {
                                         <Button
                                             size="small"
                                             icon={<FolderCog className="size-3.5" />}
+                                            loading={movingDir}
                                             onClick={async () => {
                                                 try {
                                                     const { open } = await import("@tauri-apps/plugin-dialog");
                                                     const selected = await open({ directory: true, multiple: false });
-                                                    if (typeof selected === "string" && selected) {
+                                                    if (typeof selected !== "string" || !selected) return;
+                                                    setMovingDir(true);
+                                                    try {
+                                                        await moveStorageRoot(selected);
                                                         useConfigStore.getState().updateConfig("customDataDir", selected);
                                                         message.success(t("config.localStorage.customDataDirSet"));
+                                                        await refresh();
+                                                    } finally {
+                                                        setMovingDir(false);
                                                     }
                                                 } catch (err) {
-                                                    message.error(t("config.localStorage.openPathFailed") + ": " + String(err));
+                                                    message.error(t("config.localStorage.moveDataDirFailed") + ": " + String(err));
                                                 }
                                             }}
                                         >
@@ -155,9 +164,19 @@ export function ConfigLocalStorage({ active }: { active: boolean }) {
                                         {useConfigStore.getState().config.customDataDir ? (
                                             <Button
                                                 size="small"
-                                                onClick={() => {
-                                                    useConfigStore.getState().updateConfig("customDataDir", "");
-                                                    message.success(t("config.localStorage.customDataDirReset"));
+                                                loading={movingDir}
+                                                onClick={async () => {
+                                                    setMovingDir(true);
+                                                    try {
+                                                        await moveStorageRoot("");
+                                                        useConfigStore.getState().updateConfig("customDataDir", "");
+                                                        message.success(t("config.localStorage.customDataDirReset"));
+                                                        await refresh();
+                                                    } catch (err) {
+                                                        message.error(t("config.localStorage.moveDataDirFailed") + ": " + String(err));
+                                                    } finally {
+                                                        setMovingDir(false);
+                                                    }
                                                 }}
                                             >
                                                 {t("config.localStorage.resetDataDir")}

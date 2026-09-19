@@ -1,5 +1,4 @@
-import localforage from "localforage";
-
+import { kvStore, type KvStore } from "@canvas/services/fs-store";
 import type { PluginStorage } from "@canvas/types/canvas-plugin";
 
 // Lightweight canvas event bus for communication between nodes and plugins.
@@ -27,12 +26,12 @@ export function onCanvasEvent(event: string, handler: Handler) {
 }
 
 // Private plugin storage isolated by pluginId namespace.
-const stores = new Map<string, LocalForage>();
+const stores = new Map<string, KvStore>();
 
 export function createPluginStorage(pluginId: string): PluginStorage {
     let store = stores.get(pluginId);
     if (!store) {
-        store = localforage.createInstance({ name: "minimalist-canvas-plugins", storeName: pluginId });
+        store = kvStore(`plugins/${pluginId.replace(/[^a-zA-Z0-9._-]/g, "_")}`);
         stores.set(pluginId, store);
     }
     return {

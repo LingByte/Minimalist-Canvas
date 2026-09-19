@@ -1,9 +1,7 @@
 import { ArrowLeft, ArrowRight, BookOpen, CheckSquare, ClipboardPaste, Download, FolderPlus, History, LoaderCircle, Plus, SlidersHorizontal, Sparkles, Trash2, Upload, VideoIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { App, Button, Checkbox, Drawer, Empty, Modal, Tag, Typography } from "antd";
-import localforage from "localforage";
 import { nanoid } from "nanoid";
-import { saveAs } from "file-saver";
 import { useTranslation } from "react-i18next";
 
 import { AssetPickerModal, type InsertAssetPayload } from "@canvas/components/canvas/asset-picker-modal";
@@ -16,6 +14,8 @@ import type { CanvasResourceReference } from "@canvas/lib/canvas/canvas-resource
 import { buildImageReferencePromptText, imageReferenceLabel } from "@canvas/lib/image-reference-prompt";
 import { formatBytes, formatDuration } from "@canvas/lib/image-utils";
 import { deleteStoredMedia, resolveMediaUrl } from "@canvas/services/file-storage";
+import { kvStore } from "@canvas/services/fs-store";
+import { saveBlobAs } from "@canvas/lib/save-file";
 import { resolveImageUrl, uploadImage } from "@canvas/services/image-storage";
 import { VIDEO_POLL_INTERVAL_MS, VIDEO_POLL_MAX_ATTEMPTS, createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, type VideoGenerationTask } from "@canvas/services/api/video";
 import { deleteGenerationAssetsByClientIds, listGenerationAssets, upsertGenerationAsset, type GenerationAsset } from "@canvas/services/api/generation-assets";
@@ -73,8 +73,7 @@ type GenerationLogConfig = Pick<AiConfig, "model" | "videoModel" | "size" | "vqu
 
 type UpdateAiConfig = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
 
-const LOG_STORE_KEY = "minimalist-canvas:video_generation_logs";
-const logStore = localforage.createInstance({ name: "minimalist-canvas", storeName: "video_generation_logs" });
+const logStore = kvStore("video_generation_logs");
 
 export default function VideoPage() {
     const { message } = App.useApp();
@@ -350,7 +349,7 @@ export default function VideoPage() {
     };
 
     const downloadVideo = (video: GeneratedVideo) => {
-        saveAs(video.url, "video.mp4");
+        void saveBlobAs(video.url, "video.mp4");
     };
 
     const saveResultToAssets = (video: GeneratedVideo, index: number) => {

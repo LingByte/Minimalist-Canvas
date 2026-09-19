@@ -1,8 +1,6 @@
 import { ArrowLeft, ArrowRight, BookOpen, CheckSquare, ClipboardPaste, Download, FolderPlus, History, ImagePlus, LoaderCircle, PenLine, Plus, SlidersHorizontal, Sparkles, Trash2, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { App, Button, Checkbox, Drawer, Empty, Image, Input, Modal, Tag, Tooltip, Typography } from "antd";
-import localforage from "localforage";
-import { saveAs } from "file-saver";
 import { useTranslation } from "react-i18next";
 
 import { ImageSettingsPanel } from "@canvas/components/image-settings-panel";
@@ -18,6 +16,8 @@ import { formatBytes, formatDuration, getDataUrlByteSize, readImageMeta } from "
 import { requestEdit, requestGeneration } from "@canvas/services/api/image";
 import { deleteGenerationAssetsByClientIds, listGenerationAssets, upsertGenerationAsset, type GenerationAsset } from "@canvas/services/api/generation-assets";
 import { deleteStoredImages, resolveImageUrl, uploadImage } from "@canvas/services/image-storage";
+import { kvStore } from "@canvas/services/fs-store";
+import { saveBlobAs } from "@canvas/lib/save-file";
 import { useAssetStore } from "@canvas/stores/use-asset-store";
 import { useWorkbenchAgentStore } from "@canvas/stores/use-workbench-agent-store";
 import type { ReferenceImage } from "@canvas/types/image";
@@ -66,9 +66,8 @@ type GenerationLogConfig = Pick<AiConfig, "model" | "imageModel" | "quality" | "
 
 type UpdateAiConfig = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
 
-const LOG_STORE_KEY = "minimalist-canvas:image_generation_logs";
 const RESULT_ACTION_BUTTON_CLASS = "min-w-0 px-1.5 [&_.ant-btn-icon]:shrink-0 [&>span:last-child]:min-w-0 [&>span:last-child]:truncate";
-const logStore = localforage.createInstance({ name: "minimalist-canvas", storeName: "image_generation_logs" });
+const logStore = kvStore("image_generation_logs");
 
 export default function ImagePage() {
     const { message } = App.useApp();
@@ -238,7 +237,7 @@ export default function ImagePage() {
     }, [autoRunToken]);
 
     const downloadImage = (image: GeneratedImage, index: number) => {
-        saveAs(image.dataUrl, `image-${index + 1}.png`);
+        void saveBlobAs(image.dataUrl, `image-${index + 1}.png`);
     };
 
     const addResultToReferences = async (image: GeneratedImage, index: number) => {
