@@ -1379,11 +1379,13 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
                         attachments={attachments.map((attachment) => agentAttachmentToChatAttachment(attachment, endpoint, token))}
                         disabled={!connected || !conversationReady || loadingThreads}
                         sending={sending || waiting}
-                        placeholder={conversation.status === "idle" || conversation.status === "preparing"
-                            ? t("agent.panel.mcpInitializing")
-                            : conversation.status === "failed"
-                                ? t("agent.panel.initFailed")
-                                : t("agent.panel.placeholder")}
+                        placeholder={!connected
+                            ? t("agent.panel.connectHint")
+                            : conversation.status === "idle" || conversation.status === "preparing"
+                                ? t("agent.panel.mcpInitializing")
+                                : conversation.status === "failed"
+                                    ? t("agent.panel.initFailed")
+                                    : t("agent.panel.placeholder")}
                         theme={theme}
                         onPromptChange={(prompt) => setAgentState({ prompt })}
                         onSubmit={sendPrompt}

@@ -39,6 +39,22 @@ export default defineConfig({
       'react/jsx-dev-runtime': path.resolve(__dirname, './node_modules/react/jsx-dev-runtime.js'),
     },
   },
+  tools: {
+    rspack: {
+      optimization: {
+        splitChunks: {
+          cacheGroups: {
+            tauri: {
+              name: 'tauri',
+              test: /[\\/]node_modules[\\/]@tauri-apps[\\/]/,
+              chunks: 'all',
+              priority: 20,
+            },
+          },
+        },
+      },
+    },
+  },
   html: {
     template: './index.html',
   },
