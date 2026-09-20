@@ -19,7 +19,6 @@ import { SignUp } from "@/features/auth/sign-up";
 import { ForgotPassword } from "@/features/auth/forgot-password";
 import { Otp } from "@/features/auth/otp";
 import { ResetPasswordConfirm } from "@/features/auth/reset-password-confirm";
-import { RequireAuth } from "@/features/auth/require-auth";
 
 import { CANVAS_BASENAME } from "./integration/constants";
 
@@ -30,16 +29,17 @@ function ResetPasswordConfirmPage() {
 
 const canvasRoutes: RouteObject[] = [
     {
+        // Local-first app: no auth gate — canvas and other local features work
+        // signed out; server-backed calls degrade gracefully.
         element: (
-            <RequireAuth>
-                <UserLayout>
-                    <AnalyticsTracker />
-                    <Outlet />
-                </UserLayout>
-            </RequireAuth>
+            <UserLayout>
+                <AnalyticsTracker />
+                <Outlet />
+            </UserLayout>
         ),
         children: [
-            { index: true, element: <HomePage /> },
+            { index: true, element: <CanvasPage /> },
+            { path: "home", element: <HomePage /> },
             { path: "image", element: <ImagePage /> },
             { path: "video", element: <VideoPage /> },
             { path: "assets", element: <AssetsPage /> },

@@ -8,6 +8,7 @@ import { hydrateUserCanvasConfigFromServer } from "@canvas/services/user-canvas-
 import { restoreCanvasProjectsIfLocalEmpty } from "@canvas/services/user-canvas-project-sync";
 import { createModelChannel, useConfigStore } from "@canvas/stores/use-config-store";
 import { usePromptSourceStore } from "@canvas/stores/use-prompt-source-store";
+import { bootstrapAuthentication } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
 
 export function ClientRootInit({ children }: { children: ReactNode }) {
@@ -19,6 +20,12 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const loadSources = usePromptSourceStore((state) => state.loadSources);
     const isAuthenticated = useAuthStore((s) => Boolean(s.auth.user && s.auth.accessToken));
+
+    // Restore any existing session in the background — the app renders
+    // without it; hydration kicks in when this flips isAuthenticated.
+    useEffect(() => {
+        void bootstrapAuthentication().catch(() => undefined);
+    }, []);
 
     useEffect(() => {
         if (!isAuthenticated) return;

@@ -1,6 +1,12 @@
 import { create } from "zustand";
 
 import { listGenerationAssets, type GenerationAsset } from "@canvas/services/api/generation-assets";
+import { useAuthStore } from "@/stores/auth-store";
+
+function isSignedIn() {
+    const auth = useAuthStore.getState().auth;
+    return Boolean(auth.user && auth.accessToken);
+}
 
 const SEEN_AT_KEY = "canvas-generation-logs-seen-at";
 const POLL_MS = 12_000;
@@ -70,6 +76,7 @@ export const useGenerationLogsBadgeStore = create<GenerationLogsBadgeStore>((set
     unreadCount: 0,
     watching: false,
     refresh: async () => {
+        if (!isSignedIn()) return;
         set({ loading: true });
         try {
             const remote = await listGenerationAssets({ limit: 10 });
@@ -95,7 +102,7 @@ export const useGenerationLogsBadgeStore = create<GenerationLogsBadgeStore>((set
     },
     loadMore: async () => {
         const { hasMore, nextCursor, loading, loadingMore } = get();
-        if (!hasMore || !nextCursor || loading || loadingMore) return;
+        if (!hasMore || !nextCursor || loading || loadingMore || !isSignedIn()) return;
         set({ loadingMore: true });
         try {
             const remote = await listGenerationAssets({ cursor: nextCursor, limit: 10 });

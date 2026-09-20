@@ -58,6 +58,12 @@ export function AuthLayout({ children, mode }: AuthLayoutProps) {
 
           <div className='flex shrink-0 items-center gap-2 sm:gap-3'>
             <Link
+              to='/'
+              className='text-muted-foreground text-sm transition-colors hover:text-foreground'
+            >
+              {t('Back to home')}
+            </Link>
+            <Link
               to='/docs'
               className='text-muted-foreground hidden text-sm transition-colors hover:text-foreground sm:inline'
             >

@@ -142,7 +142,12 @@ api.interceptors.response.use(
     const status = error?.response?.status
 
     if (status === 401) {
-      if (config && !config.skipAuthRefresh && !config.authRetry) {
+      // No session to refresh — anonymous/local-only usage must not be
+      // bounced to the sign-in page by incidental API calls.
+      const hadSession = Boolean(
+        useAuthStore.getState().auth.session || useAuthStore.getState().auth.accessToken
+      )
+      if (config && !config.skipAuthRefresh && !config.authRetry && hadSession) {
         config.authRetry = true
         const outcome = await refreshAuthentication()
         if (outcome.kind === 'authenticated') {
