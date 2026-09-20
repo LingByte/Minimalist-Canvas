@@ -21,6 +21,7 @@
       "identifier": "http:default",
       "allow": [
         { "url": "https://cdn.jsdelivr.net/*" },
+        { "url": "https://simplefuture.zone/*" },
         { "url": "https://*.simplefuture.zone/*" },
         { "url": "https://*.lingecho.com/*" },
         { "url": "https://*.zhongzhuan.chat/*" }
