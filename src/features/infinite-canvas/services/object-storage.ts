@@ -1,5 +1,6 @@
 import { api } from '@/lib/api'
 import i18n from '@canvas/i18n'
+import { beginCloudUpload } from '@canvas/services/cloud-upload-progress'
 
 /** 七猴公开图床：画布参考图/视频直传，不经本站 presign。 */
 const QIHUO_UPLOAD_URL = 'https://imageproxy.zhongzhuan.chat/api/upload'
@@ -146,10 +147,34 @@ export async function uploadCanvasMedia(
     options?.contentType || input.type || 'application/octet-stream',
     filename
   )
+  const resolvedFilename = filename || guessFilename(mimeType)
+  const tracker = beginCloudUpload(resolvedFilename, input.size)
+  const tracked: CanvasMediaUploadOptions = {
+    ...options,
+    filename: resolvedFilename,
+    onProgress: (loaded, total) => {
+      tracker.progress(loaded, total)
+      options?.onProgress?.(loaded, total)
+    },
+  }
+  let uploaded: ObjectStorageUploadResult | null = null
+  try {
+    uploaded = await uploadCanvasMediaTracked(input, mimeType, resolvedFilename, tracked)
+    return uploaded
+  } finally {
+    tracker.finish(Boolean(uploaded?.accessUrl))
+  }
+}
+
+async function uploadCanvasMediaTracked(
+  input: Blob | File,
+  mimeType: string,
+  resolvedFilename: string,
+  options: CanvasMediaUploadOptions
+): Promise<ObjectStorageUploadResult | null> {
   if (mimeType.startsWith('audio/')) {
     return uploadToObjectStorage(input, options)
   }
-  const resolvedFilename = filename || guessFilename(mimeType)
   const blob =
     input.type === mimeType ? input : new Blob([input], { type: mimeType })
   assertCanvasMediaUploadSize(blob.size, mimeType, resolvedFilename)

@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 import i18n from "@canvas/i18n";
 import { readImageMeta } from "@canvas/lib/image-utils";
+import { publishCloudMediaUrl } from "@canvas/services/cloud-upload-progress";
 import { blobStore, isTauri, kvStore } from "@canvas/services/fs-store";
 import { uploadCanvasMedia, assertCanvasMediaUploadSize } from "@canvas/services/object-storage";
 
@@ -18,7 +19,12 @@ const imageLogStore = kvStore("image_generation_logs");
 const videoLogStore = kvStore("video_generation_logs");
 const objectUrls = new Map<string, string>();
 
-export async function uploadImage(input: string | Blob): Promise<UploadedImage> {
+export type UploadImageOptions = {
+    /** Return the local blob immediately and push the public URL onto the node later. */
+    background?: boolean;
+};
+
+export async function uploadImage(input: string | Blob, options?: UploadImageOptions): Promise<UploadedImage> {
     // Mirrored / public HTTPS urls: keep the URL as-is. Browser fetch would hit CORS
     // on third-party CDNs; <img> + naturalWidth still works without CORS.
     if (typeof input === "string" && /^https?:\/\//i.test(input)) {
@@ -45,20 +51,24 @@ export async function uploadImage(input: string | Blob): Promise<UploadedImage> 
     const meta = await readImageMeta(localUrl);
     const mimeType = blob.type || meta.mimeType;
 
-    // Prefer a public 七猴 URL. Keep the local blob under storageKey for preview / APIs.
-    let url = localUrl;
-    try {
-        const uploaded = await uploadCanvasMedia(blob, {
-            filename: input instanceof File ? input.name : undefined,
-            contentType: mimeType,
-            purpose: "canvas",
-        });
-        if (uploaded?.accessUrl) url = uploaded.accessUrl;
-    } catch {
-        // Fall back to local blob URL when storage is disabled or upload fails.
-    }
+    const local: UploadedImage = { url: localUrl, storageKey, width: meta.width, height: meta.height, bytes: blob.size, mimeType };
+    const cloud = uploadCanvasMedia(blob, {
+        filename: input instanceof File ? input.name : undefined,
+        contentType: mimeType,
+        purpose: "canvas",
+    })
+        .then((uploaded) => {
+            if (uploaded?.accessUrl) publishCloudMediaUrl(storageKey, uploaded.accessUrl);
+            return uploaded;
+        })
+        .catch(() => null);
 
-    return { url, storageKey, width: meta.width, height: meta.height, bytes: blob.size, mimeType };
+    // Local file is already usable. Cloud upload continues in the background.
+    if (options?.background) return local;
+
+    const uploaded = await cloud;
+    if (uploaded?.accessUrl) return { ...local, url: uploaded.accessUrl };
+    return local;
 }
 
 /** Best-effort: pull a remote image URL into the local blob store under a known key. */

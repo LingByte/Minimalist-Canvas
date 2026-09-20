@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 
+import { publishCloudMediaUrl } from "@canvas/services/cloud-upload-progress";
 import { blobStore, isTauri } from "@canvas/services/fs-store";
 import { uploadCanvasMedia, assertCanvasMediaUploadSize } from "@canvas/services/object-storage";
 
@@ -8,7 +9,12 @@ export type UploadedFile = { url: string; storageKey: string; bytes: number; mim
 const store = blobStore("media_files");
 const objectUrls = new Map<string, string>();
 
-export async function uploadMediaFile(input: string | Blob, prefix = "file"): Promise<UploadedFile> {
+export type UploadMediaOptions = {
+    /** Return the local blob immediately and push the public URL onto the node later. */
+    background?: boolean;
+};
+
+export async function uploadMediaFile(input: string | Blob, prefix = "file", options?: UploadMediaOptions): Promise<UploadedFile> {
     const blob = typeof input === "string" ? await fetchBlob(input) : input;
     assertCanvasMediaUploadSize(blob.size, blob.type, input instanceof File ? input.name : "");
     const storageKey = `${prefix}:${nanoid()}`;
@@ -24,18 +30,26 @@ export async function uploadMediaFile(input: string | Blob, prefix = "file"): Pr
         ...meta,
     };
 
-    // Prefer a publicly reachable 七猴 URL so upstream video workers can fetch.
-    try {
-        const uploaded = await uploadCanvasMedia(blob, {
-            filename: input instanceof File ? input.name : undefined,
-            contentType: base.mimeType,
-            purpose: "canvas",
-        });
-        if (uploaded?.accessUrl && isPubliclyReachableMediaUrl(uploaded.accessUrl)) {
-            return { ...base, url: uploaded.accessUrl, bytes: uploaded.bytes || base.bytes, mimeType: uploaded.mimeType || base.mimeType };
-        }
-    } catch {
-        // Local blob URL remains usable for canvas preview.
+    const cloud = uploadCanvasMedia(blob, {
+        filename: input instanceof File ? input.name : undefined,
+        contentType: base.mimeType,
+        purpose: "canvas",
+    })
+        .then((uploaded) => {
+            if (uploaded?.accessUrl && isPubliclyReachableMediaUrl(uploaded.accessUrl)) {
+                publishCloudMediaUrl(storageKey, uploaded.accessUrl);
+                return uploaded;
+            }
+            return null;
+        })
+        .catch(() => null);
+
+    // Local file is already usable. Cloud upload continues in the background.
+    if (options?.background) return base;
+
+    const uploaded = await cloud;
+    if (uploaded?.accessUrl) {
+        return { ...base, url: uploaded.accessUrl, bytes: uploaded.bytes || base.bytes, mimeType: uploaded.mimeType || base.mimeType };
     }
     return base;
 }
