@@ -274,7 +274,7 @@ export default {
             retentionTip: "我们的画布素材图片仅保存 2 天哦，有需要的可以也备份下载一份到本地。",
             addingAssets: "正在添加资产…", addedAssets: "已添加 {{count}} 个资产", mediaOnly: "仅支持图片或视频文件", addFailed: "添加失败，请重试", searchAssets: "搜索资产", add: "添加", noAssets: "暂无资产", inserted: "插入画布", removeAssetTitle: "移除该资产？", remove: "移除", removeAsset: "移除资产", assetRemoved: "资产已移除",
             searchPrompts: "搜索提示词", noPrompts: "暂无提示词", promptCopied: "已复制提示词", copyFailed: "复制失败", loadFailedRetry: "加载失败，点击重试", noMatchingPrompts: "无匹配提示词", sourceEmpty: "该来源暂无提示词", viewDetails: "查看详情", viewMore: "查看更多", loadingMore: "加载中…",
-            searchLogs: "搜索生成记录", loadMoreLogs: "加载更多", cannotInsertLog: "这条记录还没有可插入的媒体", cannotDownloadLog: "这条记录还没有可下载的媒体", mediaLinkExpired: "媒体链接已过期，正在刷新", logDownloaded: "已开始下载", logDownloadFailed: "下载失败，请重试", logDownloadHint: "已在新标签页打开下载链接，大文件可能需要一点时间，请留意浏览器下载提示哦", logsDeleted: "已删除 {{count}} 条生成记录",
+            searchLogs: "搜索生成记录", loadMoreLogs: "加载更多", cannotInsertLog: "这条记录还没有可插入的媒体", cannotInsertExpired: "媒体链接已过期且无本地备份，无法插入", inserting: "正在插入画布 ({{current}}/{{total}})…", insertFailed: "插入失败，请重试", insertPartial: "{{count}} 个媒体已过期，未能插入", cannotDownloadLog: "这条记录还没有可下载的媒体", mediaLinkExpired: "媒体链接已过期，正在刷新", logDownloaded: "已开始下载", logDownloadFailed: "下载失败，请重试", logDownloadHint: "已在新标签页打开下载链接，大文件可能需要一点时间，请留意浏览器下载提示哦", logsDeleted: "已删除 {{count}} 条生成记录",
             logsAuthorityTip: "请以生成记录为准。画布偶发网络波动可能导致节点失败，结果仍以生成记录为准。",
             logsRefreshTipTitle: "生成记录",
             logsRefreshTipBody: "如果还有相关的任务在执行中，可以看下生成记录中哦。画布偶发网络波动可能导致节点失败，结果仍以生成记录为准。",

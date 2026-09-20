@@ -1,12 +1,12 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import { App, Checkbox, Drawer, Empty, Input, Popconfirm, Spin, Tag } from "antd";
-import { Download, Image as ImageIcon, Plus, Search, Trash2, Video } from "lucide-react";
+import { Download, Image as ImageIcon, LoaderCircle, Plus, Search, Trash2, Video } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type { CanvasTheme } from "@canvas/lib/canvas-theme";
 import { saveBlobAs } from "@canvas/lib/save-file";
-import { uploadImage } from "@canvas/services/image-storage";
-import { uploadMediaFile } from "@canvas/services/file-storage";
+import { getImageBlob, setImageBlob, uploadImage } from "@canvas/services/image-storage";
+import { getMediaBlob, setMediaBlob, uploadMediaFile } from "@canvas/services/file-storage";
 import { isTauri } from "@canvas/services/fs-store";
 import { cn } from "@canvas/lib/utils";
 import {
@@ -38,7 +38,7 @@ function formatLogTime(value: number, locale?: string) {
 }
 
 function mediaFiles(asset: GenerationAsset) {
-    const files = (asset.assets || []).filter((item) => Boolean(item.url?.trim()));
+    const files = (asset.assets || []).filter((item) => Boolean(item.url?.trim() || item.storage_key));
     if (files.length <= 1) return files;
     // Videos (and accidental remirror stacks) should surface one preferred playable URL.
     if (asset.kind === "video") {
@@ -89,6 +89,34 @@ async function fetchMediaBlob(url: string): Promise<Blob> {
         return (await tauriFetch(url)).blob();
     }
     return (await fetch(url)).blob();
+}
+
+/** A file is insertable when it has a local blob backup or a still-valid remote URL. */
+function canInsertFile(file: GenerationAssetFile) {
+    if (file.storage_key) return true;
+    return Boolean(file.url && !isSignedUrlExpired(file.url));
+}
+
+async function readLocalBlob(storageKey: string): Promise<Blob | null> {
+    const blob = storageKey.startsWith("image:") ? await getImageBlob(storageKey).catch(() => null) : await getMediaBlob(storageKey).catch(() => null);
+    return blob?.size ? blob : null;
+}
+
+/** Local backup first, fresh remote URL second; heals the fetched bytes into the local key. */
+async function resolveInsertBlob(file: GenerationAssetFile): Promise<Blob | null> {
+    const storageKey = file.storage_key || "";
+    if (storageKey) {
+        const local = await readLocalBlob(storageKey);
+        if (local) return local;
+    }
+    if (!file.url || isSignedUrlExpired(file.url)) return null;
+    const blob = await fetchMediaBlob(file.url).catch(() => null);
+    if (!blob?.size) return null;
+    if (storageKey) {
+        const store = storageKey.startsWith("image:") ? setImageBlob : setMediaBlob;
+        void store(storageKey, blob).catch(() => undefined);
+    }
+    return blob;
 }
 
 async function downloadMediaFile(file: GenerationAssetFile, filename: string) {
@@ -174,19 +202,24 @@ export const CanvasGenerationLogsTab = memo(function CanvasGenerationLogsTab({ o
             message.warning(t("canvas.sidePanel.cannotInsertLog"));
             return;
         }
-        if (files.every((file) => isSignedUrlExpired(file.url))) {
-            message.warning(t("canvas.sidePanel.mediaLinkExpired"));
+        if (!files.some(canInsertFile)) {
+            message.warning(t("canvas.sidePanel.cannotInsertExpired"));
             void refresh();
             return;
         }
         if (inserting) return;
         const title = asset.title || asset.prompt || t("workbench.untitled");
+        const toastKey = `insert-log-${logClientId(asset)}`;
+        const showProgress = (current: number, total: number) =>
+            message.open({ key: toastKey, type: "loading", content: t("canvas.sidePanel.inserting", { current, total }), duration: 0 });
         setInserting(true);
+        showProgress(0, files.length);
         try {
+            let insertedCount = 0;
             if (asset.kind === "video") {
-                const file = files[0];
-                const blob = await fetchMediaBlob(file.url!);
-                if (!blob.size) throw new Error("empty");
+                const file = files.find(canInsertFile) || files[0];
+                const blob = await resolveInsertBlob(file);
+                if (!blob) throw new Error("empty");
                 const stored = await uploadMediaFile(new File([blob], `${safeDownloadName(title)}.${mediaExtension(file, "video")}`, { type: blob.type || file.mime_type || "video/mp4" }), "video", { background: true });
                 onInsert({
                     kind: "video",
@@ -196,10 +229,12 @@ export const CanvasGenerationLogsTab = memo(function CanvasGenerationLogsTab({ o
                     width: stored.width || file.width,
                     height: stored.height || file.height,
                 });
+                insertedCount = 1;
             } else {
                 for (const [index, file] of files.entries()) {
-                    const blob = await fetchMediaBlob(file.url!);
-                    if (!blob.size) throw new Error("empty");
+                    showProgress(index + 1, files.length);
+                    const blob = await resolveInsertBlob(file);
+                    if (!blob) continue;
                     const stored = await uploadImage(new File([blob], `${safeDownloadName(title)}.${mediaExtension(file, "image")}`, { type: blob.type || file.mime_type || "image/png" }), { background: true });
                     onInsert({
                         kind: "image",
@@ -207,12 +242,15 @@ export const CanvasGenerationLogsTab = memo(function CanvasGenerationLogsTab({ o
                         storageKey: stored.storageKey,
                         title: files.length > 1 ? `${title} ${index + 1}` : title,
                     });
+                    insertedCount += 1;
                 }
             }
-            message.success(t("canvas.sidePanel.inserted"));
+            if (!insertedCount) throw new Error("empty");
+            message.open({ key: toastKey, type: "success", content: t("canvas.sidePanel.inserted"), duration: 2 });
+            if (insertedCount < files.length) message.warning(t("canvas.sidePanel.insertPartial", { count: files.length - insertedCount }));
         } catch (error) {
             console.error(error);
-            message.error(t("canvas.sidePanel.logDownloadFailed"));
+            message.open({ key: toastKey, type: "error", content: t("canvas.sidePanel.insertFailed"), duration: 3 });
         } finally {
             setInserting(false);
         }
@@ -327,6 +365,7 @@ export const CanvasGenerationLogsTab = memo(function CanvasGenerationLogsTab({ o
                                     theme={theme}
                                     locale={i18n.resolvedLanguage}
                                     downloading={downloading}
+                                    inserting={inserting}
                                     onSelectedChange={(checked) => toggleSelected(id, checked)}
                                     onPreview={() => setPreview(asset)}
                                     onInsert={() => handleInsert(asset)}
@@ -357,6 +396,7 @@ export const CanvasGenerationLogsTab = memo(function CanvasGenerationLogsTab({ o
                         asset={preview}
                         theme={theme}
                         downloading={downloading}
+                        inserting={inserting}
                         onInsert={() => handleInsert(preview)}
                         onDownload={() => void handleDownload(preview)}
                         onDownloadFile={(file) => void handleDownload(preview, file)}
@@ -373,6 +413,7 @@ function GenerationLogRow({
     theme,
     locale,
     downloading,
+    inserting,
     onSelectedChange,
     onPreview,
     onInsert,
@@ -383,6 +424,7 @@ function GenerationLogRow({
     theme: CanvasTheme;
     locale?: string;
     downloading: boolean;
+    inserting: boolean;
     onSelectedChange: (checked: boolean) => void;
     onPreview: () => void;
     onInsert: () => void;
@@ -393,6 +435,7 @@ function GenerationLogRow({
     const coverUrl = files[0]?.url;
     const cover = coverUrl && !isSignedUrlExpired(coverUrl) ? coverUrl : undefined;
     const canUseMedia = files.length > 0;
+    const canInsert = files.some(canInsertFile);
     const KindIcon = asset.kind === "video" ? Video : ImageIcon;
     const statusColor = asset.status === "success" ? "blue" : asset.status === "pending" ? "processing" : "red";
     const statusLabel =
@@ -459,14 +502,14 @@ function GenerationLogRow({
                 </button>
                 <button
                     type="button"
-                    disabled={!canUseMedia}
+                    disabled={!canInsert || inserting}
                     onClick={onInsert}
                     className="grid size-7 place-items-center rounded-md opacity-70 transition hover:bg-black/10 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-25 dark:hover:bg-white/10"
                     style={actionStyle}
                     aria-label={t("canvas.sidePanel.inserted")}
-                    title={canUseMedia ? t("canvas.sidePanel.inserted") : t("canvas.sidePanel.cannotInsertLog")}
+                    title={canInsert ? t("canvas.sidePanel.inserted") : files.length ? t("canvas.sidePanel.cannotInsertExpired") : t("canvas.sidePanel.cannotInsertLog")}
                 >
-                    <Plus className="size-3.5" />
+                    {inserting ? <LoaderCircle className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
                 </button>
             </div>
         </div>
@@ -477,6 +520,7 @@ function GenerationLogPreview({
     asset,
     theme,
     downloading,
+    inserting,
     onInsert,
     onDownload,
     onDownloadFile,
@@ -484,6 +528,7 @@ function GenerationLogPreview({
     asset: GenerationAsset;
     theme: CanvasTheme;
     downloading: boolean;
+    inserting: boolean;
     onInsert: () => void;
     onDownload: () => void;
     onDownloadFile: (file: GenerationAssetFile) => void;
@@ -491,6 +536,7 @@ function GenerationLogPreview({
     const { t } = useTranslation();
     const files = mediaFiles(asset);
     const canUseMedia = files.length > 0;
+    const canInsert = files.some(canInsertFile);
     const primaryButtonStyle = {
         background: theme.node.activeStroke,
         color: theme.node.panel,
@@ -577,12 +623,13 @@ function GenerationLogPreview({
                 </button>
                 <button
                     type="button"
-                    disabled={!canUseMedia}
+                    disabled={!canInsert || inserting}
                     onClick={onInsert}
                     className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                     style={primaryButtonStyle}
+                    title={canInsert ? t("canvas.sidePanel.inserted") : files.length ? t("canvas.sidePanel.cannotInsertExpired") : t("canvas.sidePanel.cannotInsertLog")}
                 >
-                    <Plus className="size-3.5" />
+                    {inserting ? <LoaderCircle className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
                     {t("canvas.sidePanel.inserted")}
                 </button>
             </div>
