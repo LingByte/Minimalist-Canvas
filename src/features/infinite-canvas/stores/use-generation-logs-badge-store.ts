@@ -37,11 +37,15 @@ function computeBadge(items: GenerationAsset[], seenAt: number) {
 type GenerationLogsBadgeStore = {
     items: GenerationAsset[];
     loading: boolean;
+    loadingMore: boolean;
+    nextCursor: string;
+    hasMore: boolean;
     seenAt: number;
     pendingCount: number;
     unreadCount: number;
     watching: boolean;
     refresh: () => Promise<void>;
+    loadMore: () => Promise<void>;
     markSeen: () => void;
     startWatching: () => void;
     stopWatching: () => void;
@@ -50,9 +54,17 @@ type GenerationLogsBadgeStore = {
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let watchers = 0;
 
+function mergeAssets(current: GenerationAsset[], incoming: GenerationAsset[]) {
+    const seen = new Set(current.map((item) => item.id));
+    return [...current, ...incoming.filter((item) => !seen.has(item.id))];
+}
+
 export const useGenerationLogsBadgeStore = create<GenerationLogsBadgeStore>((set, get) => ({
     items: [],
     loading: false,
+    loadingMore: false,
+    nextCursor: "",
+    hasMore: false,
     seenAt: readSeenAt(),
     pendingCount: 0,
     unreadCount: 0,
@@ -60,7 +72,7 @@ export const useGenerationLogsBadgeStore = create<GenerationLogsBadgeStore>((set
     refresh: async () => {
         set({ loading: true });
         try {
-            const remote = await listGenerationAssets({ pageSize: 100 });
+            const remote = await listGenerationAssets({ limit: 10 });
             const items = remote.items || [];
             let seenAt = get().seenAt;
             // Baseline on first visit so existing history doesn't flood the badge.
@@ -69,9 +81,36 @@ export const useGenerationLogsBadgeStore = create<GenerationLogsBadgeStore>((set
                 writeSeenAt(seenAt);
             }
             const badge = computeBadge(items, seenAt);
-            set({ items, seenAt, ...badge, loading: false });
+            set({
+                items,
+                nextCursor: remote.next_cursor || "",
+                hasMore: Boolean(remote.has_more),
+                seenAt,
+                ...badge,
+                loading: false,
+            });
         } catch {
             set({ loading: false });
+        }
+    },
+    loadMore: async () => {
+        const { hasMore, nextCursor, loading, loadingMore } = get();
+        if (!hasMore || !nextCursor || loading || loadingMore) return;
+        set({ loadingMore: true });
+        try {
+            const remote = await listGenerationAssets({ cursor: nextCursor, limit: 10 });
+            const items = mergeAssets(get().items, remote.items || []);
+            const seenAt = get().seenAt;
+            const badge = computeBadge(items, seenAt);
+            set({
+                items,
+                nextCursor: remote.next_cursor || "",
+                hasMore: Boolean(remote.has_more),
+                ...badge,
+                loadingMore: false,
+            });
+        } catch {
+            set({ loadingMore: false });
         }
     },
     markSeen: () => {

@@ -84,6 +84,8 @@ export default function ImagePage() {
     const [references, setReferences] = useState<ReferenceImage[]>([]);
     const [results, setResults] = useState<GenerationResult[]>([]);
     const [logs, setLogs] = useState<GenerationLog[]>([]);
+    const [imageLogCursor, setImageLogCursor] = useState("");
+    const [imageLogHasMore, setImageLogHasMore] = useState(false);
     const [running, setRunning] = useState(false);
     const [logsOpen, setLogsOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -303,7 +305,23 @@ export default function ImagePage() {
         void syncGenerationAsset(log);
     };
 
-    const refreshLogs = async () => setLogs(await readMergedImageLogs());
+    const refreshLogs = async () => {
+        const page = await readMergedImageLogs();
+        setLogs(page.logs);
+        setImageLogCursor(page.nextCursor);
+        setImageLogHasMore(page.hasMore);
+    };
+
+    const loadMoreImageLogs = async () => {
+        if (!imageLogHasMore || !imageLogCursor) return;
+        const page = await readMergedImageLogs(imageLogCursor);
+        setLogs((current) => {
+            const ids = new Set(current.map((item) => item.id));
+            return [...current, ...page.logs.filter((log) => !ids.has(log.id))].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        });
+        setImageLogCursor(page.nextCursor);
+        setImageLogHasMore(page.hasMore);
+    };
 
     const previewGenerationLog = async (log: GenerationLog) => {
         setPreviewLog(log);
@@ -558,6 +576,11 @@ export default function ImagePage() {
                     onDeleteSelected={() => setDeleteConfirmOpen(true)}
                     onPreviewLog={(log) => void previewGenerationLog(log)}
                 />
+                {imageLogHasMore ? (
+                    <div className="flex justify-center py-3">
+                        <Button onClick={() => void loadMoreImageLogs()}>{t("canvas.sidePanel.loadMoreLogs")}</Button>
+                    </div>
+                ) : null}
             </Drawer>
             <Drawer title={t("workbench.settings")} placement="bottom" size="82vh" open={settingsOpen} onClose={() => setSettingsOpen(false)}>
                 <div className="grid grid-cols-2 gap-3 pb-4">
@@ -800,17 +823,21 @@ async function readStoredLogs() {
     }
 }
 
-async function readMergedImageLogs() {
-    const local = await readStoredLogs();
+async function readMergedImageLogs(cursor = "") {
+    const local = cursor ? [] : await readStoredLogs();
     try {
-        const remote = await listGenerationAssets({ kind: "image", pageSize: 100 });
+        const remote = await listGenerationAssets({ kind: "image", cursor, limit: 10 });
         const localIds = new Set(local.map((log) => log.id));
         const remoteLogs = (remote.items || [])
             .map(remoteImageAssetToLog)
             .filter((log) => !localIds.has(log.id));
-        return [...local, ...remoteLogs].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        return {
+            logs: [...local, ...remoteLogs].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
+            nextCursor: remote.next_cursor || "",
+            hasMore: Boolean(remote.has_more),
+        };
     } catch {
-        return local;
+        return { logs: local, nextCursor: "", hasMore: false };
     }
 }
 

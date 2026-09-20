@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, BookOpen, CheckSquare, ClipboardPaste, Download, Film, FolderPlus, History, LoaderCircle, Music2, Plus, SlidersHorizontal, Sparkles, Trash2, Upload, VideoIcon } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, CheckSquare, ClipboardPaste, Download, FolderPlus, History, LoaderCircle, Music2, Plus, SlidersHorizontal, Sparkles, Trash2, Upload, VideoIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { App, Button, Checkbox, Drawer, Empty, Modal, Tag, Typography } from "antd";
 import { nanoid } from "nanoid";
@@ -99,6 +99,8 @@ export default function VideoPage() {
     const [audioReferences, setAudioReferences] = useState<ReferenceAudio[]>([]);
     const [results, setResults] = useState<GenerationResult[]>([]);
     const [logs, setLogs] = useState<GenerationLog[]>([]);
+    const [videoLogCursor, setVideoLogCursor] = useState("");
+    const [videoLogHasMore, setVideoLogHasMore] = useState(false);
     const [running, setRunning] = useState(false);
     const [logsOpen, setLogsOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -121,19 +123,26 @@ export default function VideoPage() {
 
     const model = effectiveConfig.videoModel || effectiveConfig.model;
     const canGenerate = Boolean(prompt.trim());
-    const mentionReferences = useMemo<CanvasResourceReference[]>(
-        () =>
-            references.map((item, index) => ({
-                id: item.id,
-                nodeId: item.id,
-                kind: "image" as const,
-                label: imageReferenceLabel(index),
-                title: item.name || imageReferenceLabel(index),
-                previewUrl: item.dataUrl,
-                active: true,
-            })),
-        [references],
-    );
+    const mentionReferences = useMemo<CanvasResourceReference[]>(() => {
+        const images = references.map((item, index) => ({
+            id: item.id,
+            nodeId: item.id,
+            kind: "image" as const,
+            label: imageReferenceLabel(index),
+            title: item.name || imageReferenceLabel(index),
+            previewUrl: item.dataUrl,
+            active: true,
+        }));
+        const videos = videoReferences.map((item, index) => {
+            const label = `${t("videoWorkbench.videoReferences")} ${index + 1}`;
+            return { id: item.id, nodeId: item.id, kind: "video" as const, label, title: item.name || label, previewUrl: item.url, active: true };
+        });
+        const audios = audioReferences.map((item, index) => {
+            const label = `${t("videoWorkbench.audioReferences")} ${index + 1}`;
+            return { id: item.id, nodeId: item.id, kind: "audio" as const, label, title: item.name || label, active: true };
+        });
+        return [...images, ...videos, ...audios];
+    }, [audioReferences, references, t, videoReferences]);
 
     useEffect(() => {
         if (!running || !startedAt) return;
@@ -452,10 +461,25 @@ export default function VideoPage() {
     };
 
     const refreshLogs = async (resumePending = true) => {
-        const nextLogs = await readMergedVideoLogs();
-        setLogs(nextLogs);
-        if (resumePending) resumePendingLogs(nextLogs);
-        return nextLogs;
+        const page = await readMergedVideoLogs();
+        setLogs(page.logs);
+        setVideoLogCursor(page.nextCursor);
+        setVideoLogHasMore(page.hasMore);
+        if (resumePending) resumePendingLogs(page.logs);
+        return page.logs;
+    };
+
+    const loadMoreVideoLogs = async () => {
+        if (!videoLogHasMore || !videoLogCursor) return;
+        const page = await readMergedVideoLogs(videoLogCursor);
+        setLogs((current) => {
+            const ids = new Set(current.map((item) => item.id));
+            const taskIds = new Set(current.map((item) => item.task?.id).filter(Boolean));
+            const extra = page.logs.filter((log) => !ids.has(log.id) && !(log.task?.id && taskIds.has(log.task.id)));
+            return [...current, ...extra].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        });
+        setVideoLogCursor(page.nextCursor);
+        setVideoLogHasMore(page.hasMore);
     };
 
     const resumePendingLogs = (items: GenerationLog[]) => {
@@ -615,8 +639,17 @@ export default function VideoPage() {
                                 />
                             </div>
 
-                            <div className="min-w-0">
-                                <div className="mb-2 flex items-center justify-between gap-3">
+                            <div
+                                className="min-w-0 space-y-3"
+                                onDragEnter={handleReferenceDragEnter}
+                                onDragOver={(event) => {
+                                    event.preventDefault();
+                                    event.dataTransfer.dropEffect = "copy";
+                                }}
+                                onDragLeave={handleReferenceDragLeave}
+                                onDrop={handleReferenceDrop}
+                            >
+                                <div className="flex items-center justify-between gap-3">
                                     <span className="text-base font-semibold">{t("videoWorkbench.references")}</span>
                                     <div className="flex gap-2">
                                         <Button size="small" icon={<ClipboardPaste className="size-3.5" />} onClick={() => void addReferencesFromClipboard()}>
@@ -627,16 +660,7 @@ export default function VideoPage() {
                                         </Button>
                                     </div>
                                 </div>
-                                <div
-                                    className={`hover-scrollbar hover-scrollbar-hint flex min-h-24 w-full min-w-0 max-w-full gap-2 overflow-x-scroll overflow-y-hidden rounded-lg border border-dashed p-2 pb-3 overscroll-x-contain transition-colors ${referenceDragTarget ? "border-stone-900 bg-stone-100/80 dark:border-stone-100 dark:bg-stone-900/80" : "border-stone-300 dark:border-stone-700"}`}
-                                    onDragEnter={handleReferenceDragEnter}
-                                    onDragOver={(event) => {
-                                        event.preventDefault();
-                                        event.dataTransfer.dropEffect = "copy";
-                                    }}
-                                    onDragLeave={handleReferenceDragLeave}
-                                    onDrop={handleReferenceDrop}
-                                >
+                                <div className={referenceLaneClass(referenceDragTarget)}>
                                     {references.map((item, index) => (
                                         <div key={item.id} className="group relative size-20 shrink-0 overflow-hidden rounded-md border border-stone-200 dark:border-stone-800">
                                             <SmartImage src={item.dataUrl} alt={item.name} className="size-full object-cover" fallbackClassName="size-full" fallbackIconClassName="size-4" />
@@ -647,27 +671,40 @@ export default function VideoPage() {
                                             </button>
                                         </div>
                                     ))}
-                                    {videoReferences.map((item, index) => (
-                                        <div key={item.id} className="group relative flex size-20 shrink-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-md border border-stone-200 bg-stone-100 p-1.5 dark:border-stone-800 dark:bg-stone-900">
-                                            <Film className="size-5 shrink-0 text-stone-500" />
-                                            <span className="w-full truncate text-center text-[10px] leading-4 text-stone-600 dark:text-stone-400" title={item.name}>{item.name}</span>
-                                            <span className="absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">{t("videoWorkbench.videoReferences")}{index + 1}</span>
-                                            <button type="button" className="absolute right-1 top-1 hidden size-6 items-center justify-center rounded bg-black/60 text-white group-hover:flex" onClick={() => setVideoReferences((value) => value.filter((ref) => ref.id !== item.id))} aria-label={t("videoWorkbench.removeVideo")}>
-                                                <Trash2 className="size-3.5" />
-                                            </button>
-                                        </div>
-                                    ))}
-                                    {audioReferences.map((item, index) => (
-                                        <div key={item.id} className="group relative flex size-20 shrink-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-md border border-stone-200 bg-stone-100 p-1.5 dark:border-stone-800 dark:bg-stone-900">
-                                            <Music2 className="size-5 shrink-0 text-stone-500" />
-                                            <span className="w-full truncate text-center text-[10px] leading-4 text-stone-600 dark:text-stone-400" title={item.name}>{item.name}</span>
-                                            <span className="absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">{t("videoWorkbench.audioReferences")}{index + 1}</span>
-                                            <button type="button" className="absolute right-1 top-1 hidden size-6 items-center justify-center rounded bg-black/60 text-white group-hover:flex" onClick={() => setAudioReferences((value) => value.filter((ref) => ref.id !== item.id))} aria-label={t("videoWorkbench.removeAudio")}>
-                                                <Trash2 className="size-3.5" />
-                                            </button>
-                                        </div>
-                                    ))}
-                                    {!references.length && !videoReferences.length && !audioReferences.length ? <div className="flex min-w-full items-center justify-center text-sm text-stone-500">{referenceDragTarget ? t("videoWorkbench.dropReferences") : t("videoWorkbench.noImages")}</div> : null}
+                                    {!references.length ? <div className="flex min-w-full items-center justify-center text-sm text-stone-500">{referenceDragTarget ? t("videoWorkbench.dropReferences") : t("videoWorkbench.noImages")}</div> : null}
+                                </div>
+                                <div>
+                                    <div className="mb-2 text-sm font-medium">{t("videoWorkbench.videoReferences")}</div>
+                                    <div className={referenceLaneClass(referenceDragTarget)}>
+                                        {videoReferences.map((item, index) => (
+                                            <div key={item.id} className="group relative size-20 shrink-0 overflow-hidden rounded-md border border-stone-200 bg-black dark:border-stone-800">
+                                                <video src={item.url} muted className="size-full object-cover" />
+                                                <span className="absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">{index + 1}</span>
+                                                <ReferenceOrderButtons index={index} total={videoReferences.length} onMove={(offset) => setVideoReferences((value) => moveListItem(value, index, offset))} />
+                                                <button type="button" className="absolute right-1 top-1 hidden size-6 items-center justify-center rounded bg-black/60 text-white group-hover:flex" onClick={() => setVideoReferences((value) => value.filter((ref) => ref.id !== item.id))} aria-label={t("videoWorkbench.removeVideo")}>
+                                                    <Trash2 className="size-3.5" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                        {!videoReferences.length ? <div className="flex min-w-full items-center justify-center text-sm text-stone-500">{referenceDragTarget ? t("videoWorkbench.dropReferences") : t("videoWorkbench.noVideos")}</div> : null}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="mb-2 text-sm font-medium">{t("videoWorkbench.audioReferences")}</div>
+                                    <div className={referenceLaneClass(referenceDragTarget)}>
+                                        {audioReferences.map((item, index) => (
+                                            <div key={item.id} className="group relative flex h-20 w-36 shrink-0 items-center gap-2 overflow-hidden rounded-md border border-stone-200 px-2 dark:border-stone-800">
+                                                <Music2 className="size-4 shrink-0 text-stone-500" />
+                                                <span className="min-w-0 truncate text-xs">{item.name || `${index + 1}`}</span>
+                                                <span className="absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">{index + 1}</span>
+                                                <ReferenceOrderButtons index={index} total={audioReferences.length} onMove={(offset) => setAudioReferences((value) => moveListItem(value, index, offset))} />
+                                                <button type="button" className="absolute right-1 top-1 hidden size-6 items-center justify-center rounded bg-black/60 text-white group-hover:flex" onClick={() => setAudioReferences((value) => value.filter((ref) => ref.id !== item.id))} aria-label={t("videoWorkbench.removeAudio")}>
+                                                    <Trash2 className="size-3.5" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                        {!audioReferences.length ? <div className="flex min-w-full items-center justify-center text-sm text-stone-500">{referenceDragTarget ? t("videoWorkbench.dropReferences") : t("videoWorkbench.noAudio")}</div> : null}
+                                    </div>
                                 </div>
                             </div>
 
@@ -721,7 +758,7 @@ export default function VideoPage() {
             <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*,video/*,audio/*"
+                accept="image/*,video/mp4,video/quicktime,audio/mpeg,audio/wav,audio/x-wav,.mp3,.wav,.mp4,.mov"
                 multiple
                 className="hidden"
                 onChange={(event) => {
@@ -731,6 +768,11 @@ export default function VideoPage() {
             />
             <Drawer title={t("workbench.logs")} placement="bottom" size="large" open={logsOpen} onClose={() => setLogsOpen(false)}>
                 <LogPanel logs={logs} selectedLogIds={selectedLogIds} activeLogId={previewLog?.id} onSelectedLogIdsChange={setSelectedLogIds} onCreateSession={createSession} onDeleteSelected={() => setDeleteConfirmOpen(true)} onPreviewLog={previewGenerationLog} />
+                {videoLogHasMore ? (
+                    <div className="flex justify-center py-3">
+                        <Button onClick={() => void loadMoreVideoLogs()}>{t("canvas.sidePanel.loadMoreLogs")}</Button>
+                    </div>
+                ) : null}
             </Drawer>
             <Drawer title={t("workbench.settings")} placement="bottom" styles={{ section: { height: "82vh" } }} open={settingsOpen} onClose={() => setSettingsOpen(false)}>
                 <div className="grid grid-cols-2 gap-3 pb-4">
@@ -952,18 +994,22 @@ async function readStoredLogs() {
     }
 }
 
-async function readMergedVideoLogs() {
-    const local = await readStoredLogs();
+async function readMergedVideoLogs(cursor = "") {
+    const local = cursor ? [] : await readStoredLogs();
     try {
-        const remote = await listGenerationAssets({ kind: "video", pageSize: 100 });
+        const remote = await listGenerationAssets({ kind: "video", cursor, limit: 10 });
         const localIds = new Set(local.map((log) => log.id));
         const localTaskIds = new Set(local.map((log) => log.task?.id).filter(Boolean));
         const remoteLogs = (remote.items || [])
             .map(remoteVideoAssetToLog)
             .filter((log) => !localIds.has(log.id) && !(log.task?.id && localTaskIds.has(log.task.id)));
-        return [...local, ...remoteLogs].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        return {
+            logs: [...local, ...remoteLogs].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
+            nextCursor: remote.next_cursor || "",
+            hasMore: Boolean(remote.has_more),
+        };
     } catch {
-        return local;
+        return { logs: local, nextCursor: "", hasMore: false };
     }
 }
 
@@ -1136,6 +1182,10 @@ function normalizeWorkbenchUrlKey(url: string) {
     } catch {
         return url.trim().toLowerCase();
     }
+}
+
+function referenceLaneClass(active: boolean) {
+    return `hover-scrollbar hover-scrollbar-hint flex min-h-24 w-full min-w-0 max-w-full gap-2 overflow-x-scroll overflow-y-hidden rounded-lg border border-dashed p-2 pb-3 overscroll-x-contain transition-colors ${active ? "border-stone-900 bg-stone-100/80 dark:border-stone-100 dark:bg-stone-900/80" : "border-stone-300 dark:border-stone-700"}`;
 }
 
 function moveListItem<T>(items: T[], index: number, offset: number) {

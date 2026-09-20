@@ -70,12 +70,38 @@ type ApiEnvelope<T> = {
   data?: T;
 };
 
-type PageData<T> = {
-  page: number;
-  page_size: number;
-  total: number;
-  items: T[];
+export type GenerationAssetPage = {
+  items: GenerationAsset[];
+  next_cursor: string;
+  has_more: boolean;
 };
+
+export async function listGenerationAssets(params?: {
+  kind?: GenerationAssetKind;
+  source?: GenerationAssetSource;
+  status?: GenerationAssetStatus;
+  keyword?: string;
+  cursor?: string;
+  limit?: number;
+}): Promise<GenerationAssetPage> {
+  const query = new URLSearchParams();
+  if (params?.kind) query.set("kind", params.kind);
+  if (params?.source) query.set("source", params.source);
+  if (params?.status) query.set("status", params.status);
+  if (params?.keyword) query.set("keyword", params.keyword);
+  if (params?.cursor) query.set("cursor", params.cursor);
+  query.set("limit", String(params?.limit || 10));
+  const res = await api.get<ApiEnvelope<GenerationAssetPage>>(`/api/generation-assets/?${query.toString()}`, {
+    skipErrorHandler: true,
+  });
+  return (
+    res.data?.data || {
+      items: [],
+      next_cursor: "",
+      has_more: false,
+    }
+  );
+}
 
 function isDurableUrl(url?: string) {
   return Boolean(url && /^https?:\/\//i.test(url));
@@ -181,32 +207,6 @@ export async function deleteGenerationAssetsByClientIds(clientIds: string[]): Pr
   } catch {
     return 0;
   }
-}
-
-export async function listGenerationAssets(params?: {
-  kind?: GenerationAssetKind;
-  source?: GenerationAssetSource;
-  status?: GenerationAssetStatus;
-  page?: number;
-  pageSize?: number;
-}): Promise<PageData<GenerationAsset>> {
-  const query = new URLSearchParams();
-  if (params?.kind) query.set("kind", params.kind);
-  if (params?.source) query.set("source", params.source);
-  if (params?.status) query.set("status", params.status);
-  if (params?.page) query.set("p", String(params.page));
-  if (params?.pageSize) query.set("page_size", String(params.pageSize));
-  const res = await api.get<ApiEnvelope<PageData<GenerationAsset>>>(`/api/generation-assets/?${query.toString()}`, {
-    skipErrorHandler: true,
-  });
-  return (
-    res.data?.data || {
-      page: params?.page || 1,
-      page_size: params?.pageSize || 20,
-      total: 0,
-      items: [],
-    }
-  );
 }
 
 export async function deleteGenerationAsset(id: number): Promise<boolean> {

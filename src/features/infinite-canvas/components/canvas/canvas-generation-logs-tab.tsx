@@ -5,6 +5,9 @@ import { useTranslation } from "react-i18next";
 
 import type { CanvasTheme } from "@canvas/lib/canvas-theme";
 import { saveBlobAs } from "@canvas/lib/save-file";
+import { uploadImage } from "@canvas/services/image-storage";
+import { uploadMediaFile } from "@canvas/services/file-storage";
+import { isTauri } from "@canvas/services/fs-store";
 import { cn } from "@canvas/lib/utils";
 import {
     deleteGenerationAssetsByClientIds,
@@ -80,6 +83,14 @@ function mediaExtension(file: GenerationAssetFile, kind: GenerationAssetKind) {
     return kind === "video" ? "mp4" : "png";
 }
 
+async function fetchMediaBlob(url: string): Promise<Blob> {
+    if (isTauri()) {
+        const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
+        return (await tauriFetch(url)).blob();
+    }
+    return (await fetch(url)).blob();
+}
+
 async function downloadMediaFile(file: GenerationAssetFile, filename: string) {
     const url = file.url?.trim();
     if (!url) throw new Error("missing url");
@@ -87,7 +98,6 @@ async function downloadMediaFile(file: GenerationAssetFile, filename: string) {
         await saveBlobAs(url, filename);
         return;
     }
-    // Open the CDN URL directly in a new tab.
     window.open(url, "_blank", "noopener,noreferrer");
 }
 
@@ -96,7 +106,10 @@ export const CanvasGenerationLogsTab = memo(function CanvasGenerationLogsTab({ o
     const { t, i18n } = useTranslation();
     const items = useGenerationLogsBadgeStore((state) => state.items);
     const loading = useGenerationLogsBadgeStore((state) => state.loading);
+    const loadingMore = useGenerationLogsBadgeStore((state) => state.loadingMore);
+    const hasMore = useGenerationLogsBadgeStore((state) => state.hasMore);
     const refresh = useGenerationLogsBadgeStore((state) => state.refresh);
+    const loadMore = useGenerationLogsBadgeStore((state) => state.loadMore);
     const markSeen = useGenerationLogsBadgeStore((state) => state.markSeen);
     const startWatching = useGenerationLogsBadgeStore((state) => state.startWatching);
     const stopWatching = useGenerationLogsBadgeStore((state) => state.stopWatching);
@@ -105,6 +118,7 @@ export const CanvasGenerationLogsTab = memo(function CanvasGenerationLogsTab({ o
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [preview, setPreview] = useState<GenerationAsset | null>(null);
     const [downloading, setDownloading] = useState(false);
+    const [inserting, setInserting] = useState(false);
 
     useEffect(() => {
         markSeen();
@@ -154,7 +168,7 @@ export const CanvasGenerationLogsTab = memo(function CanvasGenerationLogsTab({ o
         }
     };
 
-    const handleInsert = (asset: GenerationAsset) => {
+    const handleInsert = async (asset: GenerationAsset) => {
         const files = mediaFiles(asset);
         if (!files.length) {
             message.warning(t("canvas.sidePanel.cannotInsertLog"));
@@ -165,28 +179,43 @@ export const CanvasGenerationLogsTab = memo(function CanvasGenerationLogsTab({ o
             void refresh();
             return;
         }
+        if (inserting) return;
         const title = asset.title || asset.prompt || t("workbench.untitled");
-        if (asset.kind === "video") {
-            const file = files[0];
-            onInsert({
-                kind: "video",
-                url: file.url!,
-                storageKey: file.storage_key,
-                title,
-                width: file.width,
-                height: file.height,
-            });
-        } else {
-            for (const [index, file] of files.entries()) {
+        setInserting(true);
+        try {
+            if (asset.kind === "video") {
+                const file = files[0];
+                const blob = await fetchMediaBlob(file.url!);
+                if (!blob.size) throw new Error("empty");
+                const stored = await uploadMediaFile(new File([blob], `${safeDownloadName(title)}.${mediaExtension(file, "video")}`, { type: blob.type || file.mime_type || "video/mp4" }), "video", { background: true });
                 onInsert({
-                    kind: "image",
-                    dataUrl: file.url!,
-                    storageKey: file.storage_key,
-                    title: files.length > 1 ? `${title} ${index + 1}` : title,
+                    kind: "video",
+                    url: stored.url,
+                    storageKey: stored.storageKey,
+                    title,
+                    width: stored.width || file.width,
+                    height: stored.height || file.height,
                 });
+            } else {
+                for (const [index, file] of files.entries()) {
+                    const blob = await fetchMediaBlob(file.url!);
+                    if (!blob.size) throw new Error("empty");
+                    const stored = await uploadImage(new File([blob], `${safeDownloadName(title)}.${mediaExtension(file, "image")}`, { type: blob.type || file.mime_type || "image/png" }), { background: true });
+                    onInsert({
+                        kind: "image",
+                        dataUrl: stored.url,
+                        storageKey: stored.storageKey,
+                        title: files.length > 1 ? `${title} ${index + 1}` : title,
+                    });
+                }
             }
+            message.success(t("canvas.sidePanel.inserted"));
+        } catch (error) {
+            console.error(error);
+            message.error(t("canvas.sidePanel.logDownloadFailed"));
+        } finally {
+            setInserting(false);
         }
-        message.success(t("canvas.sidePanel.inserted"));
     };
 
     const handleDownload = async (asset: GenerationAsset, onlyFile?: GenerationAssetFile) => {
@@ -274,7 +303,14 @@ export const CanvasGenerationLogsTab = memo(function CanvasGenerationLogsTab({ o
                     </Popconfirm>
                 </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+            <div
+                className="min-h-0 flex-1 overflow-y-auto px-2 pb-3"
+                onScroll={(event) => {
+                    const el = event.currentTarget;
+                    if (!hasMore || loadingMore || loading) return;
+                    if (el.scrollHeight - el.scrollTop - el.clientHeight < 96) void loadMore();
+                }}
+            >
                 {loading && !items.length ? (
                     <div className="flex justify-center py-16">
                         <Spin size="small" />
@@ -298,6 +334,11 @@ export const CanvasGenerationLogsTab = memo(function CanvasGenerationLogsTab({ o
                                 />
                             );
                         })}
+                        {loadingMore ? (
+                            <div className="flex justify-center py-3">
+                                <Spin size="small" />
+                            </div>
+                        ) : null}
                     </div>
                 ) : (
                     <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("workbench.noLogs")} className="pt-16" />
