@@ -14,8 +14,9 @@ import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { nanoid } from "nanoid";
 import { formatBytes, formatDuration, getDataUrlByteSize, readImageMeta } from "@canvas/lib/image-utils";
 import { requestEdit, requestGeneration } from "@canvas/services/api/image";
-import { deleteGenerationAssetsByClientIds, listGenerationAssets, upsertGenerationAsset, type GenerationAsset } from "@canvas/services/api/generation-assets";
+import { deleteGenerationAssetsByClientIds, upsertGenerationAsset } from "@canvas/services/api/generation-assets";
 import { deleteStoredImages, resolveImageUrl, uploadImage } from "@canvas/services/image-storage";
+import { IMAGE_GENERATION_LOG_STORE } from "@canvas/services/local-generation-logs";
 import { kvStore } from "@canvas/services/fs-store";
 import { saveBlobAs } from "@canvas/lib/save-file";
 import { useAssetStore } from "@canvas/stores/use-asset-store";
@@ -67,7 +68,7 @@ type GenerationLogConfig = Pick<AiConfig, "model" | "imageModel" | "quality" | "
 type UpdateAiConfig = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
 
 const RESULT_ACTION_BUTTON_CLASS = "min-w-0 px-1.5 [&_.ant-btn-icon]:shrink-0 [&>span:last-child]:min-w-0 [&>span:last-child]:truncate";
-const logStore = kvStore("image_generation_logs");
+const logStore = kvStore(IMAGE_GENERATION_LOG_STORE);
 
 export default function ImagePage() {
     const { message } = App.useApp();
@@ -84,8 +85,6 @@ export default function ImagePage() {
     const [references, setReferences] = useState<ReferenceImage[]>([]);
     const [results, setResults] = useState<GenerationResult[]>([]);
     const [logs, setLogs] = useState<GenerationLog[]>([]);
-    const [imageLogCursor, setImageLogCursor] = useState("");
-    const [imageLogHasMore, setImageLogHasMore] = useState(false);
     const [running, setRunning] = useState(false);
     const [logsOpen, setLogsOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -306,21 +305,7 @@ export default function ImagePage() {
     };
 
     const refreshLogs = async () => {
-        const page = await readMergedImageLogs();
-        setLogs(page.logs);
-        setImageLogCursor(page.nextCursor);
-        setImageLogHasMore(page.hasMore);
-    };
-
-    const loadMoreImageLogs = async () => {
-        if (!imageLogHasMore || !imageLogCursor) return;
-        const page = await readMergedImageLogs(imageLogCursor);
-        setLogs((current) => {
-            const ids = new Set(current.map((item) => item.id));
-            return [...current, ...page.logs.filter((log) => !ids.has(log.id))].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-        });
-        setImageLogCursor(page.nextCursor);
-        setImageLogHasMore(page.hasMore);
+        setLogs(await readStoredLogs());
     };
 
     const previewGenerationLog = async (log: GenerationLog) => {
@@ -425,9 +410,6 @@ export default function ImagePage() {
                                         {t("workbench.settings")}
                                     </Button>
                                 </div>
-                            </div>
-                            <div className="mt-2 rounded-md border border-amber-500/35 bg-amber-500/10 px-2 py-1 dark:border-amber-400/30 dark:bg-amber-400/10">
-                                <p className="text-[11px] font-medium leading-snug text-amber-900/90 dark:text-amber-100/90">{t("workbench.retentionTip")}</p>
                             </div>
                         </div>
 
@@ -576,11 +558,6 @@ export default function ImagePage() {
                     onDeleteSelected={() => setDeleteConfirmOpen(true)}
                     onPreviewLog={(log) => void previewGenerationLog(log)}
                 />
-                {imageLogHasMore ? (
-                    <div className="flex justify-center py-3">
-                        <Button onClick={() => void loadMoreImageLogs()}>{t("canvas.sidePanel.loadMoreLogs")}</Button>
-                    </div>
-                ) : null}
             </Drawer>
             <Drawer title={t("workbench.settings")} placement="bottom" size="82vh" open={settingsOpen} onClose={() => setSettingsOpen(false)}>
                 <div className="grid grid-cols-2 gap-3 pb-4">
@@ -821,64 +798,6 @@ async function readStoredLogs() {
     } catch {
         return [];
     }
-}
-
-async function readMergedImageLogs(cursor = "") {
-    const local = cursor ? [] : await readStoredLogs();
-    try {
-        const remote = await listGenerationAssets({ kind: "image", cursor, limit: 10 });
-        const localIds = new Set(local.map((log) => log.id));
-        const remoteLogs = (remote.items || [])
-            .map(remoteImageAssetToLog)
-            .filter((log) => !localIds.has(log.id));
-        return {
-            logs: [...local, ...remoteLogs].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
-            nextCursor: remote.next_cursor || "",
-            hasMore: Boolean(remote.has_more),
-        };
-    } catch {
-        return { logs: local, nextCursor: "", hasMore: false };
-    }
-}
-
-function remoteImageAssetToLog(asset: GenerationAsset): GenerationLog {
-    const createdAtMs = asset.created_at > 1e12 ? asset.created_at : asset.created_at * 1000;
-    const images = (asset.assets || []).map((item, index) => ({
-        id: `${asset.id}-${index}`,
-        dataUrl: item.url || "",
-        storageKey: item.storage_key,
-        durationMs: item.duration_ms || 0,
-        width: item.width || 0,
-        height: item.height || 0,
-        bytes: item.bytes || 0,
-        mimeType: item.mime_type,
-    }));
-    const config = {
-        model: asset.model || "",
-        imageModel: asset.model || "",
-        quality: String(asset.config?.quality || ""),
-        size: String(asset.config?.size || ""),
-        count: String(images.length || 1),
-    };
-    return {
-        id: asset.client_id || `remote:${asset.id}`,
-        createdAt: createdAtMs,
-        title: asset.title || asset.model || i18n.t("workbench.untitled"),
-        prompt: asset.prompt || "",
-        time: new Date(createdAtMs).toLocaleString(i18n.resolvedLanguage, { hour12: false }),
-        model: asset.model || "",
-        config,
-        references: [],
-        durationMs: Number(asset.config?.duration_ms || 0),
-        successCount: images.length,
-        failCount: asset.status === "failed" ? 1 : 0,
-        imageCount: images.length,
-        size: config.size,
-        quality: config.quality,
-        status: asset.status === "failed" ? "failed" : "success",
-        images,
-        thumbnails: images.map((image) => image.dataUrl).filter(Boolean),
-    };
 }
 
 async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog> {

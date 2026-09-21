@@ -4,9 +4,9 @@ import type { ConfigTabKey } from "@canvas/stores/use-config-store";
 
 export const CONFIG_ONBOARDING_STORAGE_KEY = "minimalist-canvas:config-onboarding-v1";
 
-export type ConfigOnboardingStepId = "welcome" | "settings" | "channels" | "baseUrl" | "apiKey" | "preferences" | "retention" | "generationLogs" | "done";
+export type ConfigOnboardingStepId = "welcome" | "settings" | "channels" | "baseUrl" | "apiKey" | "preferences" | "done";
 
-export const CONFIG_ONBOARDING_STEPS: ConfigOnboardingStepId[] = ["welcome", "settings", "channels", "baseUrl", "apiKey", "preferences", "retention", "generationLogs", "done"];
+export const CONFIG_ONBOARDING_STEPS: ConfigOnboardingStepId[] = ["welcome", "settings", "channels", "baseUrl", "apiKey", "preferences", "done"];
 
 type ConfigOnboardingStore = {
     active: boolean;

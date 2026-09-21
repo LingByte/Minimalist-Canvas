@@ -28,8 +28,6 @@ const STEP_TARGET: Partial<Record<ConfigOnboardingStepId, string>> = {
     baseUrl: '[data-tour="config-channel-base-url"]',
     apiKey: '[data-tour="config-channel-api-key"]',
     preferences: '[data-tour="config-preferences-panel"]',
-    retention: '[data-tour="canvas-retention-tip"]',
-    generationLogs: '[data-tour="canvas-logs-guide"]',
 };
 
 const PAD = 10;
@@ -70,7 +68,6 @@ export function ConfigOnboardingTour() {
     const setConfigDialogOpen = useConfigStore((state) => state.setConfigDialogOpen);
     const channels = useConfigStore((state) => state.config.channels);
     const openPanel = useCanvasSidePanelStore((state) => state.openPanel);
-    const requestTab = useCanvasSidePanelStore((state) => state.requestTab);
     const [rect, setRect] = useState<SpotlightRect | null>(null);
     const [ready, setReady] = useState(false);
 
@@ -132,28 +129,11 @@ export function ConfigOnboardingTour() {
             return;
         }
 
-        if (stepId === "retention") {
-            setForceEditingChannelId(null);
-            setForceTab(null);
-            setConfigDialogOpen(false);
-            openPanel();
-            return;
-        }
-
-        if (stepId === "generationLogs") {
-            setForceEditingChannelId(null);
-            setForceTab(null);
-            setConfigDialogOpen(false);
-            openPanel();
-            requestTab("logs");
-            return;
-        }
-
         if (stepId === "done") {
             setForceEditingChannelId(null);
             setForceTab(null);
         }
-    }, [active, channels, openConfigDialog, openPanel, requestTab, setConfigDialogOpen, setForceEditingChannelId, setForceTab, stepId]);
+    }, [active, channels, openConfigDialog, openPanel, setConfigDialogOpen, setForceEditingChannelId, setForceTab, stepId]);
 
     useLayoutEffect(() => {
         if (!active) {
@@ -194,9 +174,7 @@ export function ConfigOnboardingTour() {
                 ? 280
                 : stepId === "settings"
                   ? 0
-                  : stepId === "retention" || stepId === "generationLogs"
-                    ? 320
-                    : 140;
+                  : 140;
         const startTimer = window.setTimeout(measure, delay);
         const onResize = () => {
             const nextRect = readTargetRect(selector);

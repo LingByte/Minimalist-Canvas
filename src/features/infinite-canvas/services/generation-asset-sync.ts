@@ -1,4 +1,5 @@
 import { upsertGenerationAsset } from "@canvas/services/api/generation-assets";
+import { syncCanvasImageToLocalLogs, syncCanvasVideoToLocalLogs } from "@canvas/services/local-generation-logs";
 
 export type GenerationAssetConfigSnapshot = Record<string, unknown>;
 
@@ -86,8 +87,24 @@ export function buildCanvasVideoAssetConfig(input: {
   return config;
 }
 
-/** Best-effort persist a canvas image generation for later download. */
+/**
+ * Persist canvas image generation to the shared local workbench log store
+ * (image_generation_logs), and best-effort sync to the cloud API.
+ */
 export function syncCanvasImageGenerationAsset(input: CanvasImageAssetInput) {
+  void syncCanvasImageToLocalLogs({
+    clientId: input.clientId,
+    prompt: input.prompt,
+    model: input.model,
+    url: input.url,
+    storageKey: input.storageKey,
+    mimeType: input.mimeType,
+    width: input.width,
+    height: input.height,
+    bytes: input.bytes,
+    status: "success",
+    config: input.config,
+  }).catch(() => undefined);
   void upsertGenerationAsset({
     client_id: input.clientId,
     kind: "image",
@@ -110,9 +127,28 @@ export function syncCanvasImageGenerationAsset(input: CanvasImageAssetInput) {
   });
 }
 
-/** Best-effort persist a canvas video generation for later download. */
+/**
+ * Persist canvas video generation to the shared local workbench log store
+ * (video_generation_logs), and best-effort sync to the cloud API.
+ */
 export async function syncCanvasVideoGenerationAsset(input: CanvasVideoAssetInput) {
   if (isExcludedAssetUrl(input.url, input.excludeUrls)) return;
+  await syncCanvasVideoToLocalLogs({
+    clientId: input.clientId,
+    prompt: input.prompt,
+    model: input.model,
+    taskId: input.taskId,
+    url: input.url,
+    storageKey: input.storageKey,
+    mimeType: input.mimeType,
+    width: input.width,
+    height: input.height,
+    bytes: input.bytes,
+    durationMs: input.durationMs,
+    status: input.status || "success",
+    error: input.error,
+    config: input.config,
+  }).catch(() => undefined);
   await upsertGenerationAsset({
     client_id: input.clientId,
     kind: "video",

@@ -107,8 +107,23 @@ function isDurableUrl(url?: string) {
   return Boolean(url && /^https?:\/\//i.test(url));
 }
 
+function isClientTransportError(message?: string) {
+  const value = message?.trim() || "";
+  return (
+    value.includes("网络请求失败，请检查网络后刷新一下试试") ||
+    value.includes("Network request failed. Check your connection and provider URL") ||
+    value.includes("network request failed") ||
+    value.includes("Failed to fetch") ||
+    value.includes("Network Error")
+  );
+}
+
 /** Persist a workbench/canvas generation result to the backend (best-effort). */
 export async function upsertGenerationAsset(input: UpsertGenerationAssetInput): Promise<GenerationAsset | null> {
+  // No HTTP response from this gateway is not an upstream failure. Leave the earlier pending row.
+  if (input.status === "failed" && isClientTransportError(input.error)) {
+    return null;
+  }
   const assets = (input.assets || [])
     .map((item) => ({
       url: isDurableUrl(item.url) ? item.url : undefined,

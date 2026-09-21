@@ -14,11 +14,12 @@ import type { CanvasResourceReference } from "@canvas/lib/canvas/canvas-resource
 import { buildImageReferencePromptText, imageReferenceLabel } from "@canvas/lib/image-reference-prompt";
 import { formatBytes, formatDuration } from "@canvas/lib/image-utils";
 import { deleteStoredMedia, resolveMediaUrl, uploadMediaFile } from "@canvas/services/file-storage";
+import { VIDEO_GENERATION_LOG_STORE } from "@canvas/services/local-generation-logs";
 import { kvStore } from "@canvas/services/fs-store";
 import { saveBlobAs } from "@canvas/lib/save-file";
 import { resolveImageUrl, uploadImage } from "@canvas/services/image-storage";
 import { VIDEO_POLL_INTERVAL_MS, VIDEO_POLL_MAX_ATTEMPTS, createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, type VideoGenerationTask } from "@canvas/services/api/video";
-import { deleteGenerationAssetsByClientIds, listGenerationAssets, upsertGenerationAsset, type GenerationAsset } from "@canvas/services/api/generation-assets";
+import { deleteGenerationAssetsByClientIds, upsertGenerationAsset } from "@canvas/services/api/generation-assets";
 import { useAssetStore } from "@canvas/stores/use-asset-store";
 import { useWorkbenchAgentStore } from "@canvas/stores/use-workbench-agent-store";
 import { boolConfig, modelOptionLabel, useConfigStore, useEffectiveConfig, type AiConfig } from "@canvas/stores/use-config-store";
@@ -78,7 +79,7 @@ type GenerationLogConfig = Pick<AiConfig, "model" | "videoModel" | "size" | "vqu
 
 type UpdateAiConfig = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
 
-const logStore = kvStore("video_generation_logs");
+const logStore = kvStore(VIDEO_GENERATION_LOG_STORE);
 
 export default function VideoPage() {
     const { message } = App.useApp();
@@ -99,8 +100,6 @@ export default function VideoPage() {
     const [audioReferences, setAudioReferences] = useState<ReferenceAudio[]>([]);
     const [results, setResults] = useState<GenerationResult[]>([]);
     const [logs, setLogs] = useState<GenerationLog[]>([]);
-    const [videoLogCursor, setVideoLogCursor] = useState("");
-    const [videoLogHasMore, setVideoLogHasMore] = useState(false);
     const [running, setRunning] = useState(false);
     const [logsOpen, setLogsOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -461,25 +460,10 @@ export default function VideoPage() {
     };
 
     const refreshLogs = async (resumePending = true) => {
-        const page = await readMergedVideoLogs();
-        setLogs(page.logs);
-        setVideoLogCursor(page.nextCursor);
-        setVideoLogHasMore(page.hasMore);
-        if (resumePending) resumePendingLogs(page.logs);
-        return page.logs;
-    };
-
-    const loadMoreVideoLogs = async () => {
-        if (!videoLogHasMore || !videoLogCursor) return;
-        const page = await readMergedVideoLogs(videoLogCursor);
-        setLogs((current) => {
-            const ids = new Set(current.map((item) => item.id));
-            const taskIds = new Set(current.map((item) => item.task?.id).filter(Boolean));
-            const extra = page.logs.filter((log) => !ids.has(log.id) && !(log.task?.id && taskIds.has(log.task.id)));
-            return [...current, ...extra].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-        });
-        setVideoLogCursor(page.nextCursor);
-        setVideoLogHasMore(page.hasMore);
+        const logs = await readStoredLogs();
+        setLogs(logs);
+        if (resumePending) resumePendingLogs(logs);
+        return logs;
     };
 
     const resumePendingLogs = (items: GenerationLog[]) => {
@@ -610,9 +594,6 @@ export default function VideoPage() {
                                     {t("workbench.settings")}
                                 </Button>
                             </div>
-                        </div>
-                        <div className="mt-2 rounded-md border border-amber-500/35 bg-amber-500/10 px-2 py-1 dark:border-amber-400/30 dark:bg-amber-400/10">
-                            <p className="text-[11px] font-medium leading-snug text-amber-900/90 dark:text-amber-100/90">{t("workbench.retentionTip")}</p>
                         </div>
 
                         <div className="mt-6 space-y-5">
@@ -768,11 +749,6 @@ export default function VideoPage() {
             />
             <Drawer title={t("workbench.logs")} placement="bottom" size="large" open={logsOpen} onClose={() => setLogsOpen(false)}>
                 <LogPanel logs={logs} selectedLogIds={selectedLogIds} activeLogId={previewLog?.id} onSelectedLogIdsChange={setSelectedLogIds} onCreateSession={createSession} onDeleteSelected={() => setDeleteConfirmOpen(true)} onPreviewLog={previewGenerationLog} />
-                {videoLogHasMore ? (
-                    <div className="flex justify-center py-3">
-                        <Button onClick={() => void loadMoreVideoLogs()}>{t("canvas.sidePanel.loadMoreLogs")}</Button>
-                    </div>
-                ) : null}
             </Drawer>
             <Drawer title={t("workbench.settings")} placement="bottom" styles={{ section: { height: "82vh" } }} open={settingsOpen} onClose={() => setSettingsOpen(false)}>
                 <div className="grid grid-cols-2 gap-3 pb-4">
@@ -992,68 +968,6 @@ async function readStoredLogs() {
     } catch {
         return [];
     }
-}
-
-async function readMergedVideoLogs(cursor = "") {
-    const local = cursor ? [] : await readStoredLogs();
-    try {
-        const remote = await listGenerationAssets({ kind: "video", cursor, limit: 10 });
-        const localIds = new Set(local.map((log) => log.id));
-        const localTaskIds = new Set(local.map((log) => log.task?.id).filter(Boolean));
-        const remoteLogs = (remote.items || [])
-            .map(remoteVideoAssetToLog)
-            .filter((log) => !localIds.has(log.id) && !(log.task?.id && localTaskIds.has(log.task.id)));
-        return {
-            logs: [...local, ...remoteLogs].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
-            nextCursor: remote.next_cursor || "",
-            hasMore: Boolean(remote.has_more),
-        };
-    } catch {
-        return { logs: local, nextCursor: "", hasMore: false };
-    }
-}
-
-function remoteVideoAssetToLog(asset: GenerationAsset): GenerationLog {
-    const createdAtMs = asset.created_at > 1e12 ? asset.created_at : asset.created_at * 1000;
-    const file = asset.assets?.[0];
-    const config = {
-        model: asset.model || "",
-        videoModel: asset.model || "",
-        size: String(asset.config?.size || ""),
-        vquality: String(asset.config?.resolution || asset.config?.vquality || ""),
-        videoSeconds: String(asset.config?.seconds || ""),
-        videoGenerateAudio: String(asset.config?.videoGenerateAudio || "true"),
-        videoWatermark: String(asset.config?.videoWatermark || "false"),
-    };
-    return {
-        id: asset.client_id || `remote:${asset.id}`,
-        createdAt: createdAtMs,
-        title: asset.title || asset.model || i18n.t("workbench.untitled"),
-        prompt: asset.prompt || "",
-        time: new Date(createdAtMs).toLocaleString(i18n.resolvedLanguage, { hour12: false }),
-        model: asset.model || "",
-        config,
-        references: [],
-        durationMs: Number(asset.config?.duration_ms || file?.duration_ms || 0),
-        size: config.size,
-        resolution: config.vquality,
-        seconds: config.videoSeconds,
-        status: asset.status === "pending" ? "pending" : asset.status === "failed" ? "failed" : "success",
-        task: asset.task_id ? { id: asset.task_id, provider: "openai", model: asset.model || "" } : undefined,
-        video: file
-            ? {
-                  id: String(asset.id),
-                  url: file.url || "",
-                  storageKey: file.storage_key || "",
-                  durationMs: file.duration_ms || 0,
-                  width: file.width || 1280,
-                  height: file.height || 720,
-                  bytes: file.bytes || 0,
-                  mimeType: file.mime_type || "video/mp4",
-              }
-            : undefined,
-        error: asset.error,
-    };
 }
 
 async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog> {
