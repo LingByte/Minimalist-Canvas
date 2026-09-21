@@ -13,8 +13,6 @@ import { useConfigOnboardingStore } from '@canvas/stores/use-config-onboarding-s
 
 import { CanvasHostProvider } from './canvas-host-context'
 import { CANVAS_BASENAME, CANVAS_ROOT_ID } from './constants'
-import { useGatewayBridge } from './use-gateway-bridge'
-import { useGatewayModelsBridge } from './use-gateway-models-bridge'
 import { useHostLocaleSync } from './use-host-locale-sync'
 import { restoreHostThemeClass, useHostThemeSync } from './use-host-theme-sync'
 
@@ -35,8 +33,6 @@ function cleanupHostDocumentLocks() {
 }
 
 function InfiniteCanvasRuntime() {
-  useGatewayBridge()
-  useGatewayModelsBridge()
   useHostThemeSync(true)
   useHostLocaleSync(true)
 

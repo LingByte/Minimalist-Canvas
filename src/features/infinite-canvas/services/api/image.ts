@@ -455,11 +455,11 @@ function validateGeminiPayload(payload: GeminiPayload) {
 
 async function readFetchError(response: Response, fallback: string) {
     const text = await response.text();
-    if (!text) return readStatusError(response.status, fallback);
+    if (!text) return enrichApiErrorMessage(readStatusError(response.status, fallback));
     try {
-        return responseErrorMessage(JSON.parse(text)) || readStatusError(response.status, fallback);
+        return enrichApiErrorMessage(responseErrorMessage(JSON.parse(text)) || readStatusError(response.status, fallback));
     } catch {
-        return text.slice(0, 300) || readStatusError(response.status, fallback);
+        return enrichApiErrorMessage(text.slice(0, 300) || readStatusError(response.status, fallback));
     }
 }
 
@@ -534,6 +534,119 @@ async function requestStreamingResponse(config: AiConfig, body: Record<string, u
     validateResponsePayload(state.payload);
     const result = parseToolResponse(state.payload);
     return { ...result, content: state.text || result.content };
+}
+
+type ChatCompletionsStreamState = { buffer: string; text: string; error?: string };
+
+function toChatCompletionsMessages(messages: ResponseInputMessage[]): AiTextMessage[] {
+    return messages.flatMap((message): AiTextMessage[] => {
+        if ("type" in message) return [];
+        if (message.role === "tool") return [];
+        return [{ role: message.role, content: message.content }];
+    });
+}
+
+function consumeChatCompletionsStreamBlock(block: string, state: ChatCompletionsStreamState, onDelta?: (text: string) => void) {
+    const data = block
+        .split(/\r?\n/)
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).replace(/^ /, ""))
+        .join("\n")
+        .trim();
+    if (!data || data === "[DONE]") return;
+    let event: Record<string, unknown>;
+    try {
+        event = JSON.parse(data) as Record<string, unknown>;
+    } catch {
+        return;
+    }
+    const errorMessage = responseErrorMessage(event);
+    if (errorMessage) {
+        state.error = errorMessage;
+        return;
+    }
+    const choices = Array.isArray(event.choices) ? event.choices : [];
+    for (const choice of choices) {
+        if (!isRecord(choice)) continue;
+        const delta = isRecord(choice.delta) ? choice.delta : undefined;
+        const message = isRecord(choice.message) ? choice.message : undefined;
+        const piece =
+            (delta && typeof delta.content === "string" ? delta.content : "") ||
+            (message && typeof message.content === "string" ? message.content : "");
+        if (!piece) continue;
+        state.text += piece;
+        onDelta?.(state.text);
+    }
+}
+
+function consumeChatCompletionsStreamText(state: ChatCompletionsStreamState, text: string, onDelta?: (text: string) => void, flush = false) {
+    state.buffer += text;
+    for (;;) {
+        const match = state.buffer.match(/\r?\n\r?\n/);
+        if (!match) break;
+        const index = match.index ?? 0;
+        consumeChatCompletionsStreamBlock(state.buffer.slice(0, index), state, onDelta);
+        state.buffer = state.buffer.slice(index + match[0].length);
+    }
+    if (flush && state.buffer.trim()) {
+        consumeChatCompletionsStreamBlock(state.buffer, state, onDelta);
+        state.buffer = "";
+    }
+}
+
+/** Prefer /v1/chat/completions — most NewAPI / OneAPI relays implement this; /v1/responses often returns "not implemented". */
+async function requestStreamingChatCompletions(
+    config: AiConfig,
+    messages: ResponseInputMessage[],
+    onDelta?: (text: string) => void,
+    options?: RequestOptions,
+): Promise<ToolResponseResult> {
+    const response = await fetch(aiApiUrl(config, "/chat/completions"), {
+        method: "POST",
+        headers: { ...aiHeaders(config, "application/json"), Accept: "text/event-stream" },
+        body: JSON.stringify({
+            model: config.model,
+            messages: toChatCompletionsMessages(messages),
+            stream: true,
+        }),
+        signal: options?.signal,
+    });
+    if (!response.ok) throw new Error(await readFetchError(response, apiText("requestFailed")));
+    if (!response.body) {
+        const payload = (await response.json()) as Record<string, unknown>;
+        const errorMessage = responseErrorMessage(payload);
+        if (errorMessage) throw new Error(errorMessage);
+        const choices = Array.isArray(payload.choices) ? payload.choices : [];
+        const first = isRecord(choices[0]) ? choices[0] : undefined;
+        const message = first && isRecord(first.message) ? first.message : undefined;
+        const content = message && typeof message.content === "string" ? message.content : "";
+        return { content, toolCalls: [] };
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const state: ChatCompletionsStreamState = { buffer: "", text: "" };
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        consumeChatCompletionsStreamText(state, decoder.decode(value, { stream: true }), onDelta);
+        if (state.error) throw new Error(state.error);
+    }
+    consumeChatCompletionsStreamText(state, decoder.decode(), onDelta, true);
+    if (state.error) throw new Error(state.error);
+    return { content: state.text, toolCalls: [] };
+}
+
+function enrichApiErrorMessage(message: string) {
+    const trimmed = message.trim();
+    if (!trimmed) return trimmed;
+    if (/无效的令牌|invalid\s*(api[_\s-]?key|token)|incorrect api key|authentication/i.test(trimmed)) {
+        return `${trimmed}（${apiText("invalidRelayTokenHint")}）`;
+    }
+    if (/not\s*implemented/i.test(trimmed)) {
+        return `${trimmed}（${apiText("endpointNotImplementedHint")}）`;
+    }
+    return trimmed;
 }
 
 function toGeminiBody(config: AiConfig, messages: ResponseInputMessage[], extra?: Record<string, unknown>) {
@@ -964,11 +1077,13 @@ function isPublicHttpUrl(value: string) {
 export async function requestImageQuestion(config: AiConfig, messages: AiTextMessage[], onDelta: (text: string) => void, options?: RequestOptions) {
     const requestConfig = resolveModelRequestConfig(config, config.model || config.textModel);
     const script = resolveModelScript(config, config.model || config.textModel);
-    if (script) {
+    // Skip legacy /v1/responses scripts — most NewAPI relays return 500 / "not implemented".
+    const runnableScript = script && !/\/v1\/responses\b/.test(script) ? script : "";
+    if (runnableScript) {
         try {
             const answer = await runModelPlugin<string>({
                 capability: "text",
-                script,
+                script: runnableScript,
                 config: requestConfig,
                 messages: withSystemMessage(requestConfig, messages),
                 signal: options?.signal,
@@ -978,7 +1093,7 @@ export async function requestImageQuestion(config: AiConfig, messages: AiTextMes
             if (text === apiText("noContent")) onDelta(text);
             return text;
         } catch (error) {
-            throw new Error(readAxiosError(error, apiText("requestFailed")));
+            throw new Error(enrichApiErrorMessage(readAxiosError(error, apiText("requestFailed"))));
         }
     }
     try {
@@ -987,15 +1102,11 @@ export async function requestImageQuestion(config: AiConfig, messages: AiTextMes
             if (answer === apiText("noContent")) onDelta(answer);
             return answer;
         }
-        const answer = (await requestStreamingResponse(requestConfig, {
-            model: requestConfig.model,
-            input: toResponseInput(withSystemMessage(requestConfig, messages)),
-            ...(requestConfig.reasoningEffort === "auto" ? {} : { reasoning: { effort: requestConfig.reasoningEffort } }),
-        }, onDelta, options)).content || apiText("noContent");
+        const answer = (await requestStreamingChatCompletions(requestConfig, withSystemMessage(requestConfig, messages), onDelta, options)).content || apiText("noContent");
         if (answer === apiText("noContent")) onDelta(answer);
         return answer;
     } catch (error) {
-        throw new Error(readAxiosError(error, apiText("requestFailed")));
+        throw new Error(enrichApiErrorMessage(readAxiosError(error, apiText("requestFailed"))));
     }
 }
 

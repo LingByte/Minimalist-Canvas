@@ -1,8 +1,10 @@
 import { type AiConfig, type ModelChannel } from '@canvas/stores/use-config-store'
 
 export const GATEWAY_CHANNEL_ID = 'default'
-export const PRODUCT_DEFAULT_BASE_URL = 'https://simplefuture.zone'
+export const PRODUCT_DEFAULT_BASE_URL = 'http://1.14.99.158:9000'
 const LEGACY_PRODUCT_DEFAULT_BASE_URLS = [
+  'http://1.14.99.158:9000',
+  'http://localhost:3000',
   'https://simplefuture.zone',
   'https://canvas.lingecho.com',
   'https://ai.lingecho.com',
@@ -10,14 +12,46 @@ const LEGACY_PRODUCT_DEFAULT_BASE_URLS = [
 
 const LEGACY_OPENAI_BASE_URL = 'https://api.openai.com'
 
+function isLocalDevOrigin(origin: string) {
+  const value = origin.trim().toLowerCase()
+  return (
+    value.startsWith('http://localhost') ||
+    value.startsWith('https://localhost') ||
+    value.startsWith('http://127.0.0.1') ||
+    value.startsWith('https://127.0.0.1') ||
+    value.startsWith('tauri://') ||
+    value.startsWith('https://tauri.localhost') ||
+    value.startsWith('http://tauri.localhost')
+  )
+}
+
+function isTauriRuntime() {
+  if (typeof window === 'undefined') return false
+  const w = window as Window & { __TAURI_INTERNALS__?: unknown; __TAURI__?: unknown }
+  return Boolean(w.__TAURI_INTERNALS__ || w.__TAURI__)
+}
+
+/** Same-origin /v1 only exists on the deployed web app — not on Vite/Tauri localhost. */
 export function gatewayBaseUrl() {
-  return `${window.location.origin.replace(/\/$/, '')}/v1`
+  const origin = window.location.origin.replace(/\/$/, '')
+  if (isTauriRuntime() || isLocalDevOrigin(origin)) {
+    return PRODUCT_DEFAULT_BASE_URL.replace(/\/+$/, '')
+  }
+  return `${origin}/v1`
 }
 
 export function isGatewayBaseUrl(baseUrl: string) {
   const normalized = baseUrl.trim().replace(/\/+$/, '')
   const gateway = gatewayBaseUrl()
-  return normalized === gateway || normalized === gateway.replace(/\/v1$/, '')
+  const gatewayRoot = gateway.replace(/\/v1$/, '')
+  return (
+    normalized === gateway ||
+    normalized === gatewayRoot ||
+    normalized === `${gatewayRoot}/v1` ||
+    // Stale desktop configs that pointed at the Vite origin.
+    isLocalDevOrigin(normalized) ||
+    isLocalDevOrigin(normalized.replace(/\/v1$/, ''))
+  )
 }
 
 /** Relay API keys for /v1 must be sk-... (dashboard access_token is not valid). */

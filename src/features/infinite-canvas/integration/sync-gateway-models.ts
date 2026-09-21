@@ -1,7 +1,10 @@
+import { startTransition } from 'react'
+
 import { api } from '@/lib/api'
 
 import {
   encodeChannelModel,
+  guessCapability,
   modelMatchesCapability,
   modelOptionsFromChannels,
   normalizeChannelModels,
@@ -35,17 +38,31 @@ type CanvasModelsResponse = {
   data?: CanvasCatalogModel[]
 }
 
+type OpenAIModelsResponse = {
+  data?: Array<{ id?: string }>
+}
+
 /** Fetch gateway models with capability labels (no /v1/models round-trip). */
-export async function fetchGatewayModelCatalog(_apiKey: string): Promise<ChannelModel[]> {
-  const res = await api.get<CanvasModelsResponse>('/api/canvas/models')
-  const payload = res.data
-  if (!payload?.success || !Array.isArray(payload.data)) {
-    throw new Error(payload?.message || 'Failed to load canvas models')
+export async function fetchGatewayModelCatalog(apiKey: string): Promise<ChannelModel[]> {
+  try {
+    const res = await api.get<CanvasModelsResponse>('/api/canvas/models', {
+      skipErrorHandler: true,
+    })
+    const payload = res.data
+    if (payload?.success && Array.isArray(payload.data)) {
+      return normalizeCatalog(payload.data)
+    }
+  } catch {
+    // Fall through to /v1/models with the relay key (works signed-out on desktop).
   }
 
+  return fetchRelayModelCatalog(apiKey)
+}
+
+function normalizeCatalog(items: CanvasCatalogModel[]): ChannelModel[] {
   const seen = new Set<string>()
   const models: ChannelModel[] = []
-  for (const item of payload.data) {
+  for (const item of items) {
     const name = item.id?.trim()
     if (!name || seen.has(name)) continue
     seen.add(name)
@@ -53,6 +70,29 @@ export async function fetchGatewayModelCatalog(_apiKey: string): Promise<Channel
     const description = item.description?.trim() || undefined
     models.push({ name, capability, description })
   }
+  return normalizeChannelModels(models)
+}
+
+/** Fallback: list models via OpenAI-compatible /v1/models using the relay sk-. */
+async function fetchRelayModelCatalog(apiKey: string): Promise<ChannelModel[]> {
+  const key = apiKey.trim()
+  if (!key) throw new Error('Failed to load canvas models')
+
+  const res = await api.get<OpenAIModelsResponse>('/v1/models', {
+    headers: { Authorization: `Bearer ${key}` },
+    skipErrorHandler: true,
+  })
+
+  const items = Array.isArray(res.data?.data) ? res.data.data : []
+  const seen = new Set<string>()
+  const models: ChannelModel[] = []
+  for (const item of items) {
+    const name = item.id?.trim()
+    if (!name || seen.has(name)) continue
+    seen.add(name)
+    models.push({ name, capability: guessCapability(name) })
+  }
+  if (!models.length) throw new Error('Failed to load canvas models')
   return normalizeChannelModels(models)
 }
 
@@ -134,41 +174,43 @@ export async function syncGatewayModels(apiKey: string, force = false) {
     state.config.baseUrl.trim() ||
     gatewayBase
 
-  useConfigStore.setState((current) => ({
-    config: {
-      ...current.config,
-      channelMode: 'remote',
-      baseUrl: rewriteToGateway ? gatewayBase : preservedBase,
-      apiKey,
-      channels: rewriteToGateway
-        ? channels.map((channel) =>
-            channel.id === (defaultChannel?.id ?? GATEWAY_CHANNEL_ID)
-              ? { ...channel, baseUrl: gatewayBase, apiKey }
-              : channel
-          )
-        : channels.map((channel) =>
-            channel.id === (defaultChannel?.id ?? GATEWAY_CHANNEL_ID)
-              ? {
-                  ...channel,
-                  apiKey,
-                  baseUrl: isProductDefaultBaseUrl(channel.baseUrl)
-                    ? channel.baseUrl
-                    : channel.baseUrl || preservedBase,
-                }
-              : channel
-          ),
-      models,
-      imageModel: pickDefaultModel(channels, 'image', current.config.imageModel),
-      videoModel: pickDefaultModel(channels, 'video', current.config.videoModel),
-      textModel: pickDefaultModel(
-        channels,
-        'text',
-        current.config.textModel || current.config.model
-      ),
-      audioModel: pickDefaultModel(channels, 'audio', current.config.audioModel),
-      model: pickDefaultModel(channels, 'image', current.config.model),
-    },
-  }))
+  startTransition(() => {
+    useConfigStore.setState((current) => ({
+      config: {
+        ...current.config,
+        channelMode: 'remote',
+        baseUrl: rewriteToGateway ? gatewayBase : preservedBase,
+        apiKey,
+        channels: rewriteToGateway
+          ? channels.map((channel) =>
+              channel.id === (defaultChannel?.id ?? GATEWAY_CHANNEL_ID)
+                ? { ...channel, baseUrl: gatewayBase, apiKey }
+                : channel
+            )
+          : channels.map((channel) =>
+              channel.id === (defaultChannel?.id ?? GATEWAY_CHANNEL_ID)
+                ? {
+                    ...channel,
+                    apiKey,
+                    baseUrl: isProductDefaultBaseUrl(channel.baseUrl)
+                      ? channel.baseUrl
+                      : channel.baseUrl || preservedBase,
+                  }
+                : channel
+            ),
+        models,
+        imageModel: pickDefaultModel(channels, 'image', current.config.imageModel),
+        videoModel: pickDefaultModel(channels, 'video', current.config.videoModel),
+        textModel: pickDefaultModel(
+          channels,
+          'text',
+          current.config.textModel || current.config.model
+        ),
+        audioModel: pickDefaultModel(channels, 'audio', current.config.audioModel),
+        model: pickDefaultModel(channels, 'image', current.config.model),
+      },
+    }))
+  })
 
   return true
 }

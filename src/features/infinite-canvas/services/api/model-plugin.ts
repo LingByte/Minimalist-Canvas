@@ -344,17 +344,15 @@ return { data: audio.data };`,
             script: `// ${i18n.t("modelPlugin.templates.textOpenai")}
 const data = await request({
   method: "post",
-  url: \`\${baseUrl}/v1/responses\`,
+  url: \`\${baseUrl}/v1/chat/completions\`,
   headers: { "Content-Type": "application/json", Authorization: \`Bearer \${apiKey}\` },
   data: {
     model,
-    input: messages,
-    ...(reasoningEffort === "auto" ? {} : { reasoning: { effort: reasoningEffort } }),
+    messages,
+    stream: false,
   },
 });
-const text = data.output_text
-  || (data.output || []).flatMap((o) => o.content || []).map((c) => c.text || "").join("")
-  || "";
+const text = data.choices?.[0]?.message?.content || "";
 onDelta(text);
 return text;`,
         },
