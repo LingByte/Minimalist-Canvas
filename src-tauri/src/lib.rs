@@ -20,6 +20,7 @@ pub fn run() {
             mcp::mcp_tool_result,
             mcp::mcp_registered,
             mcp::register_codex_mcp,
+            mcp::open_codex_terminal,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

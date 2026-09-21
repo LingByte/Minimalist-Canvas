@@ -21,6 +21,7 @@ import { useAgentStore, type AgentAttachment, type AgentBootstrapStatus, type Ag
 import { type CanvasAgentOp, type CanvasAgentSnapshot } from "@canvas/lib/canvas/canvas-agent-ops";
 import { isSiteTool, runSiteTool } from "@canvas/lib/agent/agent-site-tools";
 import { acknowledgeCodexHistory, activateAgentClient, AgentApiError, discoverAgentConfig, fetchAgentJson, interruptCodexTurn, postCodexApproval, postState, postToolResult } from "@canvas/services/api/canvas-agent";
+import { isTauri } from "@canvas/services/fs-store";
 import { AgentChatTimeline, AgentTaskProgress, AgentUsageBar } from "./agent-chat";
 import { AgentChatComposer } from "./agent-chat-composer";
 import { AgentConnectView } from "./agent-connect-view";
@@ -71,6 +72,8 @@ const MAX_ATTACHMENT_PAYLOAD_BYTES = 28 * 1024 * 1024;
 const MESSAGE_PREVIEW_LONG_EDGE = 192;
 const MESSAGE_PREVIEW_MAX_LENGTH = 500_000;
 const DEFAULT_AGENT_URL = "http://127.0.0.1:17371";
+/** Desktop MCP already owns 17371; Canvas Agent for in-app chat should use another port. */
+const DEFAULT_DESKTOP_AGENT_URL = "http://127.0.0.1:17372";
 const AGENT_PROTOCOL_VERSION = 6;
 const HISTORY_RETRY_DELAYS_MS = [0, 150, 350, 700, 1200];
 const AGENT_REASONING_EFFORTS = new Set<AgentReasoningEffort>(["minimal", "low", "medium", "high", "xhigh", "max", "ultra"]);
@@ -907,8 +910,20 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
         }
         const urlToken = searchParams.get("agentToken") || "";
         const urlEndpoint = searchParams.get("agentUrl") || "";
-        const discovered = urlToken ? null : await discoverAgentConfig(endpoint || DEFAULT_AGENT_URL);
-        const nextEndpoint = (urlEndpoint || discovered?.url || endpoint || DEFAULT_AGENT_URL).trim().replace(/\/$/, "");
+        const preferred = (urlEndpoint || endpoint || (isTauri() ? DEFAULT_DESKTOP_AGENT_URL : DEFAULT_AGENT_URL)).trim().replace(/\/$/, "");
+        const discoverCandidates = [...new Set([
+            preferred,
+            DEFAULT_DESKTOP_AGENT_URL,
+            DEFAULT_AGENT_URL,
+        ].filter(Boolean))];
+        let discovered: Awaited<ReturnType<typeof discoverAgentConfig>> = null;
+        if (!urlToken) {
+            for (const candidate of discoverCandidates) {
+                discovered = await discoverAgentConfig(candidate);
+                if (discovered?.url || discovered?.token) break;
+            }
+        }
+        const nextEndpoint = (urlEndpoint || discovered?.url || preferred).trim().replace(/\/$/, "");
         const nextToken = (urlToken || token.trim() || discovered?.token || "").trim();
         if (!nextEndpoint) {
             const text = rt("addressRequired");
@@ -1287,8 +1302,46 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
         setAgentState({ messages: currentMessages.map((message, itemIndex) => itemIndex === index ? { ...message, text: isDelta ? `${message.text}${text}` : mergeStreamText(message.text, text) } : message) });
     };
 
-    const connectionStatus = t(connectError ? "agent.status.failed" : connected ? "agent.status.connected" : enabled ? "agent.status.connecting" : "agent.status.disconnected");
-    const connectionStatusColor = connectError ? "#dc2626" : connected ? "#16a34a" : enabled ? "#d97706" : theme.node.muted;
+    const [mcpRegistered, setMcpRegistered] = useState(false);
+    useEffect(() => {
+        if (!isTauri()) return;
+        let disposed = false;
+        const check = async () => {
+            const { invoke } = await import("@tauri-apps/api/core");
+            const registered = await invoke<boolean>("mcp_registered").catch(() => false);
+            if (!disposed) setMcpRegistered(registered);
+        };
+        void check();
+        const onRegistered = () => void check();
+        window.addEventListener("canvas:mcp-registered", onRegistered);
+        const timer = window.setInterval(check, 15000);
+        return () => {
+            disposed = true;
+            window.clearInterval(timer);
+            window.removeEventListener("canvas:mcp-registered", onRegistered);
+        };
+    }, []);
+
+    const connectionStatus = t(
+        connectError
+            ? "agent.status.failed"
+            : connected
+                ? "agent.status.connected"
+                : enabled
+                    ? "agent.status.connecting"
+                    : mcpRegistered
+                        ? "agent.status.mcpReady"
+                        : "agent.status.disconnected",
+    );
+    const connectionStatusColor = connectError
+        ? "#dc2626"
+        : connected
+            ? "#16a34a"
+            : enabled
+                ? "#d97706"
+                : mcpRegistered
+                    ? "#0d9488"
+                    : theme.node.muted;
     const content = (
         <>
             <AgentPanelTabs

@@ -58,6 +58,22 @@ pub fn mcp_tool_result(
     }
 }
 
+fn codex_home_dir() -> Option<std::path::PathBuf> {
+    if let Ok(dir) = std::env::var("CODEX_HOME") {
+        return Some(std::path::PathBuf::from(dir));
+    }
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .ok()?;
+    Some(std::path::Path::new(&home).join(".codex"))
+}
+
+fn push_codex_path(candidates: &mut Vec<(String, Vec<String>)>, path: std::path::PathBuf) {
+    if path.is_file() {
+        candidates.push((path.to_string_lossy().into_owned(), Vec::new()));
+    }
+}
+
 fn codex_candidates() -> Vec<(String, Vec<String>)> {
     let mut candidates: Vec<(String, Vec<String>)> = Vec::new();
     // Installed binary: %LOCALAPPDATA%\OpenAI\Codex\bin\<hash>\codex.exe — works even
@@ -82,13 +98,30 @@ fn codex_candidates() -> Vec<(String, Vec<String>)> {
             candidates.push(("cmd".to_string(), vec!["/c".to_string(), wrapper.to_string_lossy().into_owned()]));
         }
     }
+    // macOS / Linux: installer and package-manager locations GuIs often miss via PATH.
+    if let Ok(home) = std::env::var("HOME") {
+        let home = std::path::Path::new(&home);
+        for rel in [
+            ".local/bin/codex",
+            ".bun/bin/codex",
+            ".npm-global/bin/codex",
+            "bin/codex",
+            ".cargo/bin/codex",
+        ] {
+            push_codex_path(&mut candidates, home.join(rel));
+        }
+    }
+    for path in ["/opt/homebrew/bin/codex", "/usr/local/bin/codex"] {
+        push_codex_path(&mut candidates, std::path::PathBuf::from(path));
+    }
     candidates.push(("codex".to_string(), Vec::new()));
     candidates.push(("cmd".to_string(), vec!["/c".to_string(), "codex".to_string()]));
     candidates
 }
 
 fn run_codex(args: &[&str]) -> Result<String, String> {
-    let mut last_error = "codex not found".to_string();
+    let mut spawned = false;
+    let mut last_error = String::new();
     for (program, prefix) in codex_candidates() {
         let argv: Vec<String> = prefix.iter().cloned().chain(args.iter().map(|s| s.to_string())).collect();
         match std::process::Command::new(&program).args(&argv).output() {
@@ -96,11 +129,27 @@ fn run_codex(args: &[&str]) -> Result<String, String> {
                 let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
                 return Ok(if stdout.is_empty() { "ok".to_string() } else { stdout });
             }
-            Ok(output) => last_error = String::from_utf8_lossy(&output.stderr).trim().to_string(),
-            Err(error) => last_error = error.to_string(),
+            Ok(output) => {
+                spawned = true;
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                last_error = if stderr.is_empty() { stdout } else { stderr };
+            }
+            Err(error) => {
+                if error.kind() != std::io::ErrorKind::NotFound {
+                    last_error = error.to_string();
+                }
+            }
         }
     }
-    Err(last_error)
+    if !spawned {
+        return Err("CODEX_NOT_INSTALLED".to_string());
+    }
+    Err(if last_error.is_empty() {
+        "CODEX_NOT_INSTALLED".to_string()
+    } else {
+        last_error
+    })
 }
 
 #[tauri::command]
@@ -109,11 +158,9 @@ pub fn mcp_registered(state: tauri::State<'_, Arc<McpBridge>>) -> bool {
     if endpoint.is_empty() {
         return false;
     }
-    let config_path = std::env::var("CODEX_HOME")
-        .map(std::path::PathBuf::from)
-        .or_else(|_| std::env::var("USERPROFILE").map(|home| std::path::Path::new(&home).join(".codex")))
-        .map(|dir| dir.join("config.toml"));
-    let Ok(config_path) = config_path else { return false };
+    let Some(config_path) = codex_home_dir().map(|dir| dir.join("config.toml")) else {
+        return false;
+    };
     let Ok(config) = std::fs::read_to_string(config_path) else { return false };
     config.contains("infinite-canvas") && config.contains(&endpoint)
 }
@@ -126,6 +173,78 @@ pub fn register_codex_mcp(state: tauri::State<'_, Arc<McpBridge>>) -> Result<Str
     }
     let _ = run_codex(&["mcp", "remove", "infinite-canvas"]);
     run_codex(&["mcp", "add", "infinite-canvas", "--url", &endpoint])
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\"'\"'"))
+}
+
+/// Open a system terminal in `cwd` (optional) and start an interactive `codex` session.
+#[tauri::command]
+pub fn open_codex_terminal(cwd: Option<String>) -> Result<(), String> {
+    let workdir = cwd
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| std::env::var("HOME").ok())
+        .unwrap_or_else(|| ".".to_string());
+    let quoted = shell_quote(&workdir);
+
+    #[cfg(target_os = "macos")]
+    {
+        let script = format!(
+            "tell application \"Terminal\"\nactivate\ndo script \"cd {quoted} && exec codex\"\nend tell"
+        );
+        std::process::Command::new("osascript")
+            .args(["-e", &script])
+            .spawn()
+            .map_err(|error| {
+                if error.kind() == std::io::ErrorKind::NotFound {
+                    "CODEX_NOT_INSTALLED".to_string()
+                } else {
+                    error.to_string()
+                }
+            })?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let _ = quoted;
+        std::process::Command::new("cmd")
+            .args([
+                "/C",
+                "start",
+                "cmd",
+                "/K",
+                &format!("cd /d {} && codex", workdir.replace('/', "\\")),
+            ])
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        for program in ["x-terminal-emulator", "gnome-terminal", "konsole", "xfce4-terminal", "alacritty", "kitty", "xterm"] {
+            let result = match program {
+                "gnome-terminal" => std::process::Command::new(program)
+                    .args(["--working-directory", &workdir, "--", "bash", "-lc", "codex"])
+                    .spawn(),
+                "xfce4-terminal" => std::process::Command::new(program)
+                    .args([format!("--working-directory={workdir}"), "--command=codex".to_string()])
+                    .spawn(),
+                "konsole" => std::process::Command::new(program)
+                    .args(["--workdir", &workdir, "-e", "codex"])
+                    .spawn(),
+                _ => std::process::Command::new(program)
+                    .args(["-e", "bash", "-lc", &format!("cd {quoted} && exec codex")])
+                    .spawn(),
+            };
+            if result.is_ok() {
+                return Ok(());
+            }
+        }
+        return Err("No terminal emulator found".to_string());
+    }
 }
 
 pub fn spawn_mcp_server(app: &AppHandle) -> Arc<McpBridge> {

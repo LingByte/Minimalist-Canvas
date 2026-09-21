@@ -92,7 +92,13 @@ export function AgentChatComposer({
                         ) : null}
                         {onConfirmToolsChange ? <ToolConfirmationMenu confirmTools={Boolean(confirmTools)} theme={theme} onChange={onConfirmToolsChange} /> : null}
                         {permissionMode && onPermissionModeChange ? <PermissionModeMenu permissionMode={permissionMode} theme={theme} onChange={onPermissionModeChange} /> : null}
-                        {models?.length && model && reasoningEffort && onModelChange && onReasoningEffortChange ? <AgentModelControls models={models} model={model} reasoningEffort={reasoningEffort} onModelChange={onModelChange} onReasoningEffortChange={onReasoningEffortChange} /> : null}
+                        {models?.length && model && onModelChange ? (
+                            reasoningEffort && onReasoningEffortChange ? (
+                                <AgentModelControls models={models} model={model} reasoningEffort={reasoningEffort} onModelChange={onModelChange} onReasoningEffortChange={onReasoningEffortChange} />
+                            ) : (
+                                <AgentModelOnlyControl models={models} model={model} onModelChange={onModelChange} />
+                            )
+                        ) : null}
                         {left}
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
@@ -105,6 +111,28 @@ export function AgentChatComposer({
                 </div>
             </div>
         </div>
+    );
+}
+
+function AgentModelOnlyControl({ models, model, onModelChange }: { models: AgentModel[]; model: string; onModelChange: (model: string) => void }) {
+    const { t } = useTranslation();
+    const current = models.find((item) => item.model === model) || models[0];
+    const [modelOpen, setModelOpen] = useState(false);
+    return (
+        <Tooltip title={t("agent.composer.model", { model: current.displayName || current.model })} placement="top" open={modelOpen ? false : undefined}>
+            <span className="inline-flex shrink-0">
+                <Select value={model} open={modelOpen} onOpenChange={setModelOpen} onValueChange={onModelChange}>
+                    <SelectTrigger hideChevron className="h-9 w-9 min-w-9 justify-center gap-0 rounded-full border-0 bg-transparent px-0 text-xs font-medium shadow-none hover:bg-black/5 focus:ring-0 @min-[660px]:w-auto @min-[660px]:min-w-36 @min-[660px]:max-w-36 @min-[660px]:justify-start @min-[660px]:gap-1.5 @min-[660px]:px-2.5 dark:bg-transparent dark:hover:bg-white/10" aria-label={t("agent.composer.selectModel", { model: current.displayName || current.model })}>
+                        <Cpu className="size-3.5 shrink-0 opacity-70" />
+                        <span className="hidden min-w-0 flex-1 truncate text-left @min-[660px]:inline">{current.displayName || current.model}</span>
+                        <ChevronUp className="hidden size-3 opacity-50 @min-[660px]:block" />
+                    </SelectTrigger>
+                    <SelectContent data-canvas-no-zoom position="popper" side="top" align="start" sideOffset={6} className="z-[1200] w-64 rounded-xl border border-border/70 bg-popover p-1 shadow-xl">
+                        {models.map((item) => <SelectItem key={item.model} value={item.model}>{item.displayName || item.model}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </span>
+        </Tooltip>
     );
 }
 
