@@ -95,7 +95,12 @@ export function ConfigLocalStorage({ active }: { active: boolean }) {
                         </Button>
                     </div>
                 </div>
-                <Alert className="mt-4" type="info" showIcon title={t("config.localStorage.syncedHint")} />
+                <Alert
+                    className="mt-4 !border-stone-300/80 !bg-stone-100/80 [&_.ant-alert-icon]:!text-stone-500 dark:!border-stone-700 dark:!bg-stone-900/70 dark:[&_.ant-alert-icon]:!text-stone-400"
+                    type="info"
+                    showIcon
+                    title={<span className="text-stone-700 dark:text-stone-200">{t("config.localStorage.syncedHint")}</span>}
+                />
                 {usage?.dataPath ? (
                     <div className="mt-4 rounded-lg bg-stone-100/70 p-3 dark:bg-stone-900/70">
                         <div className="flex items-center gap-2 text-xs text-stone-500">

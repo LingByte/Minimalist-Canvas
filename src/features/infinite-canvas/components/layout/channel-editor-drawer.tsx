@@ -1,4 +1,4 @@
-import { Button, Drawer, Input, Segmented, Select, Space } from "antd";
+import { Button, Drawer, Input, Select, Space } from "antd";
 import { ListPlus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -20,7 +20,10 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
         { label: "OpenAI", value: "openai" },
         { label: "Gemini", value: "gemini" },
     ];
-    const capabilityOptions: Array<{ label: string; value: ModelCapability }> = ["image", "video", "text", "audio"].map((value) => ({ label: t(`config.channelEditor.capabilities.${value}`), value: value as ModelCapability }));
+    const capabilityOptions: Array<{ label: string; value: ModelCapability }> = ["image", "video", "text", "audio"].map((value) => ({
+        label: t(`config.channelEditor.capabilities.${value}`),
+        value: value as ModelCapability,
+    }));
 
     useEffect(() => {
         if (open && channel) setDraft(channel);
@@ -69,12 +72,12 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
     return (
         <Drawer
             open={open}
-            styles={{ section: { width: 640 } }}
+            size={860}
             title={t("config.channelEditor.title")}
             onClose={onClose}
             mask={!tourActive}
             zIndex={tourActive ? 10080 : undefined}
-            styles={{ body: { paddingTop: 16 } }}
+            styles={{ body: { paddingTop: 16, displayBottom: 16 } }}
             extra={
                 <Space>
                     <Button onClick={onClose}>{t("common.cancel")}</Button>
@@ -84,7 +87,7 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
                 </Space>
             }
         >
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block">
                     <span className="mb-1 block text-sm font-medium">{t("config.channelEditor.name")}</span>
                     <Input value={draft.name} onChange={(event) => patch({ name: event.target.value })} />
@@ -93,18 +96,18 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
                     <span className="mb-1 block text-sm font-medium">{t("config.channelEditor.protocol")}</span>
                     <Select className="w-full" value={draft.apiFormat} options={apiFormatOptions} onChange={changeApiFormat} />
                 </label>
-                <label className="block md:col-span-2" data-tour="config-channel-base-url">
+                <label className="block sm:col-span-2" data-tour="config-channel-base-url">
                     <span className="mb-1 block text-sm font-medium">{t("config.channelEditor.baseUrl")}</span>
                     <Input value={draft.baseUrl} onChange={(event) => patch({ baseUrl: event.target.value })} placeholder="https://api.example.com" />
                 </label>
-                <label className="block md:col-span-2" data-tour="config-channel-api-key">
+                <label className="block sm:col-span-2" data-tour="config-channel-api-key">
                     <span className="mb-1 block text-sm font-medium">API Key</span>
                     <Input.Password value={draft.apiKey} onChange={(event) => patch({ apiKey: event.target.value })} placeholder="sk-..." />
                 </label>
             </div>
 
             <div className="mt-6 mb-3 flex flex-wrap items-center justify-between gap-2">
-                <div>
+                <div className="min-w-0">
                     <div className="text-sm font-semibold">{t("config.channelEditor.models")}</div>
                     <div className="mt-0.5 text-xs text-stone-500">{t("config.channelEditor.modelDescription", { count: draft.models.length })}</div>
                 </div>
@@ -113,20 +116,32 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
                 </Button>
             </div>
 
-            <div className="space-y-2 rounded-lg border border-stone-200 p-2 dark:border-stone-800">
+            <div className="thin-scrollbar max-h-[min(52vh,520px)] space-y-2 overflow-y-auto rounded-lg border border-stone-200 p-2 dark:border-stone-800">
                 {draft.models.length ? (
                     draft.models.map((model) => (
-                        <div key={model.name} className="flex min-w-0 flex-wrap items-start gap-3 rounded-md px-2 py-1.5 hover:bg-stone-50 dark:hover:bg-stone-900/40">
-                            <span className="min-w-0 flex-1 overflow-hidden" title={model.description ? `${model.name} — ${model.description}` : model.name}>
-                                <span className="block truncate text-sm">{model.name}</span>
-                                {model.description ? <span className="mt-0.5 block line-clamp-2 break-words text-xs font-normal leading-5 text-stone-400">{model.description}</span> : null}
-                            </span>
-                            <div className="flex shrink-0 items-center gap-2">
-                                <Segmented size="small" value={model.capability} options={capabilityOptions} onChange={(value) => setCapability(model.name, value as ModelCapability)} />
-                                <Button size="small" type={model.script ? "primary" : "default"} ghost={Boolean(model.script)} onClick={() => setScriptTarget({ name: model.name, capability: model.capability, value: model.script || "" })}>
+                        <div key={model.name} className="rounded-md border border-stone-100 bg-white px-3 py-2.5 dark:border-stone-800 dark:bg-stone-950/40">
+                            <div className="min-w-0" title={model.description ? `${model.name} — ${model.description}` : model.name}>
+                                <div className="break-all text-sm font-medium leading-5 text-stone-900 dark:text-stone-100">{model.name}</div>
+                                {model.description ? <div className="mt-1 line-clamp-2 break-words text-xs leading-5 text-stone-400">{model.description}</div> : null}
+                            </div>
+                            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                                <Select
+                                    size="small"
+                                    className="min-w-[7.5rem]"
+                                    value={model.capability}
+                                    options={capabilityOptions}
+                                    onChange={(value) => setCapability(model.name, value)}
+                                    popupMatchSelectWidth={false}
+                                />
+                                <Button
+                                    size="small"
+                                    type={model.script ? "primary" : "default"}
+                                    ghost={Boolean(model.script)}
+                                    onClick={() => setScriptTarget({ name: model.name, capability: model.capability, value: model.script || "" })}
+                                >
                                     {t(model.script ? "config.channelEditor.scriptReady" : "config.channelEditor.script")}
                                 </Button>
-                                <Button size="small" danger type="text" icon={<Trash2 className="size-3.5" />} onClick={() => removeModel(model.name)} />
+                                <Button size="small" danger type="text" className="!ml-auto" icon={<Trash2 className="size-3.5" />} onClick={() => removeModel(model.name)} />
                             </div>
                         </div>
                     ))

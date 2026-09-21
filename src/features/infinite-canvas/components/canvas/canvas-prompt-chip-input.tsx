@@ -6,7 +6,7 @@ import { FileText, Image as ImageIcon, Music2, Video } from "lucide-react";
 
 import i18n from "@canvas/i18n";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
-import { isImeComposing, isPlainEnterKey } from "@canvas/lib/keyboard-event";
+import { isImeComposing } from "@canvas/lib/keyboard-event";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import type { CanvasResourceReference } from "@canvas/lib/canvas/canvas-resource-references";
 import { SmartImage } from "@/components/smart-image";
@@ -15,7 +15,6 @@ type Props = {
     value: string;
     references: CanvasResourceReference[];
     onChange: (value: string) => void;
-    onSubmit?: () => void;
     className?: string;
     style?: CSSProperties;
     placeholder?: string;
@@ -32,7 +31,7 @@ type Token =
 
 // Prompt-panel contentEditable input: @ references embed thumbnail chips instead of plain label text.
 // Serialization converts chips back to reference labels so the generated value matches the former textarea semantics.
-export function CanvasPromptChipInput({ value, references, onChange, onSubmit, className, style, placeholder }: Props) {
+export function CanvasPromptChipInput({ value, references, onChange, className, style, placeholder }: Props) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const editorRef = useRef<HTMLDivElement>(null);
     const composingRef = useRef(false);
@@ -180,11 +179,6 @@ export function CanvasPromptChipInput({ value, references, onChange, onSubmit, c
                     if ((event.key === "Backspace" || event.key === "Delete") && deleteAdjacentReference(event.key)) {
                         event.preventDefault();
                         requestAnimationFrame(syncFromEditor);
-                        return;
-                    }
-                    if (isPlainEnterKey(event) && onSubmit) {
-                        event.preventDefault();
-                        onSubmit();
                         return;
                     }
                     requestAnimationFrame(syncMention);

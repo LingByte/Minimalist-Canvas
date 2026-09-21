@@ -42,7 +42,7 @@ export function ModelSelectModal({
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        if (!open) return;
+        if (!open) return
         setExisting(selectedNames);
         setFetched([]);
         setCapabilityByName(new Map());
@@ -100,13 +100,13 @@ export function ModelSelectModal({
         setActiveTab("new");
     };
 
-    const fetchModels = async () => {
+    const fetchModels = async (options?: { silent?: boolean }) => {
         if (!channel) return;
         // Site gateway and the product default host share the capability-aware catalog.
         const useGatewayCatalog =
             isGatewayBaseUrl(channel.baseUrl) || isProductDefaultBaseUrl(channel.baseUrl);
         if (!useGatewayCatalog && (!channel.baseUrl.trim() || !channel.apiKey.trim())) {
-            message.error(t("config.modelSelect.missingConfig"));
+            if (!options?.silent) message.error(t("config.modelSelect.missingConfig"));
             return;
         }
         setLoading(true);
@@ -123,7 +123,7 @@ export function ModelSelectModal({
                     return next;
                 });
                 setActiveTab("new");
-                message.success(t("config.modelSelect.fetched", { count: catalog.length }));
+                if (!options?.silent) message.success(t("config.modelSelect.fetched", { count: catalog.length }));
             } else {
                 const models = await fetchChannelModels(channel);
                 setFetched(models);
@@ -131,14 +131,23 @@ export function ModelSelectModal({
                     new Map(models.map((name) => [name, guessCapability(name)])),
                 );
                 setActiveTab("new");
-                message.success(t("config.modelSelect.fetched", { count: models.length }));
+                if (!options?.silent) message.success(t("config.modelSelect.fetched", { count: models.length }));
             }
         } catch (error) {
-            message.error(error instanceof Error ? error.message : t("config.modelSelect.fetchFailed"));
+            if (!options?.silent) {
+                message.error(error instanceof Error ? error.message : t("config.modelSelect.fetchFailed"));
+            }
         } finally {
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        if (!open || !channel) return;
+        void fetchModels({ silent: true });
+        // Auto-pull once when the selector opens for this channel.
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional open-edge fetch
+    }, [open, channel?.id, channel?.baseUrl, channel?.apiKey]);
 
     const confirm = () => {
         const ordered = [...existing, ...fetched].filter((name, index, list) => list.indexOf(name) === index).filter((name) => selected.has(name));

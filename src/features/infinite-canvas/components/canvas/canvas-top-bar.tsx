@@ -25,11 +25,9 @@ export function CanvasTopBar({
     onExportProject,
     onOpenFolder,
     onImportImage,
-    onOpenPlugins,
     onUndo,
     onRedo,
     agentOpen,
-    compactAgentStatus,
     onToggleAgent,
 }: {
     title: string;
@@ -48,11 +46,9 @@ export function CanvasTopBar({
     onExportProject: () => void;
     onOpenFolder?: () => void;
     onImportImage: () => void;
-    onOpenPlugins: () => void;
     onUndo: () => void;
     onRedo: () => void;
     agentOpen: boolean;
-    compactAgentStatus: { connected: boolean; enabled: boolean; activity: string };
     onToggleAgent: () => void;
 }) {
     const colorTheme = useThemeStore((state) => state.theme);
@@ -136,7 +132,6 @@ export function CanvasTopBar({
                             </button>
                         )}
                     </div>
-                    <CompactAgentStatus status={compactAgentStatus} onClick={onToggleAgent} />
                 </div>
 
                 <div className="pointer-events-auto flex shrink-0 items-center gap-0.5 md:gap-1.5">
@@ -144,7 +139,6 @@ export function CanvasTopBar({
                         variant="canvas"
                         compactOnMobile
                         onOpenShortcuts={() => setShortcutsOpen(true)}
-                        onOpenPlugins={onOpenPlugins}
                     />
                     <span className="mx-0.5 hidden h-6 w-px md:block" style={{ background: theme.toolbar.border }} />
                     <Button
@@ -193,27 +187,6 @@ function MenuLabel({ text, shortcut }: { text: string; shortcut: string }) {
             <span>{text}</span>
             <span className="text-xs opacity-45">{shortcut}</span>
         </span>
-    );
-}
-
-function CompactAgentStatus({ status, onClick }: { status: { connected: boolean; enabled: boolean; activity: string }; onClick: () => void }) {
-    const colorTheme = useThemeStore((state) => state.theme);
-    const theme = canvasThemes[colorTheme];
-    const { t } = useTranslation();
-    const label = status.connected ? t("canvas.agentConnected") : status.enabled ? t("canvas.agentConnecting", { activity: status.activity || t("canvas.connecting") }) : t("canvas.agentDisconnected");
-    const dotColor = status.connected ? "#22c55e" : status.enabled ? "#f59e0b" : theme.node.muted;
-    return (
-        <button
-            type="button"
-            className="flex h-8 shrink-0 items-center gap-1.5 text-xs transition hover:opacity-75"
-            style={{ color: status.connected ? "#16a34a" : status.enabled ? "#d97706" : theme.node.muted }}
-            onClick={onClick}
-            title={label}
-            aria-label={label}
-        >
-            <span className="size-2 shrink-0 rounded-full" style={{ background: dotColor }} />
-            <span className="hidden max-w-[140px] truncate lg:inline">{label}</span>
-        </button>
     );
 }
 
