@@ -4787,6 +4787,8 @@
     "Sign In": "登录",
     "Sign in now": "立即登录",
     "Sign in required": "需要登录",
+    "Please sign in again to continue.": "登录已过期，请重新登录后继续。",
+    "Please sign in to use cloud features.": "使用云端功能前请先登录。",
     "Sign in with Passkey": "使用 Passkey 登录",
     "Sign out": "登出",
     "Sign out other sessions": "退出其他会话",
@@ -5956,5 +5958,8 @@
     "Sign out of this device": "退出当前设备登录",
     "Manage API tokens for upstream calls": "管理上游调用的 API 令牌",
     "Security settings, sessions, and more on the web": "安全设置、登录会话等更多功能在网页端"
-  }
+  },
+  "Simplicity is the way. Create the future.": "大道至简，创作未来。",
+  "One studio for frontier image, video, and voice—from idea to finished work.": "前沿图像、视频与语音，同一创作环境，从想法到成片一次完成。",
+  "Start Creating": "开始创作"
 }

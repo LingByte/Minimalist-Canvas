@@ -118,18 +118,7 @@ export function ProfileDropdown() {
   ])
 
   if (!user) {
-    return (
-      <button
-        type='button'
-        onClick={() => navigate('/sign-in')}
-        className='inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-md border border-stone-300 px-2 text-xs font-medium text-stone-600 transition hover:bg-black/5 hover:text-stone-900 dark:border-stone-600 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white'
-        aria-label={t('Sign in')}
-        title={t('Not signed in')}
-      >
-        <User className='size-3.5' />
-        {t('Not signed in')}
-      </button>
-    )
+    return null
   }
 
   return (

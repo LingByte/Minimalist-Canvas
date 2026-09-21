@@ -46,7 +46,9 @@ import { useTurnstile } from '@/features/auth/hooks/use-turnstile'
 import { beginPasskeyLogin, finishPasskeyLogin } from '@/features/auth/passkey'
 import type { AuthFormProps } from '@/features/auth/types'
 import { useStatus } from '@/hooks/use-status'
-import { isAuthBundle } from '@/lib/api'
+import { applyAuthBundle, isAuthBundle } from '@/lib/api'
+import { getSavedLanguage } from '@/features/auth/lib/auth-redirect'
+import i18n from 'i18next'
 import {
   buildAssertionResult,
   prepareCredentialRequestOptions,
@@ -60,6 +62,7 @@ import { SmartImage } from '@/components/smart-image'
 export function UserAuthForm({
   className,
   redirectTo,
+  onAuthenticated,
   ...props
 }: AuthFormProps) {
   const { t } = useTranslation()
@@ -93,6 +96,19 @@ export function UserAuthForm({
   const setPending2FAFlowToken = useAuthStore(
     (state) => state.auth.setPending2FAFlowToken
   )
+
+  const completeLogin = async (bundle: Parameters<typeof handleLoginSuccess>[0]) => {
+    if (onAuthenticated) {
+      applyAuthBundle(bundle)
+      const savedLang = getSavedLanguage(bundle.user)
+      if (savedLang && savedLang !== i18n.language) {
+        await i18n.changeLanguage(savedLang)
+      }
+      onAuthenticated()
+      return
+    }
+    await handleLoginSuccess(bundle, redirectTo)
+  }
 
   const hasUserAgreement = Boolean(status?.user_agreement_enabled)
   const hasPrivacyPolicy = Boolean(status?.privacy_policy_enabled)
@@ -184,7 +200,7 @@ export function UserAuthForm({
         if (!isAuthBundle(res.data)) {
           throw new Error(t('Login failed'))
         }
-        await handleLoginSuccess(res.data, redirectTo)
+        await completeLogin(res.data)
         toast.success(t('Welcome back!'))
       }
     } catch (error: unknown) {
@@ -222,7 +238,7 @@ export function UserAuthForm({
     try {
       const res = await wechatLoginByCode(wechatCode)
       if (res?.success && isAuthBundle(res.data)) {
-        await handleLoginSuccess(res.data, redirectTo)
+        await completeLogin(res.data)
         toast.success(t('Signed in via WeChat'))
         handleWeChatDialogChange(false)
       } else {
@@ -293,7 +309,7 @@ export function UserAuthForm({
         throw new Error(t('Missing user data from Passkey login response'))
       }
 
-      await handleLoginSuccess(finish.data, redirectTo)
+      await completeLogin(finish.data)
       toast.success(t('Signed in with Passkey'))
     } catch (error: unknown) {
       if (getServerErrorMessageKey(error)) return

@@ -72,13 +72,8 @@ api.get = ((url: string, config: ApiRequestConfig = {}) => {
   return request
 }) as typeof api.get
 
-function redirectToSignIn(): void {
-  if (
-    typeof window !== 'undefined' &&
-    window.location.pathname !== '/sign-in'
-  ) {
-    window.location.replace('/sign-in')
-  }
+function promptSignIn(_reason: 'required' | 'expired' = 'required'): void {
+  // Desktop is local-first; do not open auth UI on incidental 401s.
 }
 
 // Raw backend auth failures (e.g. "Unauthorized, not logged in and no access
@@ -106,6 +101,10 @@ function unauthenticatedMessage(): string {
     : t('Please sign in first')
 }
 
+function unauthenticatedReason(): 'required' | 'expired' {
+  return useAuthStore.getState().auth.user ? 'expired' : 'required'
+}
+
 function resolveErrorMessage(payload: unknown, fallback?: string): string {
   const messageKey = getServerErrorMessageKey(payload)
   if (messageKey) return t(messageKey)
@@ -121,6 +120,14 @@ function resolveErrorMessage(payload: unknown, fallback?: string): string {
   return typeof raw === 'string' && raw ? raw : fallback || t('Request failed')
 }
 
+function isUnauthenticatedResolvedMessage(message: string): boolean {
+  return (
+    message === t('Please sign in first') ||
+    message === t('Session expired!') ||
+    isUnauthenticatedMessage(message)
+  )
+}
+
 api.interceptors.response.use(
   (response) => {
     if (response.config.acceptAuthRotation && response.data?.success === true) {
@@ -132,7 +139,12 @@ api.interceptors.response.use(
       typeof response.data?.success === 'boolean' &&
       !response.data.success
     ) {
-      toast.error(resolveErrorMessage(response.data))
+      const message = resolveErrorMessage(response.data)
+      if (isUnauthenticatedResolvedMessage(message)) {
+        promptSignIn(unauthenticatedReason())
+      } else {
+        toast.error(message)
+      }
     }
     return response
   },
@@ -162,24 +174,38 @@ api.interceptors.response.use(
         }
 
         if (outcome.kind === 'anonymous' || outcome.kind === 'out_of_sync') {
-          if (!skipErrorHandler) toast.error(unauthenticatedMessage())
-          redirectToSignIn()
+          if (!skipErrorHandler) promptSignIn('expired')
         }
       } else if (config?.authRetry) {
         clearAuthentication(false)
-        if (!skipErrorHandler) toast.error(unauthenticatedMessage())
-        redirectToSignIn()
+        if (!skipErrorHandler) promptSignIn('expired')
       } else if (!skipErrorHandler) {
-        toast.error(unauthenticatedMessage())
+        promptSignIn(hadSession ? 'expired' : 'required')
       }
     } else if (!skipErrorHandler) {
-      toast.error(resolveErrorMessage(error, error?.message))
+      const message = resolveErrorMessage(error, error?.message)
+      if (isUnauthenticatedResolvedMessage(message)) {
+        promptSignIn(unauthenticatedReason())
+      } else {
+        toast.error(message)
+      }
     }
     throw error
   }
 )
 
-api.interceptors.request.use((config) => {
+api.interceptors.request.use(async (config) => {
+  const auth = useAuthStore.getState().auth
+  const refreshBefore = Math.floor(Date.now() / 1000) + 60
+  if (
+    auth.accessToken &&
+    auth.accessExpiresAt &&
+    auth.accessExpiresAt <= refreshBefore &&
+    !config.skipAuthRefresh
+  ) {
+    await refreshAuthentication().catch(() => undefined)
+  }
+
   const accessToken = useAuthStore.getState().auth.accessToken
   if (accessToken) {
     config.headers.Authorization = `Bearer ${accessToken}`

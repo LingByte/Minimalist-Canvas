@@ -211,4 +211,6 @@ export interface CustomOAuthProviderInfo {
 
 export interface AuthFormProps extends React.HTMLAttributes<HTMLFormElement> {
   redirectTo?: string
+  /** Modal flow: apply session then call this instead of navigating away. */
+  onAuthenticated?: () => void
 }

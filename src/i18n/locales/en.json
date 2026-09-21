@@ -4787,6 +4787,8 @@
     "Sign In": "Sign In",
     "Sign in now": "Sign in now",
     "Sign in required": "Sign in required",
+    "Please sign in again to continue.": "Please sign in again to continue.",
+    "Please sign in to use cloud features.": "Please sign in to use cloud features.",
     "Sign in with Passkey": "Sign in with Passkey",
     "Sign out": "Sign out",
     "Sign out other sessions": "Sign out other sessions",
@@ -5956,5 +5958,8 @@
     "Sign out of this device": "Sign out of this device",
     "Manage API tokens for upstream calls": "Manage API tokens for upstream calls",
     "Security settings, sessions, and more on the web": "Security settings, sessions, and more on the web"
-  }
+  },
+  "Simplicity is the way. Create the future.": "Simplicity is the way. Create the future.",
+  "One studio for frontier image, video, and voice—from idea to finished work.": "One studio for frontier image, video, and voice—from idea to finished work.",
+  "Start Creating": "Start Creating"
 }

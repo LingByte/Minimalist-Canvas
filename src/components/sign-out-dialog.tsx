@@ -48,7 +48,7 @@ export function SignOutDialog({ open, onOpenChange }: SignOutDialogProps) {
 
       clearAuthenticatedClientState(queryClient)
       toast.success(t('Signed out'))
-      void navigate('/sign-in', { replace: true })
+      void navigate('/', { replace: true })
     } catch (error: unknown) {
       toast.error(
         error instanceof Error ? error.message : t('Failed to sign out session')
