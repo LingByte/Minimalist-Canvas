@@ -607,3 +607,149 @@
     border-radius: 0.6rem;
     font-size: 0.75rem;
 }
+
+/* Aeris homepage with AeroShards WebGPU background */
+.aeris-landing {
+  position: relative;
+  width: 100%;
+  min-height: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0d0a12;
+  color: #f5f4f1;
+  font-family: var(--font-body);
+}
+
+.aeris-media {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.aeris-shards {
+  width: 100%;
+  height: 100%;
+}
+
+.aeris-shards-fallback {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.aeris-shards-fallback__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.aeris-veil {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgb(13 10 18 / 0.18) 0%, rgb(13 10 18 / 0.06) 42%, rgb(13 10 18 / 0.42) 100%);
+  pointer-events: none;
+}
+
+.aeris-copy {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2rem 1.25rem 5.5rem;
+  text-align: center;
+  pointer-events: none;
+}
+
+.aeris-copy h1 {
+  margin: 0;
+  max-width: 16ch;
+  font-size: clamp(2.4rem, 6vw, 4.4rem);
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+  color: #f7f6f2;
+  text-shadow: 0 10px 40px rgb(0 0 0 / 0.35);
+}
+
+.aeris-tagline {
+  margin: 0;
+  max-width: 34rem;
+  font-size: clamp(1rem, 2.2vw, 1.25rem);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: rgb(245 244 241 / 0.88);
+}
+
+.aeris-subtitle {
+  margin: 0;
+  max-width: 36rem;
+  font-size: clamp(0.9rem, 1.6vw, 1.05rem);
+  line-height: 1.55;
+  color: rgb(245 244 241 / 0.62);
+}
+
+.aeris-actions {
+  pointer-events: auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.aeris-enter {
+  appearance: none;
+  border: 1px solid rgb(255 255 255 / 0.18);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.92);
+  color: #111216;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 0.8rem 1.45rem;
+  transition:
+    transform 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.28);
+}
+
+.aeris-enter--ghost {
+  background: rgb(255 255 255 / 0.08);
+  color: #f5f4f1;
+}
+
+.aeris-enter:hover:not(:disabled),
+.aeris-enter:focus-visible:not(:disabled) {
+  transform: translateY(-1px);
+  background: #fff;
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.34);
+}
+
+.aeris-enter:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 640px) {
+  .aeris-copy {
+    padding: 1.5rem 1rem 4.5rem;
+    align-items: stretch;
+  }
+
+  .aeris-actions {
+    flex-direction: column;
+  }
+
+  .aeris-enter {
+    width: 100%;
+  }
+}
