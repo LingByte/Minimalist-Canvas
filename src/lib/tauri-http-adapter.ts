@@ -28,6 +28,38 @@ function serializeParams(params: unknown): string {
   return search.toString()
 }
 
+function flattenAxiosHeaders(configHeaders: AxiosRequestConfig['headers']): Record<string, string> {
+  const headers: Record<string, string> = {}
+  if (!configHeaders) return headers
+
+  const axiosHeaders = configHeaders as {
+    toJSON?: () => Record<string, unknown>
+    get?: (name: string) => unknown
+    Authorization?: unknown
+    authorization?: unknown
+  }
+
+  const raw =
+    typeof axiosHeaders.toJSON === 'function'
+      ? axiosHeaders.toJSON()
+      : (configHeaders as Record<string, unknown>)
+
+  for (const [key, value] of Object.entries(raw)) {
+    if (value == null || typeof value === 'object') continue
+    headers[key] = String(value)
+  }
+
+  const authorization =
+    (typeof axiosHeaders.get === 'function' ? axiosHeaders.get('Authorization') : undefined) ??
+    axiosHeaders.Authorization ??
+    axiosHeaders.authorization
+  if (authorization != null && authorization !== '') {
+    headers.Authorization = String(authorization)
+  }
+
+  return headers
+}
+
 // Custom axios adapter using Tauri HTTP plugin (bypasses CORS)
 export function createTauriAdapter(): AxiosAdapter | null {
   if (!isTauriRuntime) return null
@@ -37,20 +69,22 @@ export function createTauriAdapter(): AxiosAdapter | null {
     const query = serializeParams(config.params)
     if (query) url += `${url.includes('?') ? '&' : '?'}${query}`
     const method = (config.method || 'get').toUpperCase()
-    const headers: Record<string, string> = {}
-    if (config.headers) {
-      for (const [key, value] of Object.entries(config.headers)) {
-        if (value != null) headers[key] = String(value)
-      }
-    }
+    const headers = flattenAxiosHeaders(config.headers)
     // Backend auth endpoints enforce an Origin allowlist (its server_address).
     // plugin-http sends no webview origin, so provide the accepted one or
     // refresh/logout are rejected as AUTH_ORIGIN_FORBIDDEN.
     if (url.startsWith(SITE_BASE_URL)) {
-      if (!headers['Origin']) headers['Origin'] = SITE_ORIGIN
-      if (!headers['Referer']) headers['Referer'] = `${SITE_ORIGIN}/`
+      if (!headers.Origin) headers.Origin = SITE_ORIGIN
+      if (!headers.Referer) headers.Referer = `${SITE_ORIGIN}/`
     }
-    const init: RequestInit = { method, headers }
+    const init: RequestInit = {
+      method,
+      headers,
+      // Persist / send new_api_refresh so access-token expiry can be renewed.
+      // Without this, desktop looks "logged in" (user in memory) while APIs
+      // return auth.not_logged_in after the short-lived Bearer expires.
+      credentials: 'include',
+    }
     if (config.data && method !== 'GET' && method !== 'HEAD') {
       init.body = typeof config.data === 'string' ? config.data : JSON.stringify(config.data)
       if (!headers['Content-Type'] && typeof config.data === 'object') {
@@ -59,12 +93,22 @@ export function createTauriAdapter(): AxiosAdapter | null {
     }
     const res = await tauriFetch(url, init)
     const responseHeaders: Record<string, string> = {}
-    res.headers.forEach((value, key) => { responseHeaders[key] = value })
+    res.headers.forEach((value, key) => {
+      responseHeaders[key] = value
+    })
     const responseData = await res.text()
     let parsed: unknown = responseData
     const contentType = responseHeaders['content-type'] || ''
-    if (contentType.includes('application/json') || responseData.startsWith('{') || responseData.startsWith('[')) {
-      try { parsed = JSON.parse(responseData) } catch { /* keep text */ }
+    if (
+      contentType.includes('application/json') ||
+      responseData.startsWith('{') ||
+      responseData.startsWith('[')
+    ) {
+      try {
+        parsed = JSON.parse(responseData)
+      } catch {
+        /* keep text */
+      }
     }
     return {
       data: parsed,

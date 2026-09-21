@@ -70,15 +70,22 @@ export type ConfigTabKey = "channels" | "preferences" | "webdav" | "local-storag
 
 export const CONFIG_STORE_KEY = "minimalist-canvas:ai_config_store";
 const CHANNEL_MODEL_SEPARATOR = "::";
-const DEFAULT_OPENAI_BASE_URL = "https://simplefuture.zone";
+const DEFAULT_OPENAI_BASE_URL = "http://1.14.99.158:9000";
 const LEGACY_OPENAI_BASE_URL = "https://api.openai.com";
-const LEGACY_PRODUCT_BASE_URLS = ["https://ai.lingecho.com", "https://canvas.lingecho.com"];
+const LEGACY_PRODUCT_BASE_URLS = [
+    "http://localhost:3000",
+    "https://simplefuture.zone",
+    "https://ai.lingecho.com",
+    "https://canvas.lingecho.com",
+];
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
+/** Built-in relay key for this desktop build. */
+const BUILTIN_API_KEY = "sk-VsOmVvXFwhvpDeJSK5RFWYWo2xMtL37FIv6ju0goTUzOUPTA";
 
 export const defaultConfig: AiConfig = {
     channelMode: "remote",
     baseUrl: DEFAULT_OPENAI_BASE_URL,
-    apiKey: "",
+    apiKey: BUILTIN_API_KEY,
     apiFormat: "openai",
     serverUrl: "",
     channels: [
@@ -86,7 +93,7 @@ export const defaultConfig: AiConfig = {
             id: "default",
             name: i18n.t("config.channels.defaultName"),
             baseUrl: DEFAULT_OPENAI_BASE_URL,
-            apiKey: "",
+            apiKey: BUILTIN_API_KEY,
             apiFormat: "openai",
             // No baked-in demo models — gateway sync / channel editor fills this.
             models: [],
@@ -239,10 +246,12 @@ export const useConfigStore = create<ConfigStore>()(
                 const config = { ...defaultConfig, ...persistedConfig };
                 if (!Array.isArray(persistedConfig.channels)) config.channels = [];
                 config.baseUrl = migrateLegacyOpenAIBaseUrl(config.baseUrl);
+                config.apiKey = config.apiKey?.trim() || BUILTIN_API_KEY;
                 const channels = stripPlaceholderChannelModels(
                     normalizeChannels(config).map((channel) => ({
                         ...channel,
                         baseUrl: migrateLegacyOpenAIBaseUrl(channel.baseUrl),
+                        apiKey: channel.apiKey?.trim() || BUILTIN_API_KEY,
                     })),
                 );
                 const models = modelOptionsFromChannels(channels);
@@ -402,7 +411,21 @@ export function defaultBaseUrlForApiFormat(apiFormat: ApiCallFormat) {
 
 /** Migrate placeholder / previous product hosts to the current canvas default. */
 function migrateLegacyOpenAIBaseUrl(baseUrl: string) {
-    const normalized = baseUrl.trim().replace(/\/+$/, "").replace(/\/v1$/, "");
+    const trimmed = baseUrl.trim().replace(/\/+$/, "");
+    const normalized = trimmed.replace(/\/v1$/, "");
+    const lower = normalized.toLowerCase();
+    // Desktop / Vite used to auto-bridge to same-origin /v1 which has no NewAPI relay.
+    if (
+        lower.startsWith("http://localhost") ||
+        lower.startsWith("https://localhost") ||
+        lower.startsWith("http://127.0.0.1") ||
+        lower.startsWith("https://127.0.0.1") ||
+        lower.startsWith("tauri://") ||
+        lower.startsWith("http://tauri.localhost") ||
+        lower.startsWith("https://tauri.localhost")
+    ) {
+        return DEFAULT_OPENAI_BASE_URL;
+    }
     if (
         !normalized ||
         normalized === LEGACY_OPENAI_BASE_URL ||
