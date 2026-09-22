@@ -16,8 +16,8 @@ import {
     normalizeContractQuality,
     normalizeContractResolution,
 } from "@canvas/lib/contract-image";
-import { getImageBlob, imageToDataUrl } from "@canvas/services/image-storage";
-import { uploadCanvasMedia } from "@canvas/services/object-storage";
+import { imageToDataUrl } from "@canvas/services/image-storage";
+import { ensurePublicImageUrls } from "@canvas/services/ensure-public-media";
 import type { ReferenceImage } from "@canvas/types/image";
 
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
@@ -898,41 +898,47 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
     const quality = normalizeQuality(config.quality);
     const requestSize = resolveRequestSize(quality, config.size, requestConfig.model);
     const background = normalizeBackground(config.background);
+    const bodyBase = {
+        model: requestConfig.model,
+        prompt: withSystemPrompt(requestConfig, prompt),
+        n,
+        ...(quality ? { quality } : {}),
+        ...(requestSize ? { size: requestSize } : {}),
+        ...(background ? { background } : {}),
+    };
     try {
-        const response = await axios.post<ImageApiResponse>(
-            aiApiUrl(requestConfig, "/images/generations"),
-            {
-                model: requestConfig.model,
-                prompt: withSystemPrompt(requestConfig, prompt),
-                n,
-                ...(quality ? { quality } : {}),
-                ...(requestSize ? { size: requestSize } : {}),
-                ...(background ? { background } : {}),
-                response_format: "b64_json",
-                output_format: IMAGE_OUTPUT_FORMAT,
-            },
-            {
-                headers: aiHeaders(requestConfig, "application/json"),
-                signal: options?.signal,
-            },
-        );
-        const images = parseImagePayload(response.data);
-        return images;
+        return await postOpenAiImageGeneration(requestConfig, {
+            ...bodyBase,
+            response_format: "b64_json",
+            output_format: IMAGE_OUTPUT_FORMAT,
+        }, options);
     } catch (error) {
-        throw new Error(readAxiosError(error, apiText("requestFailed")));
+        const message = readAxiosError(error, apiText("requestFailed"));
+        if (isUnsupportedResponseFormatError(message)) {
+            try {
+                return await postOpenAiImageGeneration(requestConfig, bodyBase, options);
+            } catch (retryError) {
+                throw new Error(readAxiosError(retryError, message));
+            }
+        }
+        throw new Error(message);
     }
 }
 
 export async function requestEdit(config: AiConfig, prompt: string, references: ReferenceImage[], mask?: ReferenceImage, options?: RequestOptions) {
     const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.count)) || 1)));
-    const requestPrompt = buildImageReferencePromptText(prompt, references);
+    // Local-first uploads may still be blob:; promote every ref to a public cloud URL before calling upstream.
+    const resolvedReferences = references.length
+        ? await ensurePublicImageUrls(references, { signal: options?.signal })
+        : references;
+    const requestPrompt = buildImageReferencePromptText(prompt, resolvedReferences);
     const script = resolveModelScript(config, config.model || config.imageModel);
     if (script) {
         const quality = normalizeQuality(config.quality);
         const requestSize = resolveRequestSize(quality, config.size, requestConfig.model);
         const background = normalizeBackground(config.background);
-        const refs = await Promise.all(references.map((image) => imageToDataUrl(image)));
+        const refs = await Promise.all(resolvedReferences.map((image) => imageToDataUrl(image)));
         try {
             const result = await runModelPlugin({
                 capability: "image",
@@ -951,7 +957,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     if (requestConfig.apiFormat === "gemini") {
         if (mask) throw new Error(apiText("geminiMaskUnsupported"));
         try {
-            return await requestGeminiImages(requestConfig, requestPrompt, references, n, options);
+            return await requestGeminiImages(requestConfig, requestPrompt, resolvedReferences, n, options);
         } catch (error) {
             throw new Error(readAxiosError(error, apiText("requestFailed")));
         }
@@ -959,7 +965,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     if (isContractImageModel(requestConfig.model)) {
         if (mask) throw new Error(apiText("requestFailed"));
         try {
-            return await requestContractEdit(requestConfig, config, prompt, references, options);
+            return await requestContractEdit(requestConfig, config, prompt, resolvedReferences, options);
         } catch (error) {
             throw new Error(readAxiosError(error, apiText("requestFailed")));
         }
@@ -983,7 +989,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     if (background) {
         formData.set("background", background);
     }
-    const files = await Promise.all(references.map(async (image) => dataUrlToFile({ ...image, dataUrl: await imageToDataUrl(image) })));
+    const files = await Promise.all(resolvedReferences.map(async (image) => dataUrlToFile({ ...image, dataUrl: await imageToDataUrl(image) })));
     files.forEach((file) => formData.append("image", file));
     if (mask) formData.set("mask", dataUrlToFile(mask));
 
@@ -992,7 +998,15 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
         const images = parseImagePayload(response.data);
         return images;
     } catch (error) {
-        throw new Error(readAxiosError(error, apiText("requestFailed")));
+        const message = readAxiosError(error, apiText("requestFailed"));
+        if (!mask && isGenerationsOnlyEndpointError(message)) {
+            try {
+                return await requestGenerationWithPublicRefs(requestConfig, config, requestPrompt, resolvedReferences, n, options);
+            } catch (fallbackError) {
+                throw new Error(readAxiosError(fallbackError, message));
+            }
+        }
+        throw new Error(message);
     }
 }
 
@@ -1013,24 +1027,86 @@ async function requestContractEdit(
     references: ReferenceImage[],
     options?: RequestOptions,
 ) {
-    const refs = await resolveContractImageUrls(references.slice(0, CONTRACT_IMAGE_MAX_REFS));
-    if (!refs.length) throw new Error(apiText("noImageReturned"));
-    const publicRefs = refs.filter((url) => isPublicHttpUrl(url));
-    if (publicRefs.length !== refs.length) {
-        throw new Error("Reference images require public HTTPS URLs. Enable object storage and retry.");
-    }
+    const resolved = await ensurePublicImageUrls(references.slice(0, CONTRACT_IMAGE_MAX_REFS), { signal: options?.signal });
+    const publicRefs = resolved.map((image) => image.url || image.dataUrl).filter((url): url is string => Boolean(url));
+    if (!publicRefs.length) throw new Error(apiText("noImageReturned"));
     const body = buildContractImageBody(
         requestConfig,
         config,
         withSystemPrompt(requestConfig, buildContractImagePrompt(prompt, publicRefs.length)),
         publicRefs,
     );
-    const response = await axios.post<ImageApiResponse>(aiApiUrl(requestConfig, "/images/edits"), body, {
-        headers: aiHeaders(requestConfig, "application/json", { "Idempotency-Key": nanoid() }),
+    try {
+        const response = await axios.post<ImageApiResponse>(aiApiUrl(requestConfig, "/images/edits"), body, {
+            headers: aiHeaders(requestConfig, "application/json", { "Idempotency-Key": nanoid() }),
+            signal: options?.signal,
+            timeout: CONTRACT_IMAGE_TIMEOUT_MS,
+        });
+        return parseImagePayload(response.data);
+    } catch (error) {
+        const message = readAxiosError(error, apiText("requestFailed"));
+        if (!isGenerationsOnlyEndpointError(message)) throw new Error(message);
+        const response = await axios.post<ImageApiResponse>(aiApiUrl(requestConfig, "/images/generations"), body, {
+            headers: aiHeaders(requestConfig, "application/json", { "Idempotency-Key": nanoid() }),
+            signal: options?.signal,
+            timeout: CONTRACT_IMAGE_TIMEOUT_MS,
+        });
+        return parseImagePayload(response.data);
+    }
+}
+
+async function requestGenerationWithPublicRefs(
+    requestConfig: AiConfig,
+    config: AiConfig,
+    prompt: string,
+    references: ReferenceImage[],
+    n: number,
+    options?: RequestOptions,
+) {
+    const quality = normalizeQuality(config.quality);
+    const requestSize = resolveRequestSize(quality, config.size, requestConfig.model);
+    const background = normalizeBackground(config.background);
+    const resolved = references.length
+        ? await ensurePublicImageUrls(references.slice(0, CONTRACT_IMAGE_MAX_REFS), { signal: options?.signal })
+        : [];
+    const publicRefs = resolved.map((image) => image.url || image.dataUrl).filter((url): url is string => Boolean(url));
+    if (references.length && !publicRefs.length) {
+        throw new Error(apiText("referenceImageUploadRequired"));
+    }
+    // Generations-only upstream models (e.g. lec-ac-image-*) often reject response_format.
+    return postOpenAiImageGeneration(
+        requestConfig,
+        {
+            model: requestConfig.model,
+            prompt: withSystemPrompt(requestConfig, prompt),
+            n,
+            ...(quality ? { quality } : {}),
+            ...(requestSize ? { size: requestSize } : {}),
+            ...(background ? { background } : {}),
+            ...(publicRefs.length ? { images: publicRefs } : {}),
+        },
+        options,
+    );
+}
+
+async function postOpenAiImageGeneration(
+    requestConfig: AiConfig,
+    body: Record<string, unknown>,
+    options?: RequestOptions,
+) {
+    const response = await axios.post<ImageApiResponse>(aiApiUrl(requestConfig, "/images/generations"), body, {
+        headers: aiHeaders(requestConfig, "application/json"),
         signal: options?.signal,
-        timeout: CONTRACT_IMAGE_TIMEOUT_MS,
     });
     return parseImagePayload(response.data);
+}
+
+function isGenerationsOnlyEndpointError(message: string) {
+    return /only available through\s+POST\s+\/v1\/images\/generations/i.test(message);
+}
+
+function isUnsupportedResponseFormatError(message: string) {
+    return /response_format\s+is\s+not\s+supported/i.test(message);
 }
 
 function buildContractImageBody(requestConfig: AiConfig, config: AiConfig, prompt: string, images: string[]) {
@@ -1049,47 +1125,6 @@ function buildContractImageBody(requestConfig: AiConfig, config: AiConfig, promp
     }
     if (images.length) body.images = images;
     return body;
-}
-
-async function resolveContractImageUrls(references: ReferenceImage[]): Promise<string[]> {
-    return Promise.all(references.map((image) => resolveContractImageUrl(image)));
-}
-
-async function resolveContractImageUrl(image: ReferenceImage): Promise<string> {
-    if (image.url && isPublicHttpUrl(image.url)) return image.url;
-    if (image.dataUrl && isPublicHttpUrl(image.dataUrl)) return image.dataUrl;
-
-    try {
-        const blob = await contractImageToBlob(image);
-        if (blob) {
-            const uploaded = await uploadCanvasMedia(blob, {
-                filename: image.name || undefined,
-                contentType: image.type || blob.type || "image/png",
-                purpose: "canvas",
-            });
-            if (uploaded?.accessUrl) return uploaded.accessUrl;
-        }
-    } catch {
-        // Fall through to data URL — contract edits require public HTTPS, so caller validates.
-    }
-    return imageToDataUrl(image);
-}
-
-async function contractImageToBlob(image: ReferenceImage): Promise<Blob | null> {
-    if (image.storageKey) {
-        const stored = await getImageBlob(image.storageKey);
-        if (stored) return stored;
-    }
-    const source = image.dataUrl || image.url || "";
-    if (!source) return null;
-    if (source.startsWith("data:") || isPublicHttpUrl(source) || source.startsWith("blob:")) {
-        return (await fetch(source)).blob();
-    }
-    return null;
-}
-
-function isPublicHttpUrl(value: string) {
-    return /^https?:\/\//i.test(value || "");
 }
 
 export async function requestImageQuestion(config: AiConfig, messages: AiTextMessage[], onDelta: (text: string) => void, options?: RequestOptions) {

@@ -4,8 +4,8 @@ import { nanoid } from "nanoid";
 import i18n from "@canvas/i18n";
 import { getMediaBlob, setMediaBlob, uploadMediaFile, type UploadedFile } from "@canvas/services/file-storage";
 import { isTauri } from "@canvas/services/fs-store";
-import { getImageBlob, imageToDataUrl, resolveImageUrl } from "@canvas/services/image-storage";
-import { getObjectStorageStatus, mirrorRemoteToObjectStorage, uploadCanvasMedia, assertCanvasUploadSize } from "@canvas/services/object-storage";
+import { ensurePublicFileUrl, ensurePublicImageUrl, isPubliclyReachableMediaUrl } from "@canvas/services/ensure-public-media";
+import { getObjectStorageStatus, mirrorRemoteToObjectStorage, uploadCanvasMedia } from "@canvas/services/object-storage";
 import { VIDEO_SECONDS_MAX, VIDEO_SECONDS_MIN } from "@canvas/components/video-settings-panel";
 import { VIDEO_POLL_INTERVAL_MS, VIDEO_POLL_MAX_ATTEMPTS, VIDEO_POLL_TIMEOUT_MS } from "@canvas/constant/video-generation";
 import { boolConfig, buildApiUrl, modelOptionName, resolveModelRequestConfig, resolveModelScript, type AiConfig } from "@canvas/stores/use-config-store";
@@ -398,43 +398,9 @@ async function createOpenAIVideoTask(config: AiConfig, model: string, prompt: st
     }
 }
 
-/** Upload canvas image refs to 七猴图床; fall back to data URLs if upload fails. */
+/** Promote canvas image refs to publicly reachable cloud URLs before submit. */
 async function resolveImageReferences(references: ReferenceImage[]): Promise<string[]> {
-    return Promise.all(references.map((image) => resolveOneImageReference(image)));
-}
-
-async function resolveOneImageReference(image: ReferenceImage): Promise<string> {
-    if (image.url && isPublicMediaUrl(image.url)) return image.url;
-    if (image.dataUrl && isPublicMediaUrl(image.dataUrl)) return image.dataUrl;
-
-    try {
-        const blob = await imageReferenceToBlob(image);
-        if (blob) {
-            const uploaded = await uploadCanvasMedia(blob, {
-                filename: image.name || undefined,
-                contentType: image.type || blob.type || "image/png",
-                purpose: "canvas",
-            });
-            if (uploaded?.accessUrl) return uploaded.accessUrl;
-        }
-    } catch {
-        // Fall back to data URL when storage is unavailable or upload fails.
-    }
-
-    return imageToDataUrl(image);
-}
-
-async function imageReferenceToBlob(image: ReferenceImage): Promise<Blob | null> {
-    if (image.storageKey) {
-        const stored = await getImageBlob(image.storageKey);
-        if (stored) return stored;
-    }
-    const source = image.dataUrl || (await resolveImageUrl(image.storageKey, image.url || ""));
-    if (!source) return null;
-    if (source.startsWith("data:") || isPublicMediaUrl(source) || source.startsWith("blob:")) {
-        return (await fetch(source)).blob();
-    }
-    return null;
+    return Promise.all(references.map((image) => ensurePublicImageUrl(image)));
 }
 
 type FileReference = { url?: string; storageKey?: string; name?: string; type?: string };
@@ -445,71 +411,19 @@ async function resolveFileReferences(references: FileReference[], kind: "video" 
 
 /**
  * Reference video/audio must be a URL the upstream worker can fetch.
- * Local blob:/data: URLs and localhost links are rejected with an explicit
- * error — never silently dropped (that produced “please upload reference video 1”).
+ * Local blob:/data: URLs are uploaded first; failures throw explicitly.
  */
 async function resolveOneFileReference(item: FileReference, kind: "video" | "audio"): Promise<string> {
     if (item.url && isPubliclyReachableMediaUrl(item.url)) return item.url;
-
-    const blob = await fileReferenceToBlob(item);
-    if (!blob) {
-        throw new Error(apiText(kind === "video" ? "invalidReferenceVideo" : "invalidReferenceAudio"));
-    }
 
     if (kind === "audio") {
         const status = await getObjectStorageStatus();
         if (!status.enabled) {
             throw new Error(apiText("referenceMediaStorageRequired"));
         }
-        assertCanvasUploadSize(blob.size, status.max_upload_bytes);
-    } else {
-        assertCanvasUploadSize(blob.size);
     }
 
-    let uploaded;
-    try {
-        uploaded = await uploadCanvasMedia(blob, {
-            filename: item.name || undefined,
-            contentType: item.type || blob.type || "application/octet-stream",
-            purpose: "canvas",
-        });
-    } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        throw new Error(apiText(kind === "video" ? "referenceVideoUploadFailed" : "referenceAudioUploadFailed", { detail }));
-    }
-    if (!uploaded?.accessUrl) {
-        throw new Error(apiText(kind === "video" ? "referenceVideoUploadFailed" : "referenceAudioUploadFailed", { detail: "empty access url" }));
-    }
-    if (!isPubliclyReachableMediaUrl(uploaded.accessUrl)) {
-        throw new Error(apiText("referenceMediaUrlNotPublic", { url: uploaded.accessUrl }));
-    }
-    return uploaded.accessUrl;
-}
-
-async function fileReferenceToBlob(item: FileReference): Promise<Blob | null> {
-    if (item.storageKey) {
-        const stored = await getMediaBlob(item.storageKey);
-        if (stored) return stored;
-    }
-    if (!item.url) return null;
-    if (item.url.startsWith("data:") || isPublicMediaUrl(item.url) || item.url.startsWith("blob:")) {
-        return (await fetch(item.url)).blob();
-    }
-    return null;
-}
-
-/** True when an upstream (often remote) worker can likely fetch the URL. */
-function isPubliclyReachableMediaUrl(value: string) {
-    if (!/^https?:\/\//i.test(value || "")) return false;
-    try {
-        const host = new URL(value).hostname.toLowerCase();
-        if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "0.0.0.0") return false;
-        if (host.endsWith(".local") || host.endsWith(".internal")) return false;
-        if (/^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)) return false;
-        return true;
-    } catch {
-        return false;
-    }
+    return ensurePublicFileUrl(item, kind);
 }
 
 function sizeToAspectRatio(size: string): string | null {

@@ -22,6 +22,8 @@ const objectUrls = new Map<string, string>();
 export type UploadImageOptions = {
     /** Return the local blob immediately and push the public URL onto the node later. */
     background?: boolean;
+    onProgress?: (loaded: number, total: number) => void;
+    signal?: AbortSignal;
 };
 
 export async function uploadImage(input: string | Blob, options?: UploadImageOptions): Promise<UploadedImage> {
@@ -56,19 +58,34 @@ export async function uploadImage(input: string | Blob, options?: UploadImageOpt
         filename: input instanceof File ? input.name : undefined,
         contentType: mimeType,
         purpose: "canvas",
+        onProgress: options?.onProgress,
+        signal: options?.signal,
+        onSuccess: (uploaded) => publishCloudMediaUrl(storageKey, uploaded.accessUrl),
     })
         .then((uploaded) => {
             if (uploaded?.accessUrl) publishCloudMediaUrl(storageKey, uploaded.accessUrl);
             return uploaded;
         })
-        .catch(() => null);
+        .catch((error) => {
+            if (isAbortError(error) || options?.signal?.aborted) throw error;
+            return null;
+        });
 
     // Local file is already usable. Cloud upload continues in the background.
     if (options?.background) return local;
 
     const uploaded = await cloud;
+    if (options?.signal?.aborted) {
+        const error = new Error("Upload canceled");
+        error.name = "AbortError";
+        throw error;
+    }
     if (uploaded?.accessUrl) return { ...local, url: uploaded.accessUrl };
     return local;
+}
+
+function isAbortError(error: unknown) {
+    return error instanceof Error && (error.name === "AbortError" || /cancel|abort/i.test(error.message));
 }
 
 /** Best-effort: pull a remote image URL into the local blob store under a known key. */

@@ -1,6 +1,11 @@
-import { useParams } from "react-router-dom";
+import { Navigate, useParams } from "react-router-dom";
 
 import { Dashboard } from "@/features/dashboard";
+import { UsageLogs } from "@/features/usage-logs";
+import {
+  isUsageLogsSectionId,
+  USAGE_LOGS_DEFAULT_SECTION,
+} from "@/features/usage-logs/section-registry";
 import { DocsPage } from "@/features/docs";
 import { DOCS_DEFAULT_SECTION, isDocsSectionId } from "@/features/docs/lib/sections";
 import { FaqDetailPage, FaqPage } from "@/features/faq";
@@ -32,4 +37,16 @@ export function SitePricingModelPage() {
 
 export function SiteDashboardPage() {
     return <Dashboard />;
+}
+
+export function SiteUsageLogsPage() {
+    const { section } = useParams();
+    if (section && !isUsageLogsSectionId(section)) {
+        return <Navigate to={`/usage-logs/${USAGE_LOGS_DEFAULT_SECTION}`} replace />;
+    }
+    return <UsageLogs />;
+}
+
+export function SiteUsageLogsIndexPage() {
+    return <Navigate to="/usage-logs/task" replace />;
 }

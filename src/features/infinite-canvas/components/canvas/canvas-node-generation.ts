@@ -151,25 +151,37 @@ export function buildNodeResponseMessages(context: NodeGenerationContext): AiTex
     return [
         {
             role: "user",
-            content: [{ type: "text" as const, text: context.prompt }, ...context.referenceImages.map((image) => ({ type: "image_url" as const, image_url: { url: image.dataUrl } }))],
+            content: [{ type: "text" as const, text: context.prompt }, ...context.referenceImages.map((image) => ({ type: "image_url" as const, image_url: { url: image.url || image.dataUrl } }))],
         },
     ];
 }
 
 export async function hydrateNodeGenerationContext(context: NodeGenerationContext) {
-    const { imageToDataUrl } = await import("@canvas/services/image-storage");
+    const { ensurePublicFileUrl, ensurePublicImageUrls } = await import("@canvas/services/ensure-public-media");
+
+    const referenceImages = context.referenceImages.length
+        ? await ensurePublicImageUrls(context.referenceImages)
+        : context.referenceImages;
+
+    const referenceVideos = await Promise.all(
+        (context.referenceVideos || []).map(async (video) => {
+            const url = await ensurePublicFileUrl(video, "video");
+            return { ...video, url };
+        }),
+    );
+
+    const referenceAudios = await Promise.all(
+        (context.referenceAudios || []).map(async (audio) => {
+            const url = await ensurePublicFileUrl(audio, "audio");
+            return { ...audio, url };
+        }),
+    );
+
     return {
         ...context,
-        referenceImages: await Promise.all(
-            context.referenceImages.map(async (image) => {
-                const source = image.url || image.dataUrl || "";
-                if (/^https?:\/\//i.test(source)) {
-                    return { ...image, url: source, dataUrl: source };
-                }
-                const dataUrl = await imageToDataUrl(image);
-                return { ...image, dataUrl };
-            }),
-        ),
+        referenceImages,
+        referenceVideos,
+        referenceAudios,
     };
 }
 

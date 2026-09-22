@@ -13,6 +13,8 @@ export const QIHUO_MAX_IMAGE_UPLOAD_BYTES = 8 * 1024 * 1024
 export const MAX_CANVAS_UPLOAD_BYTES = 100 * 1024 * 1024
 /** Product-level video upload cap (all storage paths). */
 export const CANVAS_MAX_VIDEO_BYTES = 50 * 1024 * 1024
+/** Product-level audio upload cap (object storage path). */
+export const CANVAS_MAX_AUDIO_BYTES = 20 * 1024 * 1024
 
 function bytesToMb(bytes: number) {
   return Math.max(1, Math.ceil(bytes / (1024 * 1024)))
@@ -33,7 +35,7 @@ export function assertCanvasUploadSize(size: number, backendLimit = 0): void {
   )
 }
 
-/** Throws with an image-specific hint when over 8MB, videos over 50MB, otherwise the generic cap. */
+/** Throws with an image-specific hint when over 8MB, videos over 50MB, audio over 20MB, otherwise the generic cap. */
 export function assertCanvasMediaUploadSize(
   size: number,
   mimeType: string,
@@ -57,6 +59,19 @@ export function assertCanvasMediaUploadSize(
         : CANVAS_MAX_VIDEO_BYTES
     assertCanvasUploadSize(size, limit)
     return
+  }
+  if (mime.startsWith('audio/')) {
+    const limit =
+      backendLimit > 0
+        ? Math.min(backendLimit, CANVAS_MAX_AUDIO_BYTES)
+        : CANVAS_MAX_AUDIO_BYTES
+    if (size <= limit) return
+    throw new Error(
+      i18n.t('common.uploadAudioTooLarge', {
+        sizeMb: bytesToMb(size),
+        limitMb: bytesToMb(limit),
+      })
+    )
   }
   assertCanvasUploadSize(size, backendLimit)
 }
@@ -130,6 +145,9 @@ export type CanvasMediaUploadOptions = {
   purpose?: string
   contentType?: string
   onProgress?: (loaded: number, total: number) => void
+  signal?: AbortSignal
+  /** Called whenever an upload succeeds (including badge retries). */
+  onSuccess?: (uploaded: ObjectStorageUploadResult) => void
 }
 
 /**
@@ -149,20 +167,48 @@ export async function uploadCanvasMedia(
   )
   const resolvedFilename = filename || guessFilename(mimeType)
   const tracker = beginCloudUpload(resolvedFilename, input.size)
-  const tracked: CanvasMediaUploadOptions = {
-    ...options,
-    filename: resolvedFilename,
-    onProgress: (loaded, total) => {
-      tracker.progress(loaded, total)
-      options?.onProgress?.(loaded, total)
-    },
+  // Always drive XHR from the cloud-tracker signal so the badge "cancel" works.
+  // Mirror an optional caller AbortSignal into the same tracker.
+  if (options?.signal) {
+    if (options.signal.aborted) {
+      tracker.cancel()
+      throw abortError()
+    }
+    options.signal.addEventListener('abort', () => tracker.cancel(), { once: true })
   }
-  let uploaded: ObjectStorageUploadResult | null = null
-  try {
-    uploaded = await uploadCanvasMediaTracked(input, mimeType, resolvedFilename, tracked)
+
+  const runOnce = async (signal: AbortSignal, onProgress: (loaded: number, total: number) => void) => {
+    const tracked: CanvasMediaUploadOptions = {
+      ...options,
+      filename: resolvedFilename,
+      signal,
+      onProgress: (loaded, total) => {
+        onProgress(loaded, total)
+        options?.onProgress?.(loaded, total)
+      },
+    }
+    const uploaded = await uploadCanvasMediaTracked(input, mimeType, resolvedFilename, tracked)
+    if (uploaded?.accessUrl) options?.onSuccess?.(uploaded)
     return uploaded
-  } finally {
+  }
+
+  tracker.setRetry(async (signal, onProgress) => {
+    const uploaded = await runOnce(signal, onProgress)
+    return Boolean(uploaded?.accessUrl)
+  })
+
+  try {
+    if (tracker.signal.aborted) throw abortError()
+    const uploaded = await runOnce(tracker.signal, tracker.progress)
     tracker.finish(Boolean(uploaded?.accessUrl))
+    return uploaded
+  } catch (error) {
+    if (isAbortError(error) || tracker.signal.aborted) {
+      tracker.cancel()
+      throw abortError()
+    }
+    tracker.finish(false)
+    throw error
   }
 }
 
@@ -195,7 +241,8 @@ async function uploadCanvasMediaTracked(
     'POST',
     form,
     undefined,
-    options?.onProgress
+    options?.onProgress,
+    options?.signal
   )
   let data: { url?: string; error?: string; code?: number } = {}
   try {
@@ -254,7 +301,8 @@ export async function uploadToObjectStorage(
       blob,
       mimeType,
       resolvedFilename,
-      options?.onProgress
+      options?.onProgress,
+      options?.signal
     )
     return {
       key: presign.key,
@@ -273,6 +321,7 @@ export async function uploadToObjectStorage(
     ApiEnvelope<{ key: string; access_url: string; bytes: number; mime_type: string }>
   >('/api/storage/upload', form, {
     skipErrorHandler: true,
+    signal: options?.signal,
     onUploadProgress: (event) => {
       if (options?.onProgress && event.total) {
         options.onProgress(event.loaded, event.total)
@@ -318,7 +367,8 @@ async function performDirectUpload(
   blob: Blob,
   mimeType: string,
   filename: string,
-  onProgress?: (loaded: number, total: number) => void
+  onProgress?: (loaded: number, total: number) => void,
+  signal?: AbortSignal
 ) {
   const method = (upload.method || 'PUT').toUpperCase()
   if (method === 'POST') {
@@ -327,7 +377,7 @@ async function performDirectUpload(
       form.append(key, value)
     }
     form.append(upload.fileField || 'file', blob, filename)
-    await xhrUpload(upload.url, 'POST', form, undefined, onProgress)
+    await xhrUpload(upload.url, 'POST', form, undefined, onProgress, signal)
     return
   }
 
@@ -335,7 +385,7 @@ async function performDirectUpload(
   if (!headers['Content-Type'] && !headers['content-type']) {
     headers['Content-Type'] = mimeType
   }
-  await xhrUpload(upload.url, 'PUT', blob, headers, onProgress)
+  await xhrUpload(upload.url, 'PUT', blob, headers, onProgress, signal)
 }
 
 function xhrUpload(
@@ -343,9 +393,10 @@ function xhrUpload(
   method: string,
   body: Blob | FormData,
   headers?: Record<string, string>,
-  onProgress?: (loaded: number, total: number) => void
+  onProgress?: (loaded: number, total: number) => void,
+  signal?: AbortSignal
 ): Promise<void> {
-  return xhrUploadWithResponse(url, method, body, headers, onProgress).then(() => undefined)
+  return xhrUploadWithResponse(url, method, body, headers, onProgress, signal).then(() => undefined)
 }
 
 function xhrUploadWithResponse(
@@ -353,9 +404,14 @@ function xhrUploadWithResponse(
   method: string,
   body: Blob | FormData,
   headers?: Record<string, string>,
-  onProgress?: (loaded: number, total: number) => void
+  onProgress?: (loaded: number, total: number) => void,
+  signal?: AbortSignal
 ): Promise<string> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError())
+      return
+    }
     const xhr = new XMLHttpRequest()
     xhr.open(method, url)
     if (headers) {
@@ -370,7 +426,13 @@ function xhrUploadWithResponse(
         }
       }
     }
+    const onAbort = () => {
+      xhr.abort()
+      reject(abortError())
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
     xhr.onload = () => {
+      signal?.removeEventListener('abort', onAbort)
       const text = xhr.responseText || ''
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve(text)
@@ -385,9 +447,26 @@ function xhrUploadWithResponse(
       }
       reject(new Error(detail))
     }
-    xhr.onerror = () => reject(new Error('direct upload failed (network error)'))
+    xhr.onerror = () => {
+      signal?.removeEventListener('abort', onAbort)
+      reject(new Error('direct upload failed (network error)'))
+    }
+    xhr.onabort = () => {
+      signal?.removeEventListener('abort', onAbort)
+      reject(abortError())
+    }
     xhr.send(body)
   })
+}
+
+function abortError() {
+  const error = new Error('Upload canceled')
+  error.name = 'AbortError'
+  return error
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && (error.name === 'AbortError' || /cancel|abort/i.test(error.message))
 }
 
 function keyFromPublicUrl(url: string): string {

@@ -28,3 +28,6 @@ src-tauri/gen/
 
 # Temp
 *.tmp
+
+# Updater signing keys (never commit)
+.tauri/

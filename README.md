@@ -38,6 +38,12 @@ After `bun run tauri:build`, the DMG will be at:
 src-tauri/target/release/bundle/dmg/Minimalist Canvas_0.1.0_aarch64.dmg
 ```
 
+## Auto-update
+
+Desktop builds can check GitHub Releases and install updates in-app (Tauri updater).
+
+See [docs/AUTO_UPDATE.md](docs/AUTO_UPDATE.md) for signing keys, CI secrets, and release steps.
+
 ## macOS Distribution
 
 The app is built with ad-hoc signing (no Apple Developer account required).

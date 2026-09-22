@@ -31,6 +31,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Require updater signing key
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::Missing secret TAURI_SIGNING_PRIVATE_KEY (needed for latest.json updater artifacts)."
+            exit 1
+          fi
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -51,6 +61,8 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: v__VERSION__
           releaseName: Minimalist Canvas v__VERSION__
@@ -59,6 +71,11 @@ jobs:
 
             - macOS: universal disk image (Apple Silicon and Intel). If macOS blocks the app, right-click it and choose Open. This build is not notarized.
             - Windows: 64-bit installer for Windows 10 or later.
+            - Auto-update: signed updater artifacts (`latest.json`) are attached for in-app upgrades.
+
+            Stable download links (always latest):
+            - https://github.com/LingByte/Minimalist-Canvas/releases/latest/download/Minimalist-Canvas-macOS.dmg
+            - https://github.com/LingByte/Minimalist-Canvas/releases/latest/download/Minimalist-Canvas-Windows-x64.exe
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
@@ -73,3 +90,19 @@ jobs:
           test -n "$file"
           cp "$file" "${{ matrix.asset }}"
           gh release upload "v${version}" "${{ matrix.asset }}" --clobber
+
+  verify:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm stable assets on latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          for asset in Minimalist-Canvas-macOS.dmg Minimalist-Canvas-Windows-x64.exe latest.json; do
+            code=$(curl -sS -o /dev/null -w "%{http_code}" -L \
+              "https://github.com/LingByte/Minimalist-Canvas/releases/latest/download/${asset}")
+            echo "${asset} -> HTTP ${code}"
+            test "$code" = "200"
+          done

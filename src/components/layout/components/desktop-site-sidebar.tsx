@@ -23,6 +23,8 @@ import {
   Frame,
   Home,
   LayoutDashboard,
+  ListTodo,
+  ScrollText,
   type LucideIcon,
 } from 'lucide-react'
 import { startTransition, useCallback, useMemo, type MouseEvent } from 'react'
@@ -31,10 +33,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { SmartImage } from '@/components/smart-image'
 import { ProfileDropdown } from '@/components/profile-dropdown'
-import {
-  sidebarNavIndicatorClassName,
-  sidebarNavItemClassName,
-} from '@/components/layout/utils/sidebar-nav-styles'
+import { SidebarNavItem } from '@/components/layout/components/sidebar-nav-item'
 import { useDesktopSiteNavLinks } from '@/hooks/use-desktop-site-nav-links'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { DEFAULT_LOGO } from '@/lib/constants'
@@ -44,6 +43,8 @@ import { useAuthStore } from '@/stores/auth-store'
 const NAV_ICONS: Record<string, LucideIcon> = {
   '/': Home,
   '/dashboard': LayoutDashboard,
+  '/usage-logs/common': ScrollText,
+  '/usage-logs/task': ListTodo,
   '/canvas': Frame,
   '/pricing': Boxes,
   '/docs': BookOpen,
@@ -115,27 +116,16 @@ export function DesktopSiteSidebar(props: { className?: string }) {
       </Link>
 
       <nav className='mt-1 flex w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto px-1.5 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'>
-        {items.map((item) => {
-          const active = isNavActive(pathname, item.href)
-          const Icon = item.icon
-          return (
-            <Link
-              key={item.href}
-              to={item.href}
-              onClick={(event) => go(item.href, event)}
-              aria-current={active ? 'page' : undefined}
-              className={sidebarNavItemClassName(active)}
-            >
-              {active ? (
-                <span aria-hidden className={sidebarNavIndicatorClassName()} />
-              ) : null}
-              <Icon className='size-[1.3rem] stroke-[1.75]' aria-hidden />
-              <span className='max-w-full truncate text-center text-[10px] leading-tight font-medium tracking-wide'>
-                {item.title}
-              </span>
-            </Link>
-          )
-        })}
+        {items.map((item) => (
+          <SidebarNavItem
+            key={item.href}
+            href={item.href}
+            active={isNavActive(pathname, item.href)}
+            title={item.title}
+            icon={item.icon}
+            onClick={(event) => go(item.href, event)}
+          />
+        ))}
       </nav>
 
       <div className='border-sidebar-border flex w-full flex-col items-center gap-2 border-t px-2 py-3'>

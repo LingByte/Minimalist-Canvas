@@ -16,6 +16,7 @@ import VideoPage from "@canvas/pages/video";
 import { ForgotPassword } from "@/features/auth/forgot-password";
 import { OAuthCallbackPage } from "@/features/auth/oauth-callback-page";
 import { Otp } from "@/features/auth/otp";
+import { RequireAuth } from "@/features/auth/require-auth";
 import { ResetPasswordPage } from "@/features/auth/reset-password-page";
 import { SignIn } from "@/features/auth/sign-in";
 import { SignUp } from "@/features/auth/sign-up";
@@ -29,6 +30,8 @@ import {
     SiteFaqPage,
     SitePricingModelPage,
     SitePricingPage,
+    SiteUsageLogsIndexPage,
+    SiteUsageLogsPage,
 } from "./pages/site";
 
 const canvasRoutes: RouteObject[] = [
@@ -40,13 +43,13 @@ const canvasRoutes: RouteObject[] = [
     { path: "reset", element: <ResetPasswordPage /> },
     { path: "oauth/:provider", element: <OAuthCallbackPage /> },
     {
-        // Local-first app: no auth gate — canvas and other local features work
-        // signed out; server-backed calls degrade gracefully.
         element: (
-            <UserLayout>
-                <AnalyticsTracker />
-                <Outlet />
-            </UserLayout>
+            <RequireAuth>
+                <UserLayout>
+                    <AnalyticsTracker />
+                    <Outlet />
+                </UserLayout>
+            </RequireAuth>
         ),
         children: [
             { index: true, element: <HomePage /> },
@@ -60,6 +63,8 @@ const canvasRoutes: RouteObject[] = [
             { path: "config", element: <ConfigPage /> },
             { path: "profile", element: <ProfilePage /> },
             { path: "keys", element: <ApiKeys /> },
+            { path: "usage-logs", element: <SiteUsageLogsIndexPage /> },
+            { path: "usage-logs/:section", element: <SiteUsageLogsPage /> },
             { path: "dashboard", element: <SiteDashboardPage /> },
             { path: "dashboard/:section", element: <SiteDashboardPage /> },
             { path: "docs", element: <SiteDocsPage /> },

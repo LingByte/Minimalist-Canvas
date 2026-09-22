@@ -37,6 +37,7 @@ const APP_SHELL_PREFIXES = [
     "/faq",
     "/profile",
     "/keys",
+    "/usage-logs",
 ] as const;
 
 function isAppShellPath(pathname: string) {

@@ -78,7 +78,14 @@ export async function hydrateCanvasImages(nodes: CanvasNodeData[]) {
     return Promise.all(
         nodes.map(async (node) => {
             const content = node.metadata?.content;
-            if ((node.type === CanvasNodeType.Video || node.type === CanvasNodeType.Audio) && node.metadata?.storageKey) {
+            if (node.type === CanvasNodeType.Video || node.type === CanvasNodeType.Audio) {
+                // Blank / empty media nodes have nothing to heal — skip the lookup.
+                if (!content && !node.metadata?.storageKey) {
+                    return node;
+                }
+                if (!node.metadata?.storageKey) {
+                    return node;
+                }
                 const storageKey = node.metadata.storageKey;
                 // Keep durable own-CDN https; never trust short-lived upstream hotlinks alone.
                 if (content && /^https?:\/\//i.test(content) && !isUnstableMediaUrl(content)) {
@@ -87,6 +94,10 @@ export async function hydrateCanvasImages(nodes: CanvasNodeData[]) {
                 const local = await resolveMediaUrl(storageKey, "").catch(() => "");
                 if (local) {
                     return { ...node, metadata: { ...node.metadata, content: local } };
+                }
+                // Only ask the API when we previously had playable content (or a storage key without local blob).
+                if (!content) {
+                    return node;
                 }
                 try {
                     const asset = await getGenerationAssetByClientId(node.id);

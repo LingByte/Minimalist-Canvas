@@ -8,10 +8,8 @@ import { navigationTools, navigationToolActive, type NavigationToolSlug } from "
 import { AppConfigModal } from "@canvas/components/layout/app-config-modal";
 import { MobileNavDrawer } from "@canvas/components/layout/mobile-nav-drawer";
 import { UserStatusActions } from "@canvas/components/layout/user-status-actions";
-import {
-    sidebarNavIndicatorClassName,
-    sidebarNavItemClassName,
-} from "@/components/layout/utils/sidebar-nav-styles";
+import { SidebarNavItem } from "@/components/layout/components/sidebar-nav-item";
+import { sidebarNavItemClassName } from "@/components/layout/utils/sidebar-nav-styles";
 import { SmartImage } from "@/components/smart-image";
 import { useCanvasHost } from "@canvas/integration/canvas-host-context";
 import { DEFAULT_LOGO, DEFAULT_SYSTEM_NAME } from "@/lib/constants";
@@ -108,31 +106,23 @@ export function CanvasToolsSidebar(props: { className?: string }) {
 
                 <nav className="flex w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto px-1.5 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     {navigationTools.map((tool) => {
-                        const Icon = tool.icon;
-                        const active = tool.slug === activeToolSlug;
                         const href = `/${tool.slug}`;
                         return (
-                            <Link
+                            <SidebarNavItem
                                 key={tool.slug}
-                                to={href}
+                                href={href}
+                                active={tool.slug === activeToolSlug}
+                                title={t(`navigation.${tool.slug}`)}
+                                icon={tool.icon}
+                                layoutId="canvas-tools-sidebar-nav-pill"
                                 onClick={(event) => go(href, event)}
-                                aria-current={active ? "page" : undefined}
-                                className={sidebarNavItemClassName(active)}
-                            >
-                                {active ? (
-                                    <span aria-hidden className={sidebarNavIndicatorClassName()} />
-                                ) : null}
-                                <Icon className="size-[1.3rem] stroke-[1.75]" aria-hidden />
-                                <span className="max-w-full truncate text-center text-[10px] leading-tight font-medium tracking-wide">
-                                    {t(`navigation.${tool.slug}`)}
-                                </span>
-                            </Link>
+                            />
                         );
                     })}
                 </nav>
 
                 <div className="border-sidebar-border flex w-full flex-col items-center gap-2 border-t px-1.5 py-3">
-                    <UserStatusActions showConfig orientation="vertical" />
+                    <UserStatusActions showConfig={true} orientation="vertical" />
                 </div>
             </aside>
 
@@ -157,7 +147,7 @@ export function CanvasToolsSidebar(props: { className?: string }) {
                     </Link>
                 </div>
                 <div className="flex items-center gap-0.5">
-                    <UserStatusActions showConfig compactOnMobile />
+                    <UserStatusActions showConfig={true} compactOnMobile />
                 </div>
             </div>
 

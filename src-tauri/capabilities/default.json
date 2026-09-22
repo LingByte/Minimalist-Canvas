@@ -2,7 +2,9 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default capabilities for the main window",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "core:webview:allow-internal-toggle-devtools",
@@ -14,21 +16,41 @@
     {
       "identifier": "opener:allow-open-path",
       "allow": [
-        { "path": "**" }
+        {
+          "path": "**"
+        }
       ]
     },
     {
       "identifier": "http:default",
       "allow": [
-        { "url": "https://cdn.jsdelivr.net/*" },
-        { "url": "http://localhost:3000/*" },
-        { "url": "http://127.0.0.1:3000/*" },
-        { "url": "http://1.14.99.158:9000/*" },
-        { "url": "https://canvas.lingecho.com/*" },
-        { "url": "https://simplefuture.zone/*" },
-        { "url": "https://*.simplefuture.zone/*" },
-        { "url": "https://*.lingecho.com/*" },
-        { "url": "https://*.zhongzhuan.chat/*" }
+        {
+          "url": "https://cdn.jsdelivr.net/*"
+        },
+        {
+          "url": "http://localhost:3000/*"
+        },
+        {
+          "url": "http://127.0.0.1:3000/*"
+        },
+        {
+          "url": "http://1.14.99.158:9000/*"
+        },
+        {
+          "url": "https://canvas.lingecho.com/*"
+        },
+        {
+          "url": "https://simplefuture.zone/*"
+        },
+        {
+          "url": "https://*.simplefuture.zone/*"
+        },
+        {
+          "url": "https://*.lingecho.com/*"
+        },
+        {
+          "url": "https://*.zhongzhuan.chat/*"
+        }
       ]
     },
     "fs:allow-read-file",
@@ -49,6 +71,8 @@
         "**/.*",
         "**/.*/**"
       ]
-    }
+    },
+    "updater:default",
+    "process:default"
   ]
 }

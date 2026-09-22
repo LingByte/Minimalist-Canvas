@@ -862,6 +862,7 @@ function usePlayableMediaSrc(node: CanvasNodeData): { src: string; expired: bool
         return () => window.clearTimeout(timer);
     }, [remote, expired, unstable]);
 
+    // Heal only when there is something to recover. Blank nodes must not look up assets.
     useEffect(() => {
         if (fallback) return;
         if (!remote && !storageKey) return;
@@ -876,6 +877,8 @@ function usePlayableMediaSrc(node: CanvasNodeData): { src: string; expired: bool
                     return;
                 }
             }
+            // No prior remote content → blank / never-generated; skip asset lookup noise.
+            if (!remote) return;
             const asset = await getGenerationAssetByClientId(node.id).catch(() => null);
             const fresh = (asset?.assets || [])
                 .map((item) => item.url || item.backup_url)
@@ -908,7 +911,9 @@ function useResolvedImageSrc(content: string, storageKey: string, nodeId: string
     }, [content, storageKey]);
 
     useEffect(() => {
-        if ((content && !unstable && !expired) || (!storageKey && !nodeId)) return;
+        // Blank nodes (no content, no local blob) have nothing to heal.
+        if (!content && !storageKey) return;
+        if (content && !unstable && !expired) return;
         let alive = true;
         void (async () => {
             if (storageKey) {
@@ -919,7 +924,7 @@ function useResolvedImageSrc(content: string, storageKey: string, nodeId: string
                     return;
                 }
             }
-            if (!nodeId) return;
+            if (!content || !nodeId) return;
             const asset = await getGenerationAssetByClientId(nodeId).catch(() => null);
             const fresh = (asset?.assets || [])
                 .map((item) => item.url || item.backup_url)

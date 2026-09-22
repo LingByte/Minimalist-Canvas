@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { Avatar, Button, Dropdown } from 'antd'
 import type { MenuProps } from 'antd'
-import { User, KeyRound, LogOut } from 'lucide-react'
+import { User, KeyRound, ListTodo, LogOut, ScrollText } from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -91,6 +91,18 @@ export function ProfileDropdown() {
         icon: <KeyRound className='size-4' />,
         label: t('API Keys'),
         onClick: () => navigate('/keys'),
+      },
+      {
+        key: 'common-logs',
+        icon: <ScrollText className='size-4' />,
+        label: t('Common Logs'),
+        onClick: () => navigate('/usage-logs/common'),
+      },
+      {
+        key: 'task-logs',
+        icon: <ListTodo className='size-4' />,
+        label: t('Task Logs'),
+        onClick: () => navigate('/usage-logs/task'),
       },
     ]
 

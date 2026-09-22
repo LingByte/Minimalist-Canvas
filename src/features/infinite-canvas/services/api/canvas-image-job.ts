@@ -5,6 +5,7 @@ import {
   type GenerationAsset,
 } from "@canvas/services/api/generation-assets";
 import { requestEdit, requestGeneration } from "@canvas/services/api/image";
+import { ensurePublicImageUrls } from "@canvas/services/ensure-public-media";
 import { uploadImage, type UploadedImage } from "@canvas/services/image-storage";
 import { isContractImageModel } from "@canvas/lib/contract-image";
 import {
@@ -27,19 +28,8 @@ export function canUseServerImageJob(config: AiConfig, model = config.imageModel
 }
 
 async function durableReferenceUrls(references: ReferenceImage[]) {
-  const urls: string[] = [];
-  for (const reference of references) {
-    const existing = (reference.url || reference.dataUrl || "").trim();
-    if (/^https?:\/\//i.test(existing)) {
-      urls.push(existing);
-      continue;
-    }
-    const source = reference.dataUrl || reference.url;
-    if (!source) continue;
-    const uploaded = await uploadImage(source);
-    if (/^https?:\/\//i.test(uploaded.url)) urls.push(uploaded.url);
-  }
-  return urls;
+  const resolved = await ensurePublicImageUrls(references);
+  return resolved.map((item) => item.url || item.dataUrl).filter((url): url is string => Boolean(url));
 }
 
 export async function startRecoverableImageJob(options: {

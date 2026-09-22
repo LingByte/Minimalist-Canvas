@@ -1,6 +1,6 @@
 [package]
 name = "minimalist-canvas"
-version = "0.1.1"
+version = "0.1.2"
 description = "Minimalist Canvas - Infinite canvas desktop app"
 authors = ["LingByte"]
 edition = "2021"
@@ -23,6 +23,7 @@ tauri-plugin-http = { version = "2.6.1", features = ["unsafe-headers"] }
 tauri-plugin-fs = "2.5.2"
 axum = "0.8"
 tokio = { version = "1", features = ["macros", "net", "time", "sync"] }
+tauri-plugin-process = "2.3.1"
 
 [profile.release]
 panic = "abort"
@@ -30,3 +31,6 @@ codegen-units = 1
 lto = true
 opt-level = "s"
 strip = true
+
+[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+tauri-plugin-updater = "2.12.0"

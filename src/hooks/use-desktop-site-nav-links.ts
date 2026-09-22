@@ -32,6 +32,8 @@ export function useDesktopSiteNavLinks(): TopNavLink[] {
     () => [
       { title: t('Home'), href: '/' },
       { title: t('Console'), href: '/dashboard' },
+      { title: t('Common Logs'), href: '/usage-logs/common' },
+      { title: t('Task Logs'), href: '/usage-logs/task' },
       { title: t('Canvas'), href: '/canvas' },
       { title: t('Model Selection'), href: '/pricing' },
       { title: t('Docs'), href: '/docs' },

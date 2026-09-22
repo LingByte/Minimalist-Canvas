@@ -15,25 +15,31 @@ import {
     WorkbenchBottomBar,
     WorkbenchModeTabs,
     WorkbenchReferenceZone,
+    WorkbenchUploadingTile,
     workbenchAsideClassName,
     workbenchComposerClassName,
     workbenchPageClassName,
     workbenchPromptShellClassName,
     workbenchResultsClassName,
 } from "@canvas/components/workbench/workbench-studio";
+import { CloudUploadProgress } from "@canvas/components/canvas/cloud-upload-progress";
+import { assertCanvasMediaUploadSize, CANVAS_MAX_AUDIO_BYTES, CANVAS_MAX_VIDEO_BYTES, QIHUO_MAX_IMAGE_UPLOAD_BYTES } from "@canvas/services/object-storage";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
 import type { CanvasResourceReference } from "@canvas/lib/canvas/canvas-resource-references";
 import { buildImageReferencePromptText, imageReferenceLabel } from "@canvas/lib/image-reference-prompt";
 import { formatBytes, formatDuration } from "@canvas/lib/image-utils";
 import { deleteStoredMedia, uploadMediaFile } from "@canvas/services/file-storage";
 import { saveBlobAs } from "@canvas/lib/save-file";
+import { onCloudMediaUrl } from "@canvas/services/cloud-upload-progress";
+import { isPubliclyReachableMediaUrl } from "@canvas/services/ensure-public-media";
 import { uploadImage } from "@canvas/services/image-storage";
 import { VIDEO_POLL_INTERVAL_MS, VIDEO_POLL_MAX_ATTEMPTS, createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, type VideoGenerationTask } from "@canvas/services/api/video";
 import { deleteGenerationAssetsByClientIds, listGenerationAssets, upsertGenerationAsset, type GenerationAsset } from "@canvas/services/api/generation-assets";
 import { shouldKeepVideoAssetPending } from "@canvas/services/generation-asset-sync";
 import { useAssetStore } from "@canvas/stores/use-asset-store";
 import { useWorkbenchAgentStore } from "@canvas/stores/use-workbench-agent-store";
-import { boolConfig, modelPriceHint, useConfigStore, useEffectiveConfig, type AiConfig } from "@canvas/stores/use-config-store";
+import { boolConfig, useConfigStore, useEffectiveConfig, type AiConfig } from "@canvas/stores/use-config-store";
+import { useModelUnitPrice } from "@canvas/lib/use-model-unit-price";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import type { ReferenceImage } from "@canvas/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@canvas/types/media";
@@ -127,14 +133,31 @@ export default function VideoPage() {
     const [referenceDragTarget, setReferenceDragTarget] = useState(false);
     const [generationCount, setGenerationCount] = useState(1);
     const [autoRunToken, setAutoRunToken] = useState(0);
+    const [pendingUploads, setPendingUploads] = useState<Array<{ id: string; name: string; previewUrl: string; progress: number; kind: "image" | "video" | "audio" }>>([]);
+    const pendingUploadControllersRef = useRef(new Map<string, AbortController>());
     const videoCommand = useWorkbenchAgentStore((state) => state.videoCommand);
     const clearVideoCommand = useWorkbenchAgentStore((state) => state.clearVideoCommand);
     const updateAgentTask = useWorkbenchAgentStore((state) => state.updateTask);
     const processedCommandRef = useRef(0);
     const agentTaskIdRef = useRef<string | undefined>(undefined);
 
+    useEffect(() => {
+        return onCloudMediaUrl((storageKey, url) => {
+            if (!isPubliclyReachableMediaUrl(url)) return;
+            setReferences((value) =>
+                value.map((item) => (item.storageKey === storageKey ? { ...item, dataUrl: url, url } : item)),
+            );
+            setVideoReferences((value) =>
+                value.map((item) => (item.storageKey === storageKey ? { ...item, url } : item)),
+            );
+            setAudioReferences((value) =>
+                value.map((item) => (item.storageKey === storageKey ? { ...item, url } : item)),
+            );
+        });
+    }, []);
+
     const model = effectiveConfig.videoModel || effectiveConfig.model;
-    const priceHint = modelPriceHint(effectiveConfig, model);
+    const priceHint = useModelUnitPrice(model);
     const canGenerate = Boolean(prompt.trim());
     const mentionReferences = useMemo<CanvasResourceReference[]>(() => {
         const images = references.map((item, index) => ({
@@ -171,32 +194,165 @@ export default function VideoPage() {
         const selectedFiles = Array.from(files || []);
         const unsupported = selectedFiles.filter((file) => !/^(image|video|audio)\//.test(file.type));
         if (unsupported.length) message.warning(t("videoWorkbench.unsupportedFiles"));
-        const imageFiles = selectedFiles.filter((file) => file.type.startsWith("image/")).slice(0, MAX_REFERENCE_IMAGES - references.length);
-        const nextReferences = await Promise.all(
-            imageFiles.map(async (file) => {
-                const image = await uploadImage(file);
-                return { id: nanoid(), name: file.name, type: image.mimeType, dataUrl: image.url, storageKey: image.storageKey };
-            }),
-        );
-        setReferences((value) => [...value, ...nextReferences].slice(0, MAX_REFERENCE_IMAGES));
 
-        const videoFiles = selectedFiles.filter((file) => file.type.startsWith("video/")).slice(0, MAX_REFERENCE_VIDEOS - videoReferences.length);
-        const nextVideos = await Promise.all(
-            videoFiles.map(async (file) => {
-                const media = await uploadMediaFile(file, "video");
-                return { id: nanoid(), name: file.name, type: media.mimeType, url: media.url, storageKey: media.storageKey, bytes: media.bytes, width: media.width, height: media.height, durationMs: media.durationMs };
-            }),
-        );
-        setVideoReferences((value) => [...value, ...nextVideos].slice(0, MAX_REFERENCE_VIDEOS));
+        const pendingImageCount = pendingUploads.filter((item) => item.kind === "image").length;
+        const pendingVideoCount = pendingUploads.filter((item) => item.kind === "video").length;
+        const pendingAudioCount = pendingUploads.filter((item) => item.kind === "audio").length;
 
-        const audioFiles = selectedFiles.filter((file) => file.type.startsWith("audio/")).slice(0, MAX_REFERENCE_AUDIOS - audioReferences.length);
-        const nextAudios = await Promise.all(
-            audioFiles.map(async (file) => {
-                const media = await uploadMediaFile(file, "audio");
-                return { id: nanoid(), name: file.name, type: media.mimeType, url: media.url, storageKey: media.storageKey, durationMs: media.durationMs };
-            }),
-        );
-        setAudioReferences((value) => [...value, ...nextAudios].slice(0, MAX_REFERENCE_AUDIOS));
+        const imageFiles = selectedFiles
+            .filter((file) => file.type.startsWith("image/"))
+            .slice(0, Math.max(0, MAX_REFERENCE_IMAGES - references.length - pendingImageCount));
+        const videoFiles = selectedFiles
+            .filter((file) => file.type.startsWith("video/"))
+            .slice(0, Math.max(0, MAX_REFERENCE_VIDEOS - videoReferences.length - pendingVideoCount));
+        const audioFiles = selectedFiles
+            .filter((file) => file.type.startsWith("audio/"))
+            .slice(0, Math.max(0, MAX_REFERENCE_AUDIOS - audioReferences.length - pendingAudioCount));
+
+        const nextReferences: ReferenceImage[] = [];
+        for (const file of imageFiles) {
+            try {
+                assertCanvasMediaUploadSize(file.size, file.type, file.name);
+            } catch (error) {
+                message.error(error instanceof Error ? error.message : t("workbench.uploadFailed"));
+                continue;
+            }
+            const pendingId = nanoid();
+            const previewUrl = URL.createObjectURL(file);
+            const controller = new AbortController();
+            pendingUploadControllersRef.current.set(pendingId, controller);
+            setPendingUploads((value) => [...value, { id: pendingId, name: file.name, previewUrl, progress: 0, kind: "image" }]);
+            try {
+                const image = await uploadImage(file, { background: true, 
+                    signal: controller.signal,
+                    onProgress: (loaded, total) => {
+                        const progress = total > 0 ? (loaded / total) * 100 : 0;
+                        setPendingUploads((value) => value.map((item) => (item.id === pendingId ? { ...item, progress } : item)));
+                    },
+                });
+                if (!controller.signal.aborted) {
+                    nextReferences.push({ id: nanoid(), name: file.name, type: image.mimeType, dataUrl: image.url, url: isPubliclyReachableMediaUrl(image.url) ? image.url : undefined, storageKey: image.storageKey });
+                }
+            } catch (error) {
+                if (!isUploadAbortError(error) && !controller.signal.aborted) {
+                    message.error(error instanceof Error ? error.message : t("workbench.uploadFailed"));
+                }
+            } finally {
+                pendingUploadControllersRef.current.delete(pendingId);
+                setPendingUploads((value) => {
+                    const current = value.find((item) => item.id === pendingId);
+                    if (current?.previewUrl) URL.revokeObjectURL(current.previewUrl);
+                    return value.filter((item) => item.id !== pendingId);
+                });
+            }
+        }
+        if (nextReferences.length) setReferences((value) => [...value, ...nextReferences].slice(0, MAX_REFERENCE_IMAGES));
+
+        const nextVideos: ReferenceVideo[] = [];
+        for (const file of videoFiles) {
+            try {
+                assertCanvasMediaUploadSize(file.size, file.type, file.name);
+            } catch (error) {
+                message.error(error instanceof Error ? error.message : t("workbench.uploadFailed"));
+                continue;
+            }
+            const pendingId = nanoid();
+            const previewUrl = URL.createObjectURL(file);
+            const controller = new AbortController();
+            pendingUploadControllersRef.current.set(pendingId, controller);
+            setPendingUploads((value) => [...value, { id: pendingId, name: file.name, previewUrl, progress: 0, kind: "video" }]);
+            try {
+                const media = await uploadMediaFile(file, "video", { background: true, 
+                    signal: controller.signal,
+                    onProgress: (loaded, total) => {
+                        const progress = total > 0 ? (loaded / total) * 100 : 0;
+                        setPendingUploads((value) => value.map((item) => (item.id === pendingId ? { ...item, progress } : item)));
+                    },
+                });
+                if (!controller.signal.aborted) {
+                    nextVideos.push({
+                        id: nanoid(),
+                        name: file.name,
+                        type: media.mimeType,
+                        url: media.url,
+                        storageKey: media.storageKey,
+                        bytes: media.bytes,
+                        width: media.width,
+                        height: media.height,
+                        durationMs: media.durationMs,
+                    });
+                }
+            } catch (error) {
+                if (!isUploadAbortError(error) && !controller.signal.aborted) {
+                    message.error(error instanceof Error ? error.message : t("workbench.uploadFailed"));
+                }
+            } finally {
+                pendingUploadControllersRef.current.delete(pendingId);
+                setPendingUploads((value) => {
+                    const current = value.find((item) => item.id === pendingId);
+                    if (current?.previewUrl) URL.revokeObjectURL(current.previewUrl);
+                    return value.filter((item) => item.id !== pendingId);
+                });
+            }
+        }
+        if (nextVideos.length) setVideoReferences((value) => [...value, ...nextVideos].slice(0, MAX_REFERENCE_VIDEOS));
+
+        const nextAudios: ReferenceAudio[] = [];
+        for (const file of audioFiles) {
+            try {
+                assertCanvasMediaUploadSize(file.size, file.type, file.name);
+            } catch (error) {
+                message.error(error instanceof Error ? error.message : t("workbench.uploadFailed"));
+                continue;
+            }
+            const pendingId = nanoid();
+            const previewUrl = URL.createObjectURL(file);
+            const controller = new AbortController();
+            pendingUploadControllersRef.current.set(pendingId, controller);
+            setPendingUploads((value) => [...value, { id: pendingId, name: file.name, previewUrl, progress: 0, kind: "audio" }]);
+            try {
+                const media = await uploadMediaFile(file, "audio", { background: true, 
+                    signal: controller.signal,
+                    onProgress: (loaded, total) => {
+                        const progress = total > 0 ? (loaded / total) * 100 : 0;
+                        setPendingUploads((value) => value.map((item) => (item.id === pendingId ? { ...item, progress } : item)));
+                    },
+                });
+                if (!controller.signal.aborted) {
+                    nextAudios.push({
+                        id: nanoid(),
+                        name: file.name,
+                        type: media.mimeType,
+                        url: media.url,
+                        storageKey: media.storageKey,
+                        durationMs: media.durationMs,
+                    });
+                }
+            } catch (error) {
+                if (!isUploadAbortError(error) && !controller.signal.aborted) {
+                    message.error(error instanceof Error ? error.message : t("workbench.uploadFailed"));
+                }
+            } finally {
+                pendingUploadControllersRef.current.delete(pendingId);
+                setPendingUploads((value) => {
+                    const current = value.find((item) => item.id === pendingId);
+                    if (current?.previewUrl) URL.revokeObjectURL(current.previewUrl);
+                    return value.filter((item) => item.id !== pendingId);
+                });
+            }
+        }
+        if (nextAudios.length) setAudioReferences((value) => [...value, ...nextAudios].slice(0, MAX_REFERENCE_AUDIOS));
+    };
+
+    const cancelPendingUpload = (id: string) => {
+        const controller = pendingUploadControllersRef.current.get(id);
+        controller?.abort();
+        pendingUploadControllersRef.current.delete(id);
+        setPendingUploads((value) => {
+            const current = value.find((item) => item.id === id);
+            if (current?.previewUrl) URL.revokeObjectURL(current.previewUrl);
+            return value.filter((item) => item.id !== id);
+        });
     };
 
     const handleReferenceDragEnter = (event: DragEvent<HTMLDivElement>) => {
@@ -226,14 +382,50 @@ export default function VideoPage() {
                 message.error(t("videoWorkbench.clipboardEmpty"));
                 return;
             }
-            const nextReferences = await Promise.all(
-                blobs.slice(0, MAX_REFERENCE_IMAGES - references.length).map(async (blob, index) => {
-                    const image = await uploadImage(blob);
-                    return { id: nanoid(), name: `clipboard-${index + 1}.png`, type: image.mimeType, dataUrl: image.url, storageKey: image.storageKey };
-                }),
-            );
-            setReferences((value) => [...value, ...nextReferences].slice(0, MAX_REFERENCE_IMAGES));
-            message.success(t("videoWorkbench.clipboardAdded", { count: nextReferences.length }));
+            const room = Math.max(0, MAX_REFERENCE_IMAGES - references.length - pendingUploads.filter((item) => item.kind === "image").length);
+            const selected = blobs.slice(0, room);
+            const nextReferences: ReferenceImage[] = [];
+            for (const [index, blob] of selected.entries()) {
+                try {
+                    assertCanvasMediaUploadSize(blob.size, blob.type || "image/png", `clipboard-${index + 1}.png`);
+                } catch (error) {
+                    message.error(error instanceof Error ? error.message : t("workbench.uploadFailed"));
+                    continue;
+                }
+                const pendingId = nanoid();
+                const previewUrl = URL.createObjectURL(blob);
+                const name = `clipboard-${index + 1}.png`;
+                const controller = new AbortController();
+                pendingUploadControllersRef.current.set(pendingId, controller);
+                setPendingUploads((value) => [...value, { id: pendingId, name, previewUrl, progress: 0, kind: "image" }]);
+                try {
+                    const image = await uploadImage(blob, { background: true, 
+                        signal: controller.signal,
+                        onProgress: (loaded, total) => {
+                            const progress = total > 0 ? (loaded / total) * 100 : 0;
+                            setPendingUploads((value) => value.map((item) => (item.id === pendingId ? { ...item, progress } : item)));
+                        },
+                    });
+                    if (!controller.signal.aborted) {
+                        nextReferences.push({ id: nanoid(), name, type: image.mimeType, dataUrl: image.url, url: isPubliclyReachableMediaUrl(image.url) ? image.url : undefined, storageKey: image.storageKey });
+                    }
+                } catch (error) {
+                    if (!isUploadAbortError(error) && !controller.signal.aborted) {
+                        message.error(error instanceof Error ? error.message : t("workbench.uploadFailed"));
+                    }
+                } finally {
+                    pendingUploadControllersRef.current.delete(pendingId);
+                    setPendingUploads((value) => {
+                        const current = value.find((item) => item.id === pendingId);
+                        if (current?.previewUrl) URL.revokeObjectURL(current.previewUrl);
+                        return value.filter((item) => item.id !== pendingId);
+                    });
+                }
+            }
+            if (nextReferences.length) {
+                setReferences((value) => [...value, ...nextReferences].slice(0, MAX_REFERENCE_IMAGES));
+                message.success(t("videoWorkbench.clipboardAdded", { count: nextReferences.length }));
+            }
         } catch {
             message.error(t("videoWorkbench.clipboardEmpty"));
         }
@@ -438,8 +630,20 @@ export default function VideoPage() {
         if (payload.kind === "text") {
             setPrompt(payload.content);
         } else if (payload.kind === "image") {
-            const stored = await uploadImage(payload.dataUrl);
-            setReferences((value) => [...value, { id: nanoid(), name: payload.title, type: stored.mimeType, dataUrl: stored.url, storageKey: stored.storageKey }].slice(0, MAX_REFERENCE_IMAGES));
+            const stored = await uploadImage(payload.dataUrl, { background: true });
+            setReferences((value) =>
+                [
+                    ...value,
+                    {
+                        id: nanoid(),
+                        name: payload.title,
+                        type: stored.mimeType,
+                        dataUrl: stored.url,
+                        url: isPubliclyReachableMediaUrl(stored.url) ? stored.url : undefined,
+                        storageKey: stored.storageKey,
+                    },
+                ].slice(0, MAX_REFERENCE_IMAGES),
+            );
         } else if (payload.kind === "video") {
             setVideoReferences((value) => [...value, { id: nanoid(), name: payload.title, type: "video/mp4", url: payload.url, storageKey: payload.storageKey, width: payload.width, height: payload.height }].slice(0, MAX_REFERENCE_VIDEOS));
         }
@@ -614,9 +818,14 @@ export default function VideoPage() {
 
     return (
         <div className={workbenchPageClassName()}>
+            <CloudUploadProgress variant="page" />
             <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 lg:grid-cols-[280px_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[300px_minmax(0,1fr)]">
                 <aside className={workbenchAsideClassName()}>
-                    <LogPanel logs={logs} selectedLogIds={selectedLogIds} activeLogId={previewLog?.id} onSelectedLogIdsChange={setSelectedLogIds} onCreateSession={createSession} onDeleteSelected={() => setDeleteConfirmOpen(true)} onPreviewLog={previewGenerationLog} />
+                    <LogPanel logs={logs} selectedLogIds={selectedLogIds} activeLogId={previewLog?.id} onSelectedLogIdsChange={setSelectedLogIds} onCreateSession={createSession} onDeleteSelected={() => setDeleteConfirmOpen(true)}
+                        onDeleteLog={(id) => {
+                            setSelectedLogIds([id]);
+                            setDeleteConfirmOpen(true);
+                        }} onPreviewLog={previewGenerationLog} />
                 </aside>
 
                 <section className="grid gap-3 lg:min-h-0 lg:overflow-hidden xl:grid-cols-[min(440px,42%)_minmax(0,1fr)]">
@@ -671,6 +880,11 @@ export default function VideoPage() {
                                 }
                             >
                                 <WorkbenchAddTile onClick={() => fileInputRef.current?.click()} label={t("workbench.addImageRef")} />
+                                {pendingUploads
+                                    .filter((item) => item.kind === "image")
+                                    .map((item) => (
+                                        <WorkbenchUploadingTile key={item.id} name={item.name} previewUrl={item.previewUrl} progress={item.progress} kind="image" onCancel={() => cancelPendingUpload(item.id)} />
+                                    ))}
                                 {references.map((item, index) => (
                                     <div key={item.id} className="group relative size-[5.5rem] shrink-0 overflow-hidden rounded-xl border border-stone-200 dark:border-stone-800">
                                         <SmartImage src={item.dataUrl} alt={item.name} className="size-full object-cover" fallbackClassName="size-full" fallbackIconClassName="size-4" />
@@ -708,6 +922,11 @@ export default function VideoPage() {
                                 >
                                     <VideoIcon className="size-7 opacity-80" />
                                 </button>
+                                {pendingUploads
+                                    .filter((item) => item.kind === "video")
+                                    .map((item) => (
+                                        <WorkbenchUploadingTile key={item.id} name={item.name} previewUrl={item.previewUrl} progress={item.progress} kind="video" onCancel={() => cancelPendingUpload(item.id)} />
+                                    ))}
                                 {videoReferences.map((item, index) => (
                                     <div key={item.id} className="group relative size-[5.5rem] shrink-0 overflow-hidden rounded-xl border border-stone-200 bg-black dark:border-stone-800">
                                         <video src={item.url} muted className="size-full object-cover" />
@@ -745,6 +964,11 @@ export default function VideoPage() {
                                 >
                                     <Music2 className="size-7 opacity-80" />
                                 </button>
+                                {pendingUploads
+                                    .filter((item) => item.kind === "audio")
+                                    .map((item) => (
+                                        <WorkbenchUploadingTile key={item.id} name={item.name} previewUrl={item.previewUrl} progress={item.progress} kind="audio" onCancel={() => cancelPendingUpload(item.id)} />
+                                    ))}
                                 {audioReferences.map((item, index) => (
                                     <div key={item.id} className="group relative flex h-[5.5rem] w-36 shrink-0 items-center gap-2 overflow-hidden rounded-xl border border-stone-200 px-2 dark:border-stone-800">
                                         <Music2 className="size-4 shrink-0 text-stone-500" />
@@ -756,6 +980,14 @@ export default function VideoPage() {
                                     </div>
                                 ))}
                             </WorkbenchReferenceZone>
+
+                            <p className="m-0 text-[11px] leading-4 text-stone-400">
+                                {t("workbench.mediaReferenceSizeHint", {
+                                    imageMb: Math.ceil(QIHUO_MAX_IMAGE_UPLOAD_BYTES / (1024 * 1024)),
+                                    videoMb: Math.ceil(CANVAS_MAX_VIDEO_BYTES / (1024 * 1024)),
+                                    audioMb: Math.ceil(CANVAS_MAX_AUDIO_BYTES / (1024 * 1024)),
+                                })}
+                            </p>
 
                             <div>
                                 <div className={workbenchPromptShellClassName()}>
@@ -802,6 +1034,7 @@ export default function VideoPage() {
                             }
                             generateLabel={t("workbench.generate")}
                             generatePrice={priceHint || undefined}
+                            generateTip={t("workbench.retentionTip")}
                             generating={running}
                             disabled={!canGenerate || running}
                             onGenerate={requestGenerate}
@@ -867,7 +1100,7 @@ export default function VideoPage() {
                 }}
             />
             <Drawer title={t("workbench.logs")} placement="bottom" size="large" open={logsOpen} onClose={() => setLogsOpen(false)}>
-                <LogPanel logs={logs} selectedLogIds={selectedLogIds} activeLogId={previewLog?.id} onSelectedLogIdsChange={setSelectedLogIds} onCreateSession={createSession} onDeleteSelected={() => setDeleteConfirmOpen(true)} onPreviewLog={previewGenerationLog} />
+                <LogPanel logs={logs} selectedLogIds={selectedLogIds} activeLogId={previewLog?.id} onSelectedLogIdsChange={setSelectedLogIds} onCreateSession={createSession} onDeleteSelected={() => setDeleteConfirmOpen(true)} onDeleteLog={(id) => { setSelectedLogIds([id]); setDeleteConfirmOpen(true); }} onPreviewLog={previewGenerationLog} />
                 {videoLogHasMore ? (
                     <div className="flex justify-center py-3">
                         <Button onClick={() => void loadMoreVideoLogs()}>{t("canvas.sidePanel.loadMoreLogs")}</Button>
@@ -1004,6 +1237,7 @@ function LogPanel({
     onSelectedLogIdsChange,
     onCreateSession,
     onDeleteSelected,
+    onDeleteLog,
     onPreviewLog,
 }: {
     logs: GenerationLog[];
@@ -1012,6 +1246,7 @@ function LogPanel({
     onSelectedLogIdsChange: (ids: string[]) => void;
     onCreateSession: () => void;
     onDeleteSelected: () => void;
+    onDeleteLog?: (id: string) => void;
     onPreviewLog: (log: GenerationLog) => void;
 }) {
     const { t } = useTranslation();
@@ -1035,9 +1270,17 @@ function LogPanel({
                     {t("common.delete")}
                 </Button>
             </div>
-            <div className="space-y-3">
+            <div className="min-w-0 space-y-2 overflow-x-hidden">
                 {logs.map((log) => (
-                    <LogCard key={log.id} log={log} selected={selectedLogIds.includes(log.id)} active={activeLogId === log.id} onSelectedChange={(checked) => onSelectedLogIdsChange(checked ? [...selectedLogIds, log.id] : selectedLogIds.filter((id) => id !== log.id))} onClick={() => onPreviewLog(log)} />
+                    <LogCard
+                        key={log.id}
+                        log={log}
+                        selected={selectedLogIds.includes(log.id)}
+                        active={activeLogId === log.id}
+                        onSelectedChange={(checked) => onSelectedLogIdsChange(checked ? [...selectedLogIds, log.id] : selectedLogIds.filter((id) => id !== log.id))}
+                        onClick={() => onPreviewLog(log)}
+                        onDelete={onDeleteLog ? () => onDeleteLog(log.id) : undefined}
+                    />
                 ))}
                 {!logs.length ? <div className="flex min-h-48 items-center justify-center rounded-lg border border-dashed border-stone-300 text-center text-sm text-stone-500 dark:border-stone-700">{t("workbench.noLogs")}</div> : null}
             </div>
@@ -1045,30 +1288,64 @@ function LogPanel({
     );
 }
 
-function LogCard({ log, selected, active, onSelectedChange, onClick }: { log: GenerationLog; selected: boolean; active: boolean; onSelectedChange: (checked: boolean) => void; onClick: () => void }) {
+function LogCard({
+    log,
+    selected,
+    active,
+    onSelectedChange,
+    onClick,
+    onDelete,
+}: {
+    log: GenerationLog;
+    selected: boolean;
+    active: boolean;
+    onSelectedChange: (checked: boolean) => void;
+    onClick: () => void;
+    onDelete?: () => void;
+}) {
     const { t } = useTranslation();
+    const failed = log.status === "failed";
+    const pending = log.status === "pending";
+    const statusLabel = pending ? t("workbench.generating") : failed ? t("workbench.failed") : t("workbench.success");
+    const statusColor = pending ? "processing" : failed ? "red" : "blue";
+
     return (
-        <button type="button" className={`block w-full rounded-lg border p-2 text-left transition ${active ? "border-stone-900 bg-blue-50 dark:border-stone-100 dark:bg-blue-950/20" : "border-stone-200 bg-background hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-900"}`} onClick={onClick}>
-            <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2">
-                <Checkbox className="mt-0.5" checked={selected} onClick={(event) => event.stopPropagation()} onChange={(event) => onSelectedChange(event.target.checked)} />
-                <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold leading-5">{log.title}</div>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                        <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none">{log.size}</Tag>
-                        <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none">{log.resolution}p</Tag>
-                        <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none">{log.seconds}s</Tag>
-                    </div>
-                </div>
-                <div className="grid justify-items-end gap-2">
-                    <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color={log.status === "success" ? "blue" : log.status === "pending" ? "processing" : "red"}>
-                        {t(`workbench.${log.status === "success" ? "success" : log.status === "pending" ? "generating" : "failed"}`)}
+        <div
+            className={`flex w-full min-w-0 max-w-full items-start gap-2 overflow-hidden rounded-lg border p-2 transition ${active ? "border-stone-900 bg-blue-50 dark:border-stone-100 dark:bg-blue-950/20" : "border-stone-200 bg-background hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-900"}`}
+        >
+            <Checkbox className="mt-0.5 shrink-0" checked={selected} onClick={(event) => event.stopPropagation()} onChange={(event) => onSelectedChange(event.target.checked)} />
+            <button type="button" className="min-w-0 flex-1 overflow-hidden text-left" onClick={onClick}>
+                <div className="flex min-w-0 items-start gap-2">
+                    <div className="min-w-0 flex-1 truncate text-sm font-semibold leading-5">{log.title}</div>
+                    <Tag className="m-0 h-6 shrink-0 rounded-md px-1.5 text-xs leading-6" color={statusColor}>
+                        {statusLabel}
                     </Tag>
-                    <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="green">
+                </div>
+                <div className="mt-2 flex min-w-0 flex-wrap gap-1">
+                    <Tag className="m-0 h-6 rounded-md px-1.5 text-xs leading-6">{log.size}</Tag>
+                    <Tag className="m-0 h-6 rounded-md px-1.5 text-xs leading-6">{log.resolution}p</Tag>
+                    <Tag className="m-0 h-6 rounded-md px-1.5 text-xs leading-6">{log.seconds}s</Tag>
+                    <Tag className="m-0 h-6 rounded-md px-1.5 text-xs leading-6" color="green">
                         {formatDuration(log.durationMs)}
                     </Tag>
                 </div>
-            </div>
-        </button>
+            </button>
+            {onDelete ? (
+                <button
+                    type="button"
+                    className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-stone-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                    aria-label={t("common.delete")}
+                    title={t("common.delete")}
+                    onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onDelete();
+                    }}
+                >
+                    <Trash2 className="size-3.5" />
+                </button>
+            ) : null}
+        </div>
     );
 }
 
@@ -1336,4 +1613,8 @@ async function runPool<T>(items: T[], concurrency: number, worker: (item: T, ind
         }
     });
     await Promise.all(runners);
+}
+
+function isUploadAbortError(error: unknown) {
+    return error instanceof Error && (error.name === "AbortError" || /cancel|abort/i.test(error.message));
 }

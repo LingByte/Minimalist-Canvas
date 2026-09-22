@@ -209,7 +209,12 @@ export async function getGenerationAssetByClientId(clientId: string): Promise<Ge
   try {
     const res = await api.get<ApiEnvelope<GenerationAsset>>(
       `/api/generation-assets/by-client-id/${encodeURIComponent(id)}`,
-      { skipErrorHandler: true },
+      {
+        skipErrorHandler: true,
+        // Missing assets are expected for blank / never-generated nodes.
+        skipBusinessError: true,
+        skipAuthRefresh: true,
+      },
     );
     if (!res.data?.success || !res.data.data) return null;
     return res.data.data;

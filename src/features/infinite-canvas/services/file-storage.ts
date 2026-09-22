@@ -12,6 +12,8 @@ const objectUrls = new Map<string, string>();
 export type UploadMediaOptions = {
     /** Return the local blob immediately and push the public URL onto the node later. */
     background?: boolean;
+    onProgress?: (loaded: number, total: number) => void;
+    signal?: AbortSignal;
 };
 
 export async function uploadMediaFile(input: string | Blob, prefix = "file", options?: UploadMediaOptions): Promise<UploadedFile> {
@@ -34,6 +36,13 @@ export async function uploadMediaFile(input: string | Blob, prefix = "file", opt
         filename: input instanceof File ? input.name : undefined,
         contentType: base.mimeType,
         purpose: "canvas",
+        onProgress: options?.onProgress,
+        signal: options?.signal,
+        onSuccess: (uploaded) => {
+            if (uploaded.accessUrl && isPubliclyReachableMediaUrl(uploaded.accessUrl)) {
+                publishCloudMediaUrl(storageKey, uploaded.accessUrl);
+            }
+        },
     })
         .then((uploaded) => {
             if (uploaded?.accessUrl && isPubliclyReachableMediaUrl(uploaded.accessUrl)) {
@@ -42,16 +51,28 @@ export async function uploadMediaFile(input: string | Blob, prefix = "file", opt
             }
             return null;
         })
-        .catch(() => null);
+        .catch((error) => {
+            if (isAbortError(error) || options?.signal?.aborted) throw error;
+            return null;
+        });
 
     // Local file is already usable. Cloud upload continues in the background.
     if (options?.background) return base;
 
     const uploaded = await cloud;
+    if (options?.signal?.aborted) {
+        const error = new Error("Upload canceled");
+        error.name = "AbortError";
+        throw error;
+    }
     if (uploaded?.accessUrl) {
         return { ...base, url: uploaded.accessUrl, bytes: uploaded.bytes || base.bytes, mimeType: uploaded.mimeType || base.mimeType };
     }
     return base;
+}
+
+function isAbortError(error: unknown) {
+    return error instanceof Error && (error.name === "AbortError" || /cancel|abort/i.test(error.message));
 }
 
 /** Tauri fetch bypasses webview CORS so remote media actually lands in the local store. */

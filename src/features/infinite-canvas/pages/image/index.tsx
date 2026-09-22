@@ -13,20 +13,26 @@ import {
     WorkbenchBottomBar,
     WorkbenchModeTabs,
     WorkbenchReferenceZone,
+    WorkbenchUploadingTile,
     workbenchAsideClassName,
     workbenchComposerClassName,
     workbenchPageClassName,
     workbenchPromptShellClassName,
     workbenchResultsClassName,
 } from "@canvas/components/workbench/workbench-studio";
+import { CloudUploadProgress } from "@canvas/components/canvas/cloud-upload-progress";
+import { assertCanvasMediaUploadSize, QIHUO_MAX_IMAGE_UPLOAD_BYTES } from "@canvas/services/object-storage";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
 import { imageReferenceLabel } from "@canvas/lib/image-reference-prompt";
-import { modelPriceHint, useConfigStore, useEffectiveConfig, type AiConfig } from "@canvas/stores/use-config-store";
+import { useConfigStore, useEffectiveConfig, type AiConfig } from "@canvas/stores/use-config-store";
+import { useModelUnitPrice } from "@canvas/lib/use-model-unit-price";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { nanoid } from "nanoid";
 import { formatBytes, formatDuration, getDataUrlByteSize, readImageMeta } from "@canvas/lib/image-utils";
 import { requestEdit, requestGeneration } from "@canvas/services/api/image";
 import { deleteGenerationAssetsByClientIds, listGenerationAssets, upsertGenerationAsset, type GenerationAsset } from "@canvas/services/api/generation-assets";
+import { onCloudMediaUrl } from "@canvas/services/cloud-upload-progress";
+import { isPubliclyReachableMediaUrl } from "@canvas/services/ensure-public-media";
 import { deleteStoredImages, uploadImage } from "@canvas/services/image-storage";
 import { saveBlobAs } from "@canvas/lib/save-file";
 import { useAssetStore } from "@canvas/stores/use-asset-store";
@@ -107,14 +113,25 @@ export default function ImagePage() {
     const [imageLogHasMore, setImageLogHasMore] = useState(false);
     const [isReferenceDragActive, setIsReferenceDragActive] = useState(false);
     const [autoRunToken, setAutoRunToken] = useState(0);
+    const [pendingUploads, setPendingUploads] = useState<Array<{ id: string; name: string; previewUrl: string; progress: number }>>([]);
+    const pendingUploadControllersRef = useRef(new Map<string, AbortController>());
     const imageCommand = useWorkbenchAgentStore((state) => state.imageCommand);
     const clearImageCommand = useWorkbenchAgentStore((state) => state.clearImageCommand);
     const updateAgentTask = useWorkbenchAgentStore((state) => state.updateTask);
     const processedCommandRef = useRef(0);
     const agentTaskIdRef = useRef<string | undefined>(undefined);
 
+    useEffect(() => {
+        return onCloudMediaUrl((storageKey, url) => {
+            if (!isPubliclyReachableMediaUrl(url)) return;
+            setReferences((value) =>
+                value.map((item) => (item.storageKey === storageKey ? { ...item, dataUrl: url, url } : item)),
+            );
+        });
+    }, []);
+
     const model = effectiveConfig.imageModel || effectiveConfig.model;
-    const priceHint = modelPriceHint(effectiveConfig, model);
+    const priceHint = useModelUnitPrice(model);
     const canGenerate = Boolean(prompt.trim());
     const generationCount = Math.max(1, Math.min(10, Number(config.count) || 1));
 
@@ -130,13 +147,65 @@ export default function ImagePage() {
 
     const addReferences = async (files?: FileList | null) => {
         const imageFiles = Array.from(files || []).filter((file) => file.type.startsWith("image/"));
-        const nextReferences = await Promise.all(
-            imageFiles.map(async (file) => {
-                const image = await uploadImage(file);
-                return { id: nanoid(), name: file.name, type: image.mimeType, dataUrl: image.url, storageKey: image.storageKey };
-            }),
-        );
-        setReferences((value) => [...value, ...nextReferences]);
+        if (!imageFiles.length) return;
+        const room = Math.max(0, 10 - references.length - pendingUploads.length);
+        const selected = imageFiles.slice(0, room);
+        if (!selected.length) {
+            message.warning(t("imageWorkbench.referencesFull"));
+            return;
+        }
+
+        for (const file of selected) {
+            try {
+                assertCanvasMediaUploadSize(file.size, file.type, file.name);
+            } catch (error) {
+                message.error(error instanceof Error ? error.message : t("workbench.uploadFailed"));
+                continue;
+            }
+
+            const pendingId = nanoid();
+            const previewUrl = URL.createObjectURL(file);
+            const controller = new AbortController();
+            pendingUploadControllersRef.current.set(pendingId, controller);
+            setPendingUploads((value) => [...value, { id: pendingId, name: file.name, previewUrl, progress: 0 }]);
+            try {
+                // Local-first: IndexedDB + blob URL immediately; cloud continues in background.
+                const image = await uploadImage(file, {
+                    background: true,
+                    signal: controller.signal,
+                    onProgress: (loaded, total) => {
+                        const progress = total > 0 ? (loaded / total) * 100 : 0;
+                        setPendingUploads((value) => value.map((item) => (item.id === pendingId ? { ...item, progress } : item)));
+                    },
+                });
+                if (controller.signal.aborted) continue;
+                setReferences((value) =>
+                    [...value, { id: nanoid(), name: file.name, type: image.mimeType, dataUrl: image.url, url: isPubliclyReachableMediaUrl(image.url) ? image.url : undefined, storageKey: image.storageKey }].slice(0, 10),
+                );
+            } catch (error) {
+                if (!isUploadAbortError(error) && !controller.signal.aborted) {
+                    message.error(error instanceof Error ? error.message : t("workbench.uploadFailed"));
+                }
+            } finally {
+                pendingUploadControllersRef.current.delete(pendingId);
+                setPendingUploads((value) => {
+                    const current = value.find((item) => item.id === pendingId);
+                    if (current?.previewUrl) URL.revokeObjectURL(current.previewUrl);
+                    return value.filter((item) => item.id !== pendingId);
+                });
+            }
+        }
+    };
+
+    const cancelPendingUpload = (id: string) => {
+        const controller = pendingUploadControllersRef.current.get(id);
+        controller?.abort();
+        pendingUploadControllersRef.current.delete(id);
+        setPendingUploads((value) => {
+            const current = value.find((item) => item.id === id);
+            if (current?.previewUrl) URL.revokeObjectURL(current.previewUrl);
+            return value.filter((item) => item.id !== id);
+        });
     };
 
     const addReferencesFromClipboard = async () => {
@@ -147,14 +216,57 @@ export default function ImagePage() {
                 message.error(t("imageWorkbench.clipboardEmpty"));
                 return;
             }
-            const nextReferences = await Promise.all(
-                blobs.map(async (blob, index) => {
-                    const image = await uploadImage(blob);
-                    return { id: nanoid(), name: `clipboard-${index + 1}.png`, type: image.mimeType, dataUrl: image.url, storageKey: image.storageKey };
-                }),
-            );
-            setReferences((value) => [...value, ...nextReferences]);
-            message.success(t("imageWorkbench.clipboardAdded", { count: nextReferences.length }));
+            const room = Math.max(0, 10 - references.length - pendingUploads.length);
+            const selected = blobs.slice(0, room);
+            const nextReferences: ReferenceImage[] = [];
+            for (const [index, blob] of selected.entries()) {
+                try {
+                    assertCanvasMediaUploadSize(blob.size, blob.type || "image/png", `clipboard-${index + 1}.png`);
+                } catch (error) {
+                    message.error(error instanceof Error ? error.message : t("workbench.uploadFailed"));
+                    continue;
+                }
+                const pendingId = nanoid();
+                const previewUrl = URL.createObjectURL(blob);
+                const name = `clipboard-${index + 1}.png`;
+                const controller = new AbortController();
+                pendingUploadControllersRef.current.set(pendingId, controller);
+                setPendingUploads((value) => [...value, { id: pendingId, name, previewUrl, progress: 0 }]);
+                try {
+                    const image = await uploadImage(blob, {
+                        background: true,
+                        signal: controller.signal,
+                        onProgress: (loaded, total) => {
+                            const progress = total > 0 ? (loaded / total) * 100 : 0;
+                            setPendingUploads((value) => value.map((item) => (item.id === pendingId ? { ...item, progress } : item)));
+                        },
+                    });
+                    if (controller.signal.aborted) continue;
+                    nextReferences.push({
+                        id: nanoid(),
+                        name,
+                        type: image.mimeType,
+                        dataUrl: image.url,
+                        url: isPubliclyReachableMediaUrl(image.url) ? image.url : undefined,
+                        storageKey: image.storageKey,
+                    });
+                } catch (error) {
+                    if (!isUploadAbortError(error) && !controller.signal.aborted) {
+                        message.error(error instanceof Error ? error.message : t("workbench.uploadFailed"));
+                    }
+                } finally {
+                    pendingUploadControllersRef.current.delete(pendingId);
+                    setPendingUploads((value) => {
+                        const current = value.find((item) => item.id === pendingId);
+                        if (current?.previewUrl) URL.revokeObjectURL(current.previewUrl);
+                        return value.filter((item) => item.id !== pendingId);
+                    });
+                }
+            }
+            if (nextReferences.length) {
+                setReferences((value) => [...value, ...nextReferences].slice(0, 10));
+                message.success(t("imageWorkbench.clipboardAdded", { count: nextReferences.length }));
+            }
         } catch {
             message.error(t("imageWorkbench.clipboardEmpty"));
         }
@@ -293,8 +405,20 @@ export default function ImagePage() {
         if (payload.kind === "text") {
             setPrompt(payload.content);
         } else if (payload.kind === "image") {
-            const stored = await uploadImage(payload.dataUrl);
-            setReferences((value) => [...value, { id: nanoid(), name: payload.title, type: stored.mimeType, dataUrl: stored.url, storageKey: stored.storageKey }]);
+            const stored = await uploadImage(payload.dataUrl, { background: true });
+            setReferences((value) =>
+                [
+                    ...value,
+                    {
+                        id: nanoid(),
+                        name: payload.title,
+                        type: stored.mimeType,
+                        dataUrl: stored.url,
+                        url: isPubliclyReachableMediaUrl(stored.url) ? stored.url : undefined,
+                        storageKey: stored.storageKey,
+                    },
+                ].slice(0, 10),
+            );
         } else {
             message.warning(t("imageWorkbench.unsupportedAsset"));
         }
@@ -422,6 +546,7 @@ export default function ImagePage() {
 
     return (
         <div className={workbenchPageClassName()}>
+            <CloudUploadProgress variant="page" />
             <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 lg:grid-cols-[280px_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[300px_minmax(0,1fr)]">
                 <aside className={workbenchAsideClassName()}>
                     <LogPanel
@@ -431,6 +556,10 @@ export default function ImagePage() {
                         onSelectedLogIdsChange={setSelectedLogIds}
                         onCreateSession={createSession}
                         onDeleteSelected={() => setDeleteConfirmOpen(true)}
+                        onDeleteLog={(id) => {
+                            setSelectedLogIds([id]);
+                            setDeleteConfirmOpen(true);
+                        }}
                         onPreviewLog={(log) => void previewGenerationLog(log)}
                     />
                 </aside>
@@ -503,6 +632,16 @@ export default function ImagePage() {
                                     onClick={() => fileInputRef.current?.click()}
                                     label={t("workbench.upload")}
                                 />
+                                {pendingUploads.map((item) => (
+                                    <WorkbenchUploadingTile
+                                        key={item.id}
+                                        name={item.name}
+                                        previewUrl={item.previewUrl}
+                                        progress={item.progress}
+                                        kind="image"
+                                        onCancel={() => cancelPendingUpload(item.id)}
+                                    />
+                                ))}
                                 {references.map((item, index) => (
                                     <div key={item.id} className="group relative size-[5.5rem] shrink-0 overflow-hidden rounded-xl border border-stone-200 dark:border-stone-800">
                                         <SmartImage src={item.dataUrl} alt={item.name} className="size-full object-cover" fallbackClassName="size-full" fallbackIconClassName="size-4" />
@@ -519,6 +658,9 @@ export default function ImagePage() {
                                     </div>
                                 ))}
                             </WorkbenchReferenceZone>
+                            <p className="m-0 text-[11px] leading-4 text-stone-400">
+                                {t("workbench.referenceSizeHint", { imageMb: Math.ceil(QIHUO_MAX_IMAGE_UPLOAD_BYTES / (1024 * 1024)) })}
+                            </p>
 
                             <div>
                                 <div className={workbenchPromptShellClassName()}>
@@ -557,6 +699,7 @@ export default function ImagePage() {
                             }
                             generateLabel={t("workbench.generate")}
                             generatePrice={priceHint || undefined}
+                            generateTip={t("workbench.retentionTip")}
                             generating={running}
                             disabled={!canGenerate || running}
                             onGenerate={confirmGenerate}
@@ -609,6 +752,10 @@ export default function ImagePage() {
                     onSelectedLogIdsChange={setSelectedLogIds}
                     onCreateSession={createSession}
                     onDeleteSelected={() => setDeleteConfirmOpen(true)}
+                    onDeleteLog={(id) => {
+                        setSelectedLogIds([id]);
+                        setDeleteConfirmOpen(true);
+                    }}
                     onPreviewLog={(log) => void previewGenerationLog(log)}
                 />
                 {imageLogHasMore ? (
@@ -730,6 +877,7 @@ function LogPanel({
     onSelectedLogIdsChange,
     onCreateSession,
     onDeleteSelected,
+    onDeleteLog,
     onPreviewLog,
 }: {
     logs: GenerationLog[];
@@ -738,6 +886,7 @@ function LogPanel({
     onSelectedLogIdsChange: (ids: string[]) => void;
     onCreateSession: () => void;
     onDeleteSelected: () => void;
+    onDeleteLog: (id: string) => void;
     onPreviewLog: (log: GenerationLog) => void;
 }) {
     const { t } = useTranslation();
@@ -763,7 +912,7 @@ function LogPanel({
                     {t("common.delete")}
                 </Button>
             </div>
-            <div className="space-y-3">
+            <div className="min-w-0 space-y-2 overflow-x-hidden">
                 {logs.map((log) => (
                     <LogCard
                         key={log.id}
@@ -772,6 +921,7 @@ function LogPanel({
                         active={activeLogId === log.id}
                         onSelectedChange={(checked) => onSelectedLogIdsChange(checked ? [...selectedLogIds, log.id] : selectedLogIds.filter((id) => id !== log.id))}
                         onClick={() => onPreviewLog(log)}
+                        onDelete={() => onDeleteLog(log.id)}
                     />
                 ))}
                 {!logs.length ? <div className="flex min-h-48 items-center justify-center rounded-lg border border-dashed border-stone-300 text-center text-sm text-stone-500 dark:border-stone-700">{t("workbench.noLogs")}</div> : null}
@@ -780,53 +930,69 @@ function LogPanel({
     );
 }
 
-function LogCard({ log, selected, active, onSelectedChange, onClick }: { log: GenerationLog; selected: boolean; active: boolean; onSelectedChange: (checked: boolean) => void; onClick: () => void }) {
+function LogCard({
+    log,
+    selected,
+    active,
+    onSelectedChange,
+    onClick,
+    onDelete,
+}: {
+    log: GenerationLog;
+    selected: boolean;
+    active: boolean;
+    onSelectedChange: (checked: boolean) => void;
+    onClick: () => void;
+    onDelete: () => void;
+}) {
     const { t } = useTranslation();
     const thumbnails = (log.thumbnails || []).filter(Boolean).slice(0, 4);
+    const failed = log.status === "failed" || ((log.failCount ?? 0) > 0 && (log.successCount ?? log.imageCount ?? 0) === 0);
+    const pending = log.status === "pending";
+    const statusLabel = pending ? t("workbench.generating") : failed ? t("workbench.failed") : t("workbench.success");
+    const statusColor = pending ? "processing" : failed ? "red" : "blue";
 
     return (
-        <button
-            type="button"
-            className={`block w-full rounded-lg border p-2 text-left transition ${active ? "border-stone-900 bg-blue-50 dark:border-stone-100 dark:bg-blue-950/20" : "border-stone-200 bg-background hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-900"}`}
-            onClick={onClick}
+        <div
+            className={`flex w-full min-w-0 max-w-full items-start gap-2 overflow-hidden rounded-lg border p-2 transition ${active ? "border-stone-900 bg-blue-50 dark:border-stone-100 dark:bg-blue-950/20" : "border-stone-200 bg-background hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-900"}`}
         >
-            <div className="grid grid-cols-[minmax(128px,1fr)_auto] gap-2">
-                <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-2">
-                    <Checkbox className="mt-0.5" checked={selected} onClick={(event) => event.stopPropagation()} onChange={(event) => onSelectedChange(event.target.checked)} />
-                    <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold leading-5">{log.title}</div>
-                        {thumbnails.length ? (
-                            <div className="mt-2 flex gap-1 overflow-hidden">
-                                {thumbnails.map((image, index) => (
-                                    <SmartImage key={`${log.id}-${index}`} src={image} alt="" className="size-8 shrink-0 rounded-md object-cover" fallbackIconClassName="size-3" />
-                                ))}
-                            </div>
-                        ) : null}
-                    </div>
+            <Checkbox className="mt-0.5 shrink-0" checked={selected} onClick={(event) => event.stopPropagation()} onChange={(event) => onSelectedChange(event.target.checked)} />
+            <button type="button" className="min-w-0 flex-1 overflow-hidden text-left" onClick={onClick}>
+                <div className="flex min-w-0 items-start gap-2">
+                    <div className="min-w-0 flex-1 truncate text-sm font-semibold leading-5">{log.title}</div>
+                    <Tag className="m-0 h-6 shrink-0 rounded-md px-1.5 text-xs leading-6" color={statusColor}>
+                        {statusLabel}
+                    </Tag>
                 </div>
-                <div className="grid justify-items-end gap-2">
-                    <div className="flex gap-1">
-                        <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="blue">
-                            {t("workbench.successCount", { count: log.successCount ?? log.imageCount })}
-                        </Tag>
-                        {log.failCount ? (
-                            <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="red">
-                                {t("workbench.failCount", { count: log.failCount })}
-                            </Tag>
-                        ) : null}
+                {thumbnails.length ? (
+                    <div className="mt-2 flex gap-1 overflow-hidden">
+                        {thumbnails.map((image, index) => (
+                            <SmartImage key={`${log.id}-${index}`} src={image} alt="" className="size-8 shrink-0 rounded-md object-cover" fallbackIconClassName="size-3" />
+                        ))}
                     </div>
-                    <div className="flex flex-wrap justify-end gap-1">
-                        <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none">{t("workbench.itemCount", { count: log.imageCount })}</Tag>
-                        <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="green">
-                            {formatDuration(log.durationMs)}
-                        </Tag>
-                    </div>
-                    <div className="flex justify-end">
-                        <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none">{log.time}</Tag>
-                    </div>
+                ) : null}
+                <div className="mt-2 flex min-w-0 flex-wrap gap-1">
+                    {!failed ? <Tag className="m-0 h-6 rounded-md px-1.5 text-xs leading-6">{t("workbench.itemCount", { count: log.imageCount || log.successCount || 0 })}</Tag> : null}
+                    <Tag className="m-0 h-6 rounded-md px-1.5 text-xs leading-6" color="green">
+                        {formatDuration(log.durationMs)}
+                    </Tag>
+                    <Tag className="m-0 h-6 max-w-full truncate rounded-md px-1.5 text-xs leading-6">{log.time}</Tag>
                 </div>
-            </div>
-        </button>
+            </button>
+            <button
+                type="button"
+                className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-stone-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                aria-label={t("common.delete")}
+                title={t("common.delete")}
+                onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onDelete();
+                }}
+            >
+                <Trash2 className="size-3.5" />
+            </button>
+        </div>
     );
 }
 
@@ -1005,4 +1171,8 @@ function buildLog({
         images,
         thumbnails: images.map((image) => image.dataUrl).filter(Boolean),
     };
+}
+
+function isUploadAbortError(error: unknown) {
+    return error instanceof Error && (error.name === "AbortError" || /cancel|abort/i.test(error.message));
 }

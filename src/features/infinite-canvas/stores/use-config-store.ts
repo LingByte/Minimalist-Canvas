@@ -70,7 +70,7 @@ export type ConfigTabKey = "channels" | "preferences" | "webdav" | "local-storag
 
 export const CONFIG_STORE_KEY = "minimalist-canvas:ai_config_store";
 const CHANNEL_MODEL_SEPARATOR = "::";
-const DEFAULT_OPENAI_BASE_URL = "http://localhost:3000";
+const DEFAULT_OPENAI_BASE_URL = "https://canvas.lingecho.com";
 const LEGACY_OPENAI_BASE_URL = "https://api.openai.com";
 const LEGACY_PRODUCT_BASE_URLS = [
     "https://canvas.lingecho.com",

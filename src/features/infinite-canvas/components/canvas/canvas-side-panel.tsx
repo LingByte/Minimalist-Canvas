@@ -3,7 +3,7 @@ import { App, Empty, Input, Popconfirm, Select, Spin, Tag } from "antd";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { BookOpen, Check, ChevronRight, Download, Eye, FileText, Image as ImageIcon, ListChecks, Music2, Plus, Search, Settings2, Square, Trash2, Type, Video } from "lucide-react";
 import { motion } from "motion/react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { useCanvasHost } from "@canvas/integration/canvas-host-context";
@@ -162,8 +162,16 @@ export function CanvasSidePanel({ nodes, selectedNodeIds, onFocusNode, onPreview
                         <TabButton label={t("canvas.sidePanel.prompts")} active={tab === "prompts"} theme={theme} onClick={() => setTab("prompts")} />
                         <TabButton label={t("canvas.sidePanel.logs")} active={tab === "logs"} theme={theme} badge={logsBadge} dataTour="canvas-logs-tab" onClick={openLogsTab} />
                     </div>
-                    <div className="mx-3 mt-1.5 rounded-md border border-amber-500/35 bg-amber-500/10 px-2 py-1 dark:border-amber-400/30 dark:bg-amber-400/10" data-tour="canvas-logs-authority-tip">
+                    <div className="mx-3 mt-1.5 rounded-md border border-amber-500/35 bg-amber-500/10 px-2 py-1.5 dark:border-amber-400/30 dark:bg-amber-400/10" data-tour="canvas-logs-authority-tip">
                         <p className="text-[11px] font-medium leading-snug text-amber-900/90 dark:text-amber-100/90">{t("canvas.sidePanel.logsAuthorityTip")}</p>
+                        <div className="mt-1.5">
+                            <Link
+                                to="/usage-logs/task"
+                                className="rounded px-1.5 py-0.5 text-[11px] font-semibold text-amber-950 underline-offset-2 hover:underline dark:text-amber-50"
+                            >
+                                {t("canvas.sidePanel.openTaskLogs")}
+                            </Link>
+                        </div>
                     </div>
                 </div>
                 <div className="mt-2 min-h-0 flex-1 overflow-hidden">

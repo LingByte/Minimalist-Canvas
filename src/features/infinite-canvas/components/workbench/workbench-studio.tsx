@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ImagePlus, Sparkles } from "lucide-react";
+import { ChevronDown, ImagePlus, Sparkles, X } from "lucide-react";
 import { Button } from "antd";
 
 import { cn } from "@/lib/utils";
@@ -114,6 +114,57 @@ export function WorkbenchAddTile(props: {
     );
 }
 
+/** Placeholder tile shown while a reference file is uploading. */
+export function WorkbenchUploadingTile(props: {
+    name: string;
+    previewUrl?: string;
+    progress: number;
+    kind?: "image" | "video" | "audio";
+    onCancel?: () => void;
+}) {
+    const { t } = useTranslation();
+    const percent = Math.min(100, Math.max(0, Math.round(props.progress)));
+    return (
+        <div className="relative size-[5.5rem] shrink-0 overflow-hidden rounded-xl border border-stone-200 bg-stone-100 dark:border-stone-800 dark:bg-stone-900">
+            {props.previewUrl && props.kind !== "audio" ? (
+                props.kind === "video" ? (
+                    <video src={props.previewUrl} muted className="size-full object-cover opacity-50" />
+                ) : (
+                    <img src={props.previewUrl} alt="" className="size-full object-cover opacity-50" />
+                )
+            ) : (
+                <div className="grid size-full place-items-center text-stone-400">
+                    <ImagePlus className="size-6 opacity-60" />
+                </div>
+            )}
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/45 px-2 text-white">
+                <span className="text-[11px] font-semibold tabular-nums">{percent}%</span>
+                <div className="h-1 w-full max-w-[4.5rem] overflow-hidden rounded-full bg-white/25">
+                    <div className="h-full rounded-full bg-emerald-400 transition-[width] duration-150" style={{ width: `${percent}%` }} />
+                </div>
+                <span className="w-full truncate text-center text-[9px] opacity-80" title={props.name}>
+                    {props.name}
+                </span>
+            </div>
+            {props.onCancel ? (
+                <button
+                    type="button"
+                    className="absolute right-1 top-1 z-10 inline-flex size-5 items-center justify-center rounded-full bg-black/70 text-white transition hover:bg-black"
+                    aria-label={t("workbench.cancelUpload")}
+                    title={t("workbench.cancelUpload")}
+                    onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        props.onCancel?.();
+                    }}
+                >
+                    <X className="size-3" />
+                </button>
+            ) : null}
+        </div>
+    );
+}
+
 export function WorkbenchBottomBar(props: {
     summary: ReactNode;
     /** Compact settings panel content shown in a floating popover above the summary pill. */
@@ -124,6 +175,8 @@ export function WorkbenchBottomBar(props: {
     generateLabel: string;
     /** Optional unit-price hint shown on the generate button (e.g. "2.99元一条"). */
     generatePrice?: string;
+    /** Short tip under the generate button (e.g. retention notice). */
+    generateTip?: string;
     generating?: boolean;
     disabled?: boolean;
     onGenerate: () => void;
@@ -200,34 +253,41 @@ export function WorkbenchBottomBar(props: {
     return (
         <div
             className={cn(
-                "sticky bottom-0 z-10 -mx-4 mt-auto flex items-center gap-3 border-t border-stone-200/70 bg-card/95 px-4 py-3 backdrop-blur-md dark:border-stone-800/80",
+                "sticky bottom-0 z-10 -mx-4 mt-auto flex flex-col gap-1.5 border-t border-stone-200/70 bg-card/95 px-4 py-3 backdrop-blur-md dark:border-stone-800/80",
                 props.className
             )}
         >
-            <button
-                ref={pillRef}
-                type="button"
-                onClick={toggle}
-                aria-expanded={props.settings ? open : undefined}
-                className="inline-flex min-w-0 max-w-[58%] items-center gap-2 rounded-full border border-stone-200/90 bg-stone-50 px-3.5 py-2.5 text-left text-xs font-medium text-stone-700 transition hover:border-emerald-400/40 hover:bg-emerald-400/5 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-200"
-            >
-                <span className="min-w-0 flex-1 truncate">{props.summary}</span>
-                <ChevronDown className={cn("size-3.5 shrink-0 opacity-50 transition-transform", open && props.settings && "rotate-180")} />
-            </button>
-            <Button
-                type="primary"
-                size="large"
-                loading={props.generating}
-                disabled={props.disabled}
-                onClick={props.onGenerate}
-                className="!ml-auto !h-11 !min-w-[8.5rem] !rounded-xl !border-0 !bg-[#00b0f0] !px-5 !font-semibold !text-white !shadow-none hover:!bg-[#33c3f5]"
-                icon={<Sparkles className="size-4" />}
-            >
-                <span className="inline-flex items-baseline gap-1.5">
-                    <span>{props.generateLabel}</span>
-                    {props.generatePrice ? <span className="text-[11px] font-medium opacity-90">{props.generatePrice}</span> : null}
-                </span>
-            </Button>
+            <div className="flex items-center gap-3">
+                <button
+                    ref={pillRef}
+                    type="button"
+                    onClick={toggle}
+                    aria-expanded={props.settings ? open : undefined}
+                    className="inline-flex min-w-0 max-w-[58%] items-center gap-2 rounded-full border border-stone-200/90 bg-stone-50 px-3.5 py-2.5 text-left text-xs font-medium text-stone-700 transition hover:border-emerald-400/40 hover:bg-emerald-400/5 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-200"
+                >
+                    <span className="min-w-0 flex-1 truncate">{props.summary}</span>
+                    <ChevronDown className={cn("size-3.5 shrink-0 opacity-50 transition-transform", open && props.settings && "rotate-180")} />
+                </button>
+                <Button
+                    type="primary"
+                    size="large"
+                    loading={props.generating}
+                    disabled={props.disabled}
+                    onClick={props.onGenerate}
+                    className="!ml-auto !h-11 !min-w-[8.5rem] !max-w-[14rem] !rounded-xl !border-0 !bg-[#00b0f0] !px-4 !font-semibold !text-white !shadow-none hover:!bg-[#33c3f5]"
+                    icon={<Sparkles className="size-4" />}
+                >
+                    <span className="inline-flex max-w-full flex-col items-start gap-0 leading-tight">
+                        <span>{props.generateLabel}</span>
+                        {props.generatePrice ? <span className="max-w-full truncate text-[10px] font-medium opacity-90">{props.generatePrice}</span> : null}
+                    </span>
+                </Button>
+            </div>
+            {props.generateTip ? (
+                <p className="ml-auto max-w-[min(100%,22rem)] text-right text-[10px] leading-snug text-stone-500 dark:text-stone-400">
+                    {props.generateTip}
+                </p>
+            ) : null}
             {panel}
         </div>
     );
@@ -250,5 +310,5 @@ export function workbenchPromptShellClassName() {
 }
 
 export function workbenchAsideClassName() {
-    return "thin-scrollbar hidden min-h-0 overflow-y-auto rounded-2xl border border-stone-200/80 bg-card p-4 shadow-sm dark:border-stone-800 dark:bg-[#14151a] lg:block";
+    return "thin-scrollbar hidden min-h-0 overflow-x-hidden overflow-y-auto rounded-2xl border border-stone-200/80 bg-card p-4 shadow-sm dark:border-stone-800 dark:bg-[#14151a] lg:block";
 }

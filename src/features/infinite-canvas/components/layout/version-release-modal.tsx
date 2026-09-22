@@ -1,9 +1,11 @@
 import type { CSSProperties } from "react";
-import { Modal, Tag, Timeline } from "antd";
+import { Button, Modal, Progress, Tag, Timeline } from "antd";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
+
 import { useVersionCheck } from "@canvas/hooks/use-version-check";
 import { APP_VERSION } from "@canvas/constant/env";
+import { isTauri } from "@canvas/services/fs-store";
 
 function getTagColor(type: string) {
     if (type === "新增" || type === "Added") return "green";
@@ -25,7 +27,27 @@ type VersionReleaseModalProps = {
 
 export function VersionReleaseModal({ className, style }: VersionReleaseModalProps) {
     const { t } = useTranslation();
-    const { open, setOpen, openReleaseModal, latestVersion, releases, checking, hasNewVersion, checkLatestRelease } = useVersionCheck();
+    const {
+        open,
+        setOpen,
+        openReleaseModal,
+        latestVersion,
+        releases,
+        checking,
+        installing,
+        hasNewVersion,
+        updateNotes,
+        progress,
+        checkLatestRelease,
+        installUpdate,
+    } = useVersionCheck();
+
+    const progressPercent =
+        progress && progress.total && progress.total > 0
+            ? Math.min(100, Math.round((progress.downloaded / progress.total) * 100))
+            : installing
+              ? undefined
+              : 0;
 
     return (
         <>
@@ -52,7 +74,8 @@ export function VersionReleaseModal({ className, style }: VersionReleaseModalPro
                             <div className="text-xs text-stone-500 dark:text-stone-400">{t("version.latestVersion")}</div>
                             <button
                                 type="button"
-                                className="cursor-pointer bg-transparent p-0 text-[11px] font-normal text-stone-400 underline-offset-2 transition hover:text-stone-700 hover:underline dark:text-stone-500 dark:hover:text-stone-300"
+                                className="cursor-pointer bg-transparent p-0 text-[11px] font-normal text-stone-400 underline-offset-2 transition hover:text-stone-700 hover:underline disabled:cursor-not-allowed disabled:opacity-50 dark:text-stone-500 dark:hover:text-stone-300"
+                                disabled={checking || installing}
                                 onClick={() => void checkLatestRelease(true)}
                             >
                                 {t(checking ? "version.checking" : "version.checkUpdates")}
@@ -61,6 +84,40 @@ export function VersionReleaseModal({ className, style }: VersionReleaseModalPro
                         <div className="mt-1 text-base font-semibold text-stone-950 dark:text-stone-100">{latestVersion}</div>
                     </div>
                 </div>
+
+                {isTauri() && hasNewVersion ? (
+                    <div className="mb-5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 dark:border-emerald-400/25 dark:bg-emerald-400/10">
+                        <div className="text-sm font-medium text-emerald-950 dark:text-emerald-100">
+                            {t("version.updateAvailable", { version: latestVersion })}
+                        </div>
+                        {updateNotes ? (
+                            <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-emerald-900/80 dark:text-emerald-100/80">
+                                {updateNotes}
+                            </p>
+                        ) : null}
+                        {installing ? (
+                            <div className="mt-3">
+                                <Progress
+                                    percent={progressPercent}
+                                    status={progressPercent == null ? "active" : undefined}
+                                    size="small"
+                                />
+                                <div className="mt-1 text-[11px] text-emerald-900/70 dark:text-emerald-100/70">
+                                    {t("version.downloading")}
+                                </div>
+                            </div>
+                        ) : (
+                            <Button
+                                type="primary"
+                                className="mt-3"
+                                onClick={() => void installUpdate()}
+                            >
+                                {t("version.downloadAndInstall")}
+                            </Button>
+                        )}
+                    </div>
+                ) : null}
+
                 <div className="max-h-[56vh] overflow-y-auto pr-2">
                     <Timeline
                         items={releases.map((release) => ({
