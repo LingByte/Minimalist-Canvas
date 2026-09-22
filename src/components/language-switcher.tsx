@@ -22,6 +22,7 @@ import { Languages, Check } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import canvasI18n, { hostToCanvasLocale } from '@canvas/i18n'
 import hostI18n from '@/i18n/config'
 import {
   INTERFACE_LANGUAGE_OPTIONS,
@@ -52,6 +53,9 @@ export function LanguageSwitcher() {
   const handleChangeLanguage = useCallback(
     async (code: string) => {
       await hostI18n.changeLanguage(code)
+      const canvasLocale = hostToCanvasLocale(code)
+      localStorage.setItem('minimalist-canvas:locale', canvasLocale)
+      void canvasI18n.changeLanguage(canvasLocale)
       if (user) {
         try {
           await api.put('/api/user/self', { language: code })

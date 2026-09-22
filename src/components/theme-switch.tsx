@@ -22,61 +22,32 @@ import { Check, Moon, Sun } from 'lucide-react'
 import { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { useTheme } from '@/context/theme-provider'
+import { useThemeStore, type ThemeName } from '@canvas/stores/use-theme-store'
 import { cn } from '@/lib/utils'
 
 export function ThemeSwitch() {
   const { t } = useTranslation()
-  const { theme, resolvedTheme, setTheme } = useTheme()
+  const theme = useThemeStore((state) => state.theme)
+  const setTheme = useThemeStore((state) => state.setTheme)
 
   useEffect(() => {
-    const themeColor = resolvedTheme === 'dark' ? '#020817' : '#fff'
+    const themeColor = theme === 'dark' ? '#020817' : '#fff'
     const metaThemeColor = document.querySelector("meta[name='theme-color']")
     if (metaThemeColor) metaThemeColor.setAttribute('content', themeColor)
-  }, [resolvedTheme])
+  }, [theme])
 
   const items: MenuProps['items'] = useMemo(
-    () => [
-      {
-        key: 'light',
+    () =>
+      (['light', 'dark'] as ThemeName[]).map((key) => ({
+        key,
         label: (
           <span className='flex w-full items-center gap-2'>
-            {t('Light')}
-            <Check
-              size={14}
-              className={cn('ms-auto', theme !== 'light' && 'hidden')}
-            />
+            {t(key === 'light' ? 'Light' : 'Dark')}
+            <Check size={14} className={cn('ms-auto', theme !== key && 'hidden')} />
           </span>
         ),
-        onClick: () => setTheme('light'),
-      },
-      {
-        key: 'dark',
-        label: (
-          <span className='flex w-full items-center gap-2'>
-            {t('Dark')}
-            <Check
-              size={14}
-              className={cn('ms-auto', theme !== 'dark' && 'hidden')}
-            />
-          </span>
-        ),
-        onClick: () => setTheme('dark'),
-      },
-      {
-        key: 'system',
-        label: (
-          <span className='flex w-full items-center gap-2'>
-            {t('System')}
-            <Check
-              size={14}
-              className={cn('ms-auto', theme !== 'system' && 'hidden')}
-            />
-          </span>
-        ),
-        onClick: () => setTheme('system'),
-      },
-    ],
+        onClick: () => setTheme(key),
+      })),
     [setTheme, t, theme]
   )
 
@@ -87,7 +58,7 @@ export function ThemeSwitch() {
         className='relative inline-flex h-9 w-9 items-center justify-center p-0'
         aria-label={t('Toggle theme')}
         icon={
-          resolvedTheme === 'dark' ? (
+          theme === 'dark' ? (
             <Moon className='size-[1.2rem]' />
           ) : (
             <Sun className='size-[1.2rem]' />
