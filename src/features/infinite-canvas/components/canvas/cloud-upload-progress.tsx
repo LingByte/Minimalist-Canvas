@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import { CloudUpload, RefreshCw, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -27,9 +28,14 @@ function statusLabel(job: CloudUploadJobView, t: (key: string) => string) {
 
 export function CloudUploadProgress({
     variant = "canvas",
+    open,
+    onOpenChange,
     toolbar,
 }: {
     variant?: "canvas" | "page" | "toolbar";
+    /** Controlled open state (toolbar). */
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
     /** When embedded in the bottom canvas dock. */
     toolbar?: {
         hovered: string | null;
@@ -43,9 +49,19 @@ export function CloudUploadProgress({
     const progress = useCloudUploadProgress();
     const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
-    const [expanded, setExpanded] = useState(false);
+    const [uncontrolledExpanded, setUncontrolledExpanded] = useState(false);
     const [retryingId, setRetryingId] = useState<number | null>(null);
+    const [panelPos, setPanelPos] = useState<{ left: number; bottom: number } | null>(null);
     const rootRef = useRef<HTMLDivElement>(null);
+    const buttonRef = useRef<HTMLButtonElement>(null);
+
+    const controlled = typeof open === "boolean";
+    const expanded = controlled ? open : uncontrolledExpanded;
+    const setExpanded = (next: boolean | ((value: boolean) => boolean)) => {
+        const value = typeof next === "function" ? next(expanded) : next;
+        if (controlled) onOpenChange?.(value);
+        else setUncontrolledExpanded(value);
+    };
 
     const current = progress.current;
     const percent = current ? Math.min(100, Math.round((current.loaded / current.total) * 100)) : 0;
@@ -55,16 +71,47 @@ export function CloudUploadProgress({
     const positionClass =
         variant === "page" ? "fixed bottom-6 right-6" : variant === "toolbar" ? "relative" : "absolute bottom-[88px] right-5";
 
+    const updatePanelPos = () => {
+        const button = buttonRef.current;
+        if (!button) return;
+        const rect = button.getBoundingClientRect();
+        setPanelPos({
+            left: rect.left + rect.width / 2,
+            bottom: Math.max(8, window.innerHeight - rect.top + 10),
+        });
+    };
+
+    useLayoutEffect(() => {
+        if (!expanded || variant !== "toolbar") {
+            setPanelPos(null);
+            return;
+        }
+        updatePanelPos();
+    }, [expanded, variant]);
+
     useEffect(() => {
         if (!expanded || variant !== "toolbar") return;
+        const handle = () => updatePanelPos();
+        window.addEventListener("resize", handle);
+        window.addEventListener("scroll", handle, true);
+        return () => {
+            window.removeEventListener("resize", handle);
+            window.removeEventListener("scroll", handle, true);
+        };
+    }, [expanded, variant]);
+
+    useEffect(() => {
+        if (!expanded) return;
         const handlePointerDown = (event: PointerEvent) => {
             if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+                const panel = document.getElementById("canvas-cloud-upload-panel");
+                if (panel?.contains(event.target as Node)) return;
                 setExpanded(false);
             }
         };
         document.addEventListener("pointerdown", handlePointerDown, true);
         return () => document.removeEventListener("pointerdown", handlePointerDown, true);
-    }, [expanded, variant]);
+    }, [expanded]);
 
     const handleRetry = (id: number) => {
         if (retryingId != null) return;
@@ -72,18 +119,8 @@ export function CloudUploadProgress({
         void retryCloudUpload(id).finally(() => setRetryingId((currentId) => (currentId === id ? null : currentId)));
     };
 
-    const panel = expanded ? (
-        <div
-            className={cn(
-                "pointer-events-auto z-50 w-[280px] rounded-xl border px-3 py-2.5 shadow-lg backdrop-blur",
-                variant === "toolbar"
-                    ? "absolute bottom-[calc(100%+10px)] left-1/2 -translate-x-1/2"
-                    : positionClass,
-            )}
-            style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
-            onMouseDown={(event) => event.stopPropagation()}
-            onPointerDown={(event) => event.stopPropagation()}
-        >
+    const panelBody = (
+        <>
             <div className="flex items-center gap-2">
                 <CloudUpload className="size-3.5 shrink-0" style={{ color: theme.node.muted }} />
                 <span className="min-w-0 flex-1 truncate text-xs font-medium">{t("canvas.cloudUpload.title")}</span>
@@ -182,8 +219,34 @@ export function CloudUploadProgress({
                     ))}
                 </div>
             ) : null}
-        </div>
-    ) : null;
+        </>
+    );
+
+    const panelClassName = cn(
+        "pointer-events-auto z-[60] w-[280px] rounded-xl border px-3 py-2.5 shadow-lg backdrop-blur",
+        variant === "toolbar" ? null : positionClass,
+    );
+    const panelStyle = {
+        background: theme.toolbar.panel,
+        borderColor: theme.toolbar.border,
+        color: theme.node.text,
+        ...(variant === "toolbar" && panelPos
+            ? { position: "fixed" as const, left: panelPos.left, bottom: panelPos.bottom, transform: "translateX(-50%)" }
+            : null),
+    };
+
+    const panel =
+        expanded && (variant !== "toolbar" || panelPos) ? (
+            <div
+                id="canvas-cloud-upload-panel"
+                className={panelClassName}
+                style={panelStyle}
+                onMouseDown={(event) => event.stopPropagation()}
+                onPointerDown={(event) => event.stopPropagation()}
+            >
+                {panelBody}
+            </div>
+        ) : null;
 
     if (variant === "toolbar" && toolbar) {
         const id = "tool-cloud-upload";
@@ -192,8 +255,10 @@ export function CloudUploadProgress({
         return (
             <div ref={rootRef} className="relative">
                 <button
+                    ref={buttonRef}
                     type="button"
                     aria-label={t("canvas.cloudUpload.title")}
+                    aria-expanded={expanded}
                     className="relative inline-flex !h-8 !w-8 !min-w-8 items-center justify-center rounded-md border-0 bg-transparent p-0 transition"
                     style={
                         active
@@ -221,7 +286,7 @@ export function CloudUploadProgress({
                         </span>
                     ) : null}
                 </button>
-                {panel}
+                {typeof document !== "undefined" && panel ? createPortal(panel, document.body) : null}
             </div>
         );
     }

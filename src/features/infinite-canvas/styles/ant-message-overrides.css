@@ -47,23 +47,29 @@
   right: auto !important;
   top: auto !important;
   transform: none !important;
-  opacity: 0.82 !important;
   pointer-events: auto !important;
 }
 
-#canvas-antd-message-host .ant-message-notice.ant-message-fade-appear-active,
-#canvas-antd-message-host .ant-message-notice.ant-message-fade-enter-active,
-#canvas-antd-message-host .ant-message-notice.ant-message-fade-appear-done,
-#canvas-antd-message-host .ant-message-notice.ant-message-fade-enter-done,
-#canvas-antd-message-host .ant-message-fade-appear-active,
-#canvas-antd-message-host .ant-message-fade-enter-active {
-  opacity: 0.82 !important;
-  transform: none !important;
+/* Soften look on the content bubble — never force opacity on the motion root,
+   or leave/fade-out cannot finish and toasts appear stuck. */
+#canvas-antd-message-host .ant-message-notice-content,
+#canvas-antd-message-host .ant-notification-notice-wrapper,
+#canvas-antd-message-host .ant-message-notice .ant-message-custom-content {
+  opacity: 0.9;
 }
 
-#canvas-antd-message-host .ant-message-notice:hover,
-#canvas-antd-message-host .ant-message-notice-wrapper:hover .ant-message-notice {
-  opacity: 1 !important;
+#canvas-antd-message-host .ant-message-notice:hover .ant-message-notice-content,
+#canvas-antd-message-host .ant-message-notice-wrapper:hover .ant-message-notice-content,
+#canvas-antd-message-host .ant-message-notice:hover .ant-notification-notice-wrapper,
+#canvas-antd-message-host .ant-message-notice:hover .ant-message-custom-content {
+  opacity: 1;
+}
+
+#canvas-antd-message-host .ant-message-notice.ant-message-fade-leave,
+#canvas-antd-message-host .ant-message-notice.ant-message-fade-leave-active,
+#canvas-antd-message-host .ant-message-notice-wrapper.ant-message-fade-leave,
+#canvas-antd-message-host .ant-message-notice-wrapper.ant-message-fade-leave-active {
+  opacity: 0 !important;
 }
 
 /* Fallback when message still portals to body */
@@ -83,5 +89,8 @@ body > .ant-message .ant-message-notice {
   left: auto !important;
   right: 0 !important;
   transform: none !important;
-  opacity: 0.82 !important;
+}
+
+body > .ant-message .ant-message-notice-content {
+  opacity: 0.9;
 }

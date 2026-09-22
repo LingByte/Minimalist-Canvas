@@ -79,6 +79,7 @@ export function CanvasToolbar({
     const [panelX, setPanelX] = useState(0);
     const [extensionsOpen, setExtensionsOpen] = useState(false);
     const [extPanelX, setExtPanelX] = useState(0);
+    const [cloudUploadOpen, setCloudUploadOpen] = useState(false);
     // Keep extension plugin nodes synchronized with registry changes.
     useNodeRegistryVersion();
     const extensionDefs = listNodeDefinitions().filter((def) => def.showInCreateMenu !== false && getNodePluginId(def.type) !== "builtin");
@@ -91,6 +92,8 @@ export function CanvasToolbar({
     useEffect(() => {
         if (!extensionsOpen && !appearanceOpen) return;
         const handlePointerDown = (event: PointerEvent) => {
+            const cloudPanel = document.getElementById("canvas-cloud-upload-panel");
+            if (cloudPanel?.contains(event.target as Node)) return;
             if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
                 setExtensionsOpen(false);
                 setAppearanceOpen(false);
@@ -154,6 +157,7 @@ export function CanvasToolbar({
                         onClick={(event) => {
                             setExtPanelX(getTipX(wrapRef.current, event.currentTarget));
                             setAppearanceOpen(false);
+                            setCloudUploadOpen(false);
                             setExtensionsOpen((value) => !value);
                         }}
                     >
@@ -177,6 +181,7 @@ export function CanvasToolbar({
                     onClick={(event) => {
                         setPanelX(getTipX(wrapRef.current, event.currentTarget));
                         setExtensionsOpen(false);
+                        setCloudUploadOpen(false);
                         setAppearanceOpen((value) => !value);
                     }}
                 >
@@ -197,6 +202,14 @@ export function CanvasToolbar({
                 <Divider theme={theme} />
                 <CloudUploadProgress
                     variant="toolbar"
+                    open={cloudUploadOpen}
+                    onOpenChange={(next) => {
+                        if (next) {
+                            setAppearanceOpen(false);
+                            setExtensionsOpen(false);
+                        }
+                        setCloudUploadOpen(next);
+                    }}
                     toolbar={{
                         hovered,
                         hoverStyle,

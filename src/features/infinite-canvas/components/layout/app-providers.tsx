@@ -51,6 +51,7 @@ function AppProvidersInner({ children, embedded = false, rootId }: AppProvidersP
     const antMessageConfig = useMemo(
         () => ({
             top: 0,
+            duration: 2.5,
             maxCount: 4,
             getContainer: () => document.getElementById(CANVAS_MESSAGE_HOST_ID) || document.body,
             classNames: {
@@ -87,11 +88,21 @@ function AppProvidersInner({ children, embedded = false, rootId }: AppProvidersP
   left: auto !important;
   right: auto !important;
   transform: none !important;
-  opacity: 0.82 !important;
   pointer-events: auto !important;
 }
-#${CANVAS_MESSAGE_HOST_ID} .ant-message-notice:hover {
-  opacity: 1 !important;
+#${CANVAS_MESSAGE_HOST_ID} .ant-message-notice-content,
+#${CANVAS_MESSAGE_HOST_ID} .ant-message-notice .ant-message-custom-content {
+  opacity: 0.9;
+}
+#${CANVAS_MESSAGE_HOST_ID} .ant-message-notice:hover .ant-message-notice-content,
+#${CANVAS_MESSAGE_HOST_ID} .ant-message-notice:hover .ant-message-custom-content {
+  opacity: 1;
+}
+#${CANVAS_MESSAGE_HOST_ID} .ant-message-notice.ant-message-fade-leave,
+#${CANVAS_MESSAGE_HOST_ID} .ant-message-notice.ant-message-fade-leave-active,
+#${CANVAS_MESSAGE_HOST_ID} .ant-message-notice-wrapper.ant-message-fade-leave,
+#${CANVAS_MESSAGE_HOST_ID} .ant-message-notice-wrapper.ant-message-fade-leave-active {
+  opacity: 0 !important;
 }
 `;
         return () => {
