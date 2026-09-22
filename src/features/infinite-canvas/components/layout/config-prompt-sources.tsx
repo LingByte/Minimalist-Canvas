@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Eye, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toIntlLocale } from "@/i18n/languages";
 
 import { PromptSourceEditorDrawer } from "./prompt-source-editor-drawer";
 import { PromptSourceContentModal } from "./prompt-source-content-modal";
@@ -127,5 +128,5 @@ export function ConfigPromptSources() {
 
 function formatTime(value: string, locale?: string) {
     const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString(locale, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString(toIntlLocale(locale), { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }

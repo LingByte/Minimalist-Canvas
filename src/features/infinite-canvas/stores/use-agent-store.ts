@@ -97,7 +97,7 @@ export const CANVAS_AGENT_PANEL_MOTION_MS = 500;
 export const useAgentStore = create<AgentStore>((set, get) => ({
     width: typeof window === "undefined" ? 440 : Number(localStorage.getItem("canvas-agent-panel-width")) || 440,
     panelOpen: false,
-    panelMounted: true,
+    panelMounted: false,
     panelClosing: false,
     canvasContext: null,
     url: typeof window === "undefined" ? "http://127.0.0.1:17371" : localStorage.getItem("canvas-agent-url") || "http://127.0.0.1:17371",
@@ -137,7 +137,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
         if (!get().panelMounted || get().panelClosing) return;
         set({ panelOpen: false, panelClosing: true });
         setTimeout(() => {
-            if (get().panelClosing) set({ panelClosing: false });
+            if (get().panelClosing) set({ panelMounted: false, panelClosing: false });
         }, CANVAS_AGENT_PANEL_MOTION_MS);
     },
     togglePanel: () => (get().panelOpen ? get().closePanel() : get().openPanel()),

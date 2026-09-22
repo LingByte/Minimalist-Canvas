@@ -2,6 +2,7 @@ import i18n from "@canvas/i18n";
 import { kvStore } from "@canvas/services/fs-store";
 import type { ReferenceImage } from "@canvas/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@canvas/types/media";
+import { toIntlLocale } from "@/i18n/languages";
 
 /** Same store names the image/video workbenches already use. */
 export const IMAGE_GENERATION_LOG_STORE = "image_generation_logs";
@@ -95,7 +96,7 @@ export type LocalGenerationLogEntry =
     | ({ kind: "video" } & LocalVideoGenerationLog);
 
 function formatTime(ms: number) {
-    return new Date(ms).toLocaleString(i18n.resolvedLanguage, { hour12: false });
+    return new Date(ms).toLocaleString(toIntlLocale(i18n.resolvedLanguage), { hour12: false });
 }
 
 function serializeImageLog(log: LocalImageGenerationLog): LocalImageGenerationLog {
@@ -297,8 +298,8 @@ export async function syncCanvasVideoToLocalLogs(input: {
             size,
             vquality: resolution,
             videoSeconds: seconds,
-            videoGenerateAudio: input.config?.generate_audio ?? input.config?.videoGenerateAudio,
-            videoWatermark: input.config?.watermark ?? input.config?.videoWatermark,
+            videoGenerateAudio: String(input.config?.generate_audio ?? input.config?.videoGenerateAudio ?? "true"),
+            videoWatermark: String(input.config?.watermark ?? input.config?.videoWatermark ?? "false"),
         },
         references: [],
         durationMs: input.durationMs || 0,

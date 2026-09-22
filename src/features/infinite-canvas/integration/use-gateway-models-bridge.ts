@@ -23,8 +23,6 @@ let modelSyncInFlight: Promise<void> | null = null
 function shouldSyncModelsForPath(pathname: string) {
   const path = pathname.replace(/\/+$/, '') || '/'
   return (
-    path === '/' ||
-    path.endsWith('/home') ||
     path.includes('/image') ||
     path.includes('/video') ||
     path.includes('/canvas') ||

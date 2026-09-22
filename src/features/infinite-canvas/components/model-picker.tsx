@@ -112,7 +112,8 @@ export function ModelPicker({ config, value, onChange, capability, className, fu
             {open ? (
                 <div
                     className={cn(
-                        "absolute left-0 z-[1200] w-96 max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border border-border/70 bg-popover p-1 shadow-xl",
+                        "absolute left-0 z-[1200] overflow-x-hidden overflow-y-hidden rounded-xl border border-border/70 bg-popover p-1 shadow-xl",
+                        fullWidth ? "w-full min-w-[22rem] max-w-[calc(100vw-24px)]" : "w-[min(28rem,calc(100vw-24px))]",
                         placement === "top" ? "bottom-[calc(100%+6px)]" : "top-[calc(100%+6px)]",
                     )}
                     onPointerDown={(event) => event.stopPropagation()}
@@ -141,7 +142,7 @@ export function ModelPicker({ config, value, onChange, capability, className, fu
                             />
                         </label>
                     </div>
-                    <div className="thin-scrollbar max-h-64 overflow-y-auto p-0.5">
+                    <div className="thin-scrollbar max-h-64 overflow-x-hidden overflow-y-auto p-0.5">
                         {filtered.length ? (
                             filtered.map((model) => {
                                 const selected = model === current;
@@ -186,8 +187,8 @@ function ModelLabel({ config, model }: { config: AiConfig; model: string }) {
         <span className="flex min-w-0 flex-1 items-start gap-2 overflow-hidden">
             <ModelIcon model={model} />
             <span className="min-w-0 flex-1">
-                <span className="block truncate">{modelOptionLabel(config, model)}</span>
-                {description ? <span className="mt-0.5 block truncate text-xs font-normal text-stone-400 dark:text-stone-500">{description}</span> : null}
+                <span className="block break-words leading-snug">{modelOptionLabel(config, model)}</span>
+                {description ? <span className="mt-0.5 block break-words text-xs font-normal leading-snug text-stone-400 dark:text-stone-500">{description}</span> : null}
             </span>
         </span>
     );

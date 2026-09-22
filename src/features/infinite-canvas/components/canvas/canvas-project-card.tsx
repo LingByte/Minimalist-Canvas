@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button, Input } from "antd";
 import { useTranslation } from "react-i18next";
 
+import { toIntlLocale } from "@/i18n/languages";
+
 import { CanvasProjectPreview } from "@canvas/components/canvas/canvas-project-preview";
 import { cn } from "@canvas/lib/utils";
 import { useCanvasStore, type CanvasProject } from "@canvas/stores/canvas/use-canvas-store";
@@ -95,7 +97,7 @@ export function CanvasProjectCard({ project }: { project: CanvasProject }) {
                 <div className="mt-auto flex items-center justify-between gap-2">
                     <p className="truncate text-[11px] text-stone-500">
                         {t("canvas.project.updated", {
-                            date: new Date(project.updatedAt).toLocaleString(i18n.resolvedLanguage, {
+                            date: new Date(project.updatedAt).toLocaleString(toIntlLocale(i18n.resolvedLanguage), {
                                 month: "2-digit",
                                 day: "2-digit",
                                 hour: "2-digit",

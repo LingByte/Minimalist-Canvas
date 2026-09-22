@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { ConfigProvider, Switch } from "antd";
 import { useTranslation } from "react-i18next";
 
@@ -26,6 +26,8 @@ const gptImage2QualityOptions = [
     { value: "medium", labelKey: "medium" },
 ];
 const DIMENSION_STEP = 16;
+const SEEDREAM_MIN_PIXELS = 3_686_400;
+const SEEDREAM_FALLBACK_SIZE = "2048x2048";
 
 const aspectOptions = [
     { value: "1:1", label: "1:1", width: 1024, height: 1024, icon: "square" },
@@ -46,6 +48,30 @@ const aspectOptions = [
 export const imageQualityOptions = qualityOptions.map((item) => ({ value: item.value, get label() { return i18n.t(`settingsPanels.common.${item.labelKey}`); } }));
 export const imageAspectOptions = aspectOptions.map((item) => ({ value: item.size || item.value, label: item.label }));
 
+function isSeedreamImageModel(modelName: string) {
+    return modelName.toLowerCase().includes("seedream");
+}
+
+function aspectOptionPixels(item: (typeof aspectOptions)[number]) {
+    return item.width * item.height;
+}
+
+function visibleAspectOptions(modelName: string) {
+    if (!isSeedreamImageModel(modelName)) return aspectOptions;
+    return aspectOptions.filter((item) => item.value === "auto" || aspectOptionPixels(item) >= SEEDREAM_MIN_PIXELS);
+}
+
+function seedreamSizeAllowed(size: string) {
+    if (!size || size.toLowerCase() === "auto") return true;
+    const match = size.match(/^(\d+)x(\d+)$/i);
+    if (!match) return false;
+    return Number(match[1]) * Number(match[2]) >= SEEDREAM_MIN_PIXELS;
+}
+
+export function imageAspectOptionsForModel(modelName: string) {
+    return visibleAspectOptions(modelName).map((item) => ({ value: item.size || item.value, label: item.label }));
+}
+
 type ImageSettingsPanelProps = {
     config: AiConfig;
     onConfigChange: (key: "quality" | "size" | "count" | "background" | "imageResolution", value: string) => void;
@@ -54,9 +80,11 @@ type ImageSettingsPanelProps = {
     className?: string;
     maxCount?: number;
     quickCount?: number;
+    /** Denser Jimeng-style layout for floating workbench popover. */
+    compact?: boolean;
 };
 
-export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5", maxCount = 15, quickCount = 10 }: ImageSettingsPanelProps) {
+export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5", maxCount = 15, quickCount = 10, compact = false }: ImageSettingsPanelProps) {
     const { t } = useTranslation();
     const [snapDimensionToStep, setSnapDimensionToStep] = useState(true);
     // Canvas puts the active image model in `model`; workbench should pass the same via config.model.
@@ -72,6 +100,7 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                 theme={theme}
                 showTitle={showTitle}
                 className={className}
+                compact={compact}
             />
         );
     }
@@ -80,10 +109,15 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
     const count = Math.max(1, Math.min(maxCount, Math.floor(Math.abs(Number(config.count)) || 1)));
     const activeSize = config.size || "auto";
     const transparentBackground = config.background === "transparent";
-    const selectedAspect = aspectOptions.find((item) => (item.size || item.value) === activeSize || item.value === activeSize);
-    const dimensions = readSizeDimensions(activeSize, selectedAspect || aspectOptions[0]);
+    const sizeChoices = visibleAspectOptions(modelName);
+    const selectedAspect = sizeChoices.find((item) => (item.size || item.value) === activeSize || item.value === activeSize);
+    const dimensions = readSizeDimensions(activeSize, selectedAspect || sizeChoices[0] || aspectOptions[0]);
+    useEffect(() => {
+        if (!isSeedreamImageModel(modelName) || seedreamSizeAllowed(activeSize)) return;
+        onConfigChange("size", SEEDREAM_FALLBACK_SIZE);
+    }, [activeSize, modelName, onConfigChange]);
     const selectAspect = (value: string) => {
-        const option = aspectOptions.find((item) => item.value === value);
+        const option = sizeChoices.find((item) => item.value === value);
         onConfigChange("size", option?.size || option?.value || "auto");
     };
     const updateDimension = (key: "width" | "height", value: number | null) => {
@@ -115,6 +149,7 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                         ))}
                     </div>
                 </div>
+                {compact ? null : (
                 <div className="space-y-2.5">
                     <div className="flex items-center justify-between gap-3">
                         <SettingTitle color={theme.node.muted}>{t("settingsPanels.image.size")}</SettingTitle>
@@ -133,24 +168,26 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                         <DimensionInput prefix="H" value={dimensions.height} disabled={activeSize === "auto"} theme={theme} alignToStep={snapDimensionToStep} onChange={(value) => updateDimension("height", value)} />
                     </div>
                 </div>
+                )}
                 <div className="space-y-2.5">
                     <SettingTitle color={theme.node.muted}>{t("settingsPanels.image.aspectRatio")}</SettingTitle>
                     <div className="grid grid-cols-4 gap-2.5">
-                        {aspectOptions.map((item) => (
+                        {sizeChoices.map((item) => (
                             <button
                                 key={item.value}
                                 type="button"
-                                className="flex h-[72px] cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border bg-transparent text-sm transition hover:opacity-80"
+                                className={compact ? "flex h-9 cursor-pointer items-center justify-center rounded-lg border bg-transparent text-xs transition hover:opacity-80" : "flex h-[72px] cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border bg-transparent text-sm transition hover:opacity-80"}
                                 style={{ borderColor: selectedAspect?.value === item.value ? theme.node.text : theme.node.stroke, background: "transparent", color: theme.node.text }}
                                 onMouseDown={(event) => event.stopPropagation()}
                                 onClick={() => selectAspect(item.value)}
                             >
-                                <AspectIcon type={item.icon} width={item.width} height={item.height} color={theme.node.text} />
+                                {compact ? null : <AspectIcon type={item.icon} width={item.width} height={item.height} color={theme.node.text} />}
                                 <span>{item.label}</span>
                             </button>
                         ))}
                     </div>
                 </div>
+                {compact ? null : (
                 <div className="flex items-center justify-between gap-3">
                     <div className="space-y-0.5">
                         <SettingTitle color={theme.node.muted}>{t("settingsPanels.image.transparent")}</SettingTitle>
@@ -162,15 +199,16 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                         <Switch size="small" checked={transparentBackground} onChange={(checked) => onConfigChange("background", checked ? "transparent" : "")} />
                     </span>
                 </div>
+                )}
                 <div className="space-y-2.5">
                     <SettingTitle color={theme.node.muted}>{t("settingsPanels.image.count")}</SettingTitle>
                     <div className="grid grid-cols-4 gap-2.5">
                         {Array.from({ length: quickCount }, (_, index) => index + 1).map((value) => (
                             <OptionPill key={value} selected={count === value} theme={theme} onClick={() => onConfigChange("count", String(value))}>
-                                {t("settingsPanels.image.images", { count: value })}
+                                {compact ? value : t("settingsPanels.image.images", { count: value })}
                             </OptionPill>
                         ))}
-                        <CountInput value={count} max={maxCount} theme={theme} onChange={(value) => onConfigChange("count", String(value || 1))} />
+                        {compact ? null : <CountInput value={count} max={maxCount} theme={theme} onChange={(value) => onConfigChange("count", String(value || 1))} />}
                     </div>
                 </div>
             </div>
@@ -185,6 +223,7 @@ function ContractImageSettingsPanel({
     theme,
     showTitle,
     className,
+    compact = false,
 }: {
     config: AiConfig;
     modelName: string;
@@ -192,6 +231,7 @@ function ContractImageSettingsPanel({
     theme: CanvasTheme;
     showTitle: boolean;
     className: string;
+    compact?: boolean;
 }) {
     const { t } = useTranslation();
     const showQuality = isGptImage2ContractModel(modelName);
@@ -243,12 +283,12 @@ function ContractImageSettingsPanel({
                                 <button
                                     key={item}
                                     type="button"
-                                    className="flex h-[72px] cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border bg-transparent text-sm transition hover:opacity-80"
+                                    className={compact ? "flex h-9 cursor-pointer items-center justify-center rounded-lg border bg-transparent text-xs transition hover:opacity-80" : "flex h-[72px] cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border bg-transparent text-sm transition hover:opacity-80"}
                                     style={{ borderColor: aspectRatio === item ? theme.node.text : theme.node.stroke, background: "transparent", color: theme.node.text }}
                                     onMouseDown={(event) => event.stopPropagation()}
                                     onClick={() => onConfigChange("size", item)}
                                 >
-                                    <AspectIcon type={w === h ? "square" : w > h ? "landscape" : "portrait"} width={w * 100} height={h * 100} color={theme.node.text} />
+                                    {compact ? null : <AspectIcon type={w === h ? "square" : w > h ? "landscape" : "portrait"} width={w * 100} height={h * 100} color={theme.node.text} />}
                                     <span>{item}</span>
                                 </button>
                             );

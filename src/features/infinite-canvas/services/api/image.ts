@@ -126,6 +126,8 @@ const IMAGE_MAX_PIXELS = 8294400;
 const IMAGE_MAX_EDGE = 3840;
 const IMAGE_MAX_RATIO = 3;
 const IMAGE_OUTPUT_FORMAT = "png";
+const SEEDREAM_MIN_PIXELS = 3_686_400;
+const SEEDREAM_FALLBACK_SIZE = "2048x2048";
 
 const GEMINI_SUPPORTED_RATIOS = ["1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9"];
 const GEMINI_IMAGE_SIZE_BY_QUALITY: Record<string, string> = { low: "1K", medium: "2K", high: "4K", standard: "1K", hd: "2K" };
@@ -196,16 +198,32 @@ function validateImageSize(width: number, height: number) {
     if (pixels < IMAGE_MIN_PIXELS || pixels > IMAGE_MAX_PIXELS) throw new Error(apiText("imagePixelLimit"));
 }
 
-function resolveRequestSize(quality: string | undefined, size: string) {
+function resolveRequestSize(quality: string | undefined, size: string, model?: string) {
     const value = size.trim();
     if (!value || value.toLowerCase() === "auto") return undefined;
     const dimensions = parseImageDimensions(value);
     if (dimensions) {
-        validateImageSize(dimensions.width, dimensions.height);
-        return `${dimensions.width}x${dimensions.height}`;
+        const fitted = fitSeedreamDimensions(model, dimensions.width, dimensions.height);
+        validateImageSize(fitted.width, fitted.height);
+        return `${fitted.width}x${fitted.height}`;
     }
-    if (value.includes(":")) return resolveSize(quality, value);
+    if (value.includes(":")) {
+        const resolved = resolveSize(quality, value);
+        if (!isSeedreamImageModel(model)) return resolved;
+        const fitted = parseImageDimensions(resolved);
+        if (!fitted || fitted.width * fitted.height >= SEEDREAM_MIN_PIXELS) return resolved;
+        return SEEDREAM_FALLBACK_SIZE;
+    }
     throw new Error(apiText("invalidImageSizeFormat"));
+}
+
+function isSeedreamImageModel(model: string | undefined) {
+    return (model || "").toLowerCase().includes("seedream");
+}
+
+function fitSeedreamDimensions(model: string | undefined, width: number, height: number) {
+    if (!isSeedreamImageModel(model) || width * height >= SEEDREAM_MIN_PIXELS) return { width, height };
+    return parseImageDimensions(SEEDREAM_FALLBACK_SIZE) || { width: 2048, height: 2048 };
 }
 
 function resolveGeminiImageConfig(config: AiConfig) {
@@ -846,7 +864,7 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
     const script = resolveModelScript(config, config.model || config.imageModel);
     if (script) {
         const quality = normalizeQuality(config.quality);
-        const requestSize = resolveRequestSize(quality, config.size);
+        const requestSize = resolveRequestSize(quality, config.size, requestConfig.model);
         const background = normalizeBackground(config.background);
         try {
             const result = await runModelPlugin({
@@ -878,7 +896,7 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
         }
     }
     const quality = normalizeQuality(config.quality);
-    const requestSize = resolveRequestSize(quality, config.size);
+    const requestSize = resolveRequestSize(quality, config.size, requestConfig.model);
     const background = normalizeBackground(config.background);
     try {
         const response = await axios.post<ImageApiResponse>(
@@ -912,7 +930,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     const script = resolveModelScript(config, config.model || config.imageModel);
     if (script) {
         const quality = normalizeQuality(config.quality);
-        const requestSize = resolveRequestSize(quality, config.size);
+        const requestSize = resolveRequestSize(quality, config.size, requestConfig.model);
         const background = normalizeBackground(config.background);
         const refs = await Promise.all(references.map((image) => imageToDataUrl(image)));
         try {
@@ -948,7 +966,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     }
 
     const quality = normalizeQuality(config.quality);
-    const requestSize = resolveRequestSize(quality, config.size);
+    const requestSize = resolveRequestSize(quality, config.size, requestConfig.model);
     const background = normalizeBackground(config.background);
     const formData = new FormData();
     formData.set("model", requestConfig.model);

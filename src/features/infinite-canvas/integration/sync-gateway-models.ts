@@ -66,7 +66,7 @@ function normalizeCatalog(items: CanvasCatalogModel[]): ChannelModel[] {
     const name = item.id?.trim()
     if (!name || seen.has(name)) continue
     seen.add(name)
-    const capability = normalizeCapability(item.capability)
+    const capability = capabilityFromCatalog(name, item.capability)
     const description = item.description?.trim() || undefined
     models.push({ name, capability, description })
   }
@@ -101,6 +101,14 @@ function normalizeCapability(value: string | undefined): ModelCapability {
     return value
   }
   return 'text'
+}
+
+function capabilityFromCatalog(name: string, remote: string | undefined): ModelCapability {
+  const guessed = guessCapability(name)
+  // The gateway still tags every MiniMax name as video. Chat M-series stay text.
+  if (guessed === 'text' && /minimax-m\d/i.test(name)) return 'text'
+  const tagged = normalizeCapability(remote)
+  return tagged === 'text' ? guessed : tagged
 }
 
 function pickDefaultModel(

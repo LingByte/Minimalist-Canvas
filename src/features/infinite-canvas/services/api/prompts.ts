@@ -2,6 +2,7 @@ import { api } from "@/lib/api";
 
 import type { PromptSource } from "./prompt-source-presets";
 import { createPromptSource } from "./prompt-source-presets";
+import { toIntlLocale } from "@/i18n/languages";
 
 export type Prompt = {
   id: string;
@@ -226,5 +227,5 @@ export function formatPromptDate(value: string, locale?: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? ""
-    : new Intl.DateTimeFormat(locale, { year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+    : new Intl.DateTimeFormat(toIntlLocale(locale), { year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
 }

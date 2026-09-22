@@ -13,7 +13,7 @@ import { getGenerationAssetByClientId } from "@canvas/services/api/generation-as
 import { getMediaBlob, resolveMediaUrl, setMediaBlob } from "@canvas/services/file-storage";
 import { getImageBlob, resolveImageUrl, setImageBlob } from "@canvas/services/image-storage";
 import { isTauri } from "@canvas/services/fs-store";
-import { isSignedUrlExpired, signedUrlExpiresAtMs } from "@canvas/lib/signed-url";
+import { isSignedUrlExpired, signedUrlExpiresAtMs, isUnstableMediaUrl } from "@canvas/lib/signed-url";
 import { CanvasNodeType, type CanvasNodeData, type CanvasNodeImage, type Position } from "@canvas/types/canvas";
 import type { CanvasNodeContext, CanvasPluginHost } from "@canvas/types/canvas-plugin";
 import type { CanvasResourceReference } from "@canvas/lib/canvas/canvas-resource-references";
@@ -139,8 +139,10 @@ export const CanvasNode = React.memo(function CanvasNode({
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [titleDraft, setTitleDraft] = useState(data.title || "");
     const hasImageContent = data.type === CanvasNodeType.Image && Boolean(data.metadata?.content);
-    const hasVideoContent = data.type === CanvasNodeType.Video && Boolean(data.metadata?.content);
-    const hasAudioContent = data.type === CanvasNodeType.Audio && Boolean(data.metadata?.content);
+    const hasVideoContent =
+        data.type === CanvasNodeType.Video && Boolean(data.metadata?.content || data.metadata?.storageKey);
+    const hasAudioContent =
+        data.type === CanvasNodeType.Audio && Boolean(data.metadata?.content || data.metadata?.storageKey);
     const isGroup = data.type === CanvasNodeType.Group;
     const batchCount = data.type === CanvasNodeType.Image ? data.metadata?.images?.length || 0 : 0;
     const isBatchRoot = batchCount > 1;
@@ -831,6 +833,7 @@ async function healMediaLocally(storageKey: string, url: string) {
  */
 function usePlayableMediaSrc(node: CanvasNodeData): { src: string; expired: boolean; markBroken: () => void } {
     const remote = typeof node.metadata?.content === "string" ? node.metadata.content : "";
+    const unstable = isUnstableMediaUrl(remote);
     const expired = isSignedUrlExpired(remote);
     const storageKey = typeof node.metadata?.storageKey === "string" ? node.metadata.storageKey : "";
     const [broken, setBroken] = useState(false);
@@ -841,21 +844,28 @@ function usePlayableMediaSrc(node: CanvasNodeData): { src: string; expired: bool
         setFallback("");
     }, [remote, storageKey]);
 
+    // Prefer durable sources as soon as an ephemeral upstream URL is detected,
+    // not only after the browser fails to load it.
+    useEffect(() => {
+        if (!remote || !unstable || expired) return;
+        setBroken(true);
+    }, [remote, unstable, expired]);
+
     // Swap off the signed URL just before it expires so the browser never
     // re-requests a dead link while the node stays mounted.
     useEffect(() => {
-        if (!remote || expired) return;
+        if (!remote || expired || unstable) return;
         const expiresAt = signedUrlExpiresAtMs(remote);
         if (expiresAt === null) return;
         const delay = Math.max(0, expiresAt - Date.now() - 60_000);
         const timer = window.setTimeout(() => setBroken(true), delay);
         return () => window.clearTimeout(timer);
-    }, [remote, expired]);
+    }, [remote, expired, unstable]);
 
     useEffect(() => {
         if (fallback) return;
         if (!remote && !storageKey) return;
-        if (remote && !expired && !broken) return;
+        if (remote && !unstable && !expired && !broken) return;
         let alive = true;
         void (async () => {
             if (storageKey) {
@@ -868,8 +878,8 @@ function usePlayableMediaSrc(node: CanvasNodeData): { src: string; expired: bool
             }
             const asset = await getGenerationAssetByClientId(node.id).catch(() => null);
             const fresh = (asset?.assets || [])
-                .map((item) => item.url)
-                .find((url): url is string => Boolean(url && !isSignedUrlExpired(url)));
+                .map((item) => item.url || item.backup_url)
+                .find((url): url is string => Boolean(url && !isUnstableMediaUrl(url)));
             if (alive && fresh) {
                 setFallback(fresh);
                 void healMediaLocally(storageKey, fresh);
@@ -878,9 +888,9 @@ function usePlayableMediaSrc(node: CanvasNodeData): { src: string; expired: bool
         return () => {
             alive = false;
         };
-    }, [node.id, storageKey, remote, expired, broken, fallback]);
+    }, [node.id, storageKey, remote, unstable, expired, broken, fallback]);
 
-    const src = remote && !expired && !broken ? remote : fallback;
+    const src = remote && !unstable && !expired && !broken ? remote : fallback;
     return { src, expired: !src && Boolean(remote), markBroken: () => setBroken(true) };
 }
 
@@ -889,6 +899,7 @@ function usePlayableMediaSrc(node: CanvasNodeData): { src: string; expired: bool
  * fresh remote URL → local blob (storageKey) → refetched generation asset (healed locally).
  */
 function useResolvedImageSrc(content: string, storageKey: string, nodeId: string): string {
+    const unstable = isUnstableMediaUrl(content);
     const expired = isSignedUrlExpired(content);
     const [resolved, setResolved] = useState("");
 
@@ -897,7 +908,7 @@ function useResolvedImageSrc(content: string, storageKey: string, nodeId: string
     }, [content, storageKey]);
 
     useEffect(() => {
-        if ((content && !expired) || (!storageKey && !nodeId)) return;
+        if ((content && !unstable && !expired) || (!storageKey && !nodeId)) return;
         let alive = true;
         void (async () => {
             if (storageKey) {
@@ -911,8 +922,8 @@ function useResolvedImageSrc(content: string, storageKey: string, nodeId: string
             if (!nodeId) return;
             const asset = await getGenerationAssetByClientId(nodeId).catch(() => null);
             const fresh = (asset?.assets || [])
-                .map((item) => item.url)
-                .find((url): url is string => Boolean(url && !isSignedUrlExpired(url)));
+                .map((item) => item.url || item.backup_url)
+                .find((url): url is string => Boolean(url && !isUnstableMediaUrl(url)));
             if (!alive || !fresh) return;
             setResolved(fresh);
             void healMediaLocally(storageKey, fresh);
@@ -920,9 +931,9 @@ function useResolvedImageSrc(content: string, storageKey: string, nodeId: string
         return () => {
             alive = false;
         };
-    }, [content, storageKey, nodeId, expired]);
+    }, [content, storageKey, nodeId, unstable, expired]);
 
-    return content && !expired ? content : resolved;
+    return content && !unstable && !expired ? content : resolved;
 }
 
 function VideoNodeContent({ node, theme, contentInteractive = true }: NodeContentRendererProps) {

@@ -1,0 +1,579 @@
+import { memo, useEffect, useMemo, useState } from "react";
+import { App, Checkbox, Empty, Input, Modal, Popconfirm, Spin, Tag } from "antd";
+import { saveAs } from "file-saver";
+import { Download, Image as ImageIcon, Loader2, Plus, Search, Trash2, Video } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { toIntlLocale } from "@/i18n/languages";
+
+import type { CanvasTheme } from "@canvas/lib/canvas-theme";
+import { cn } from "@canvas/lib/utils";
+import {
+    deleteGenerationAssetsByClientIds,
+    type GenerationAsset,
+    type GenerationAssetFile,
+    type GenerationAssetKind,
+} from "@canvas/services/api/generation-assets";
+import { useGenerationLogsBadgeStore } from "@canvas/stores/use-generation-logs-badge-store";
+import { uploadImage } from "@canvas/services/image-storage";
+import { uploadMediaFile } from "@canvas/services/file-storage";
+import { isOwnObjectStorageUrl } from "@canvas/services/object-storage";
+
+import type { InsertAssetPayload } from "./asset-picker-modal";
+
+type KindFilter = "all" | GenerationAssetKind;
+
+type Props = {
+    onInsert: (payload: InsertAssetPayload) => void;
+    theme: CanvasTheme;
+};
+
+function createdAtMs(value: number) {
+    return value > 1e12 ? value : value * 1000;
+}
+
+function formatLogTime(value: number, locale?: string) {
+    return new Date(createdAtMs(value)).toLocaleString(toIntlLocale(locale), { hour12: false });
+}
+
+function mediaFiles(asset: GenerationAsset) {
+    const files = (asset.assets || []).filter((item) => Boolean(item.url?.trim()));
+    if (files.length <= 1) return files;
+    // Videos (and accidental remirror stacks) should surface one preferred playable URL.
+    if (asset.kind === "video") {
+        return [preferMediaFile(files)];
+    }
+    return files;
+}
+
+function preferMediaFile(files: NonNullable<GenerationAsset["assets"]>) {
+    const score = (file: (typeof files)[number]) => {
+        let value = 0;
+        const url = (file.url || "").toLowerCase();
+        if (/^https?:\/\//.test(url)) value += 50;
+        if (url.includes("/ailingecho/") || url.includes("/canvas/") || url.includes("/api/storage/")) value += 40;
+        if (file.storage_key) value += 20;
+        if (file.bytes) value += 5;
+        if (file.width && file.height) value += 2;
+        return value;
+    };
+    return files.reduce((best, file) => (score(file) > score(best) ? file : best), files[0]);
+}
+
+function logClientId(asset: GenerationAsset) {
+    return asset.client_id?.trim() || `remote:${asset.id}`;
+}
+
+function safeDownloadName(value: string) {
+    return value.replace(/[\\/:*?"<>|]+/g, "_").replace(/\s+/g, " ").trim().slice(0, 80) || "generation";
+}
+
+function mediaExtension(file: GenerationAssetFile, kind: GenerationAssetKind) {
+    const mime = (file.mime_type || "").toLowerCase();
+    if (mime.includes("png")) return "png";
+    if (mime.includes("jpeg") || mime.includes("jpg")) return "jpg";
+    if (mime.includes("webp")) return "webp";
+    if (mime.includes("gif")) return "gif";
+    if (mime.includes("mp4")) return "mp4";
+    if (mime.includes("webm")) return "webm";
+    if (mime.includes("quicktime") || mime.includes("mov")) return "mov";
+    const fromUrl = file.url?.match(/\.([a-z0-9]{2,5})(?:\?|#|$)/i)?.[1];
+    if (fromUrl) return fromUrl.toLowerCase();
+    return kind === "video" ? "mp4" : "png";
+}
+
+async function downloadMediaFile(file: GenerationAssetFile, filename: string) {
+    const url = file.url?.trim();
+    if (!url) throw new Error("missing url");
+    if (url.startsWith("data:") || url.startsWith("blob:")) {
+        saveAs(url, filename);
+        return;
+    }
+    // Open the CDN URL directly in a new tab.
+    window.open(url, "_blank", "noopener,noreferrer");
+}
+
+export const CanvasGenerationLogsTab = memo(function CanvasGenerationLogsTab({ onInsert, theme }: Props) {
+    const { message } = App.useApp();
+    const { t, i18n } = useTranslation();
+    const items = useGenerationLogsBadgeStore((state) => state.items);
+    const loading = useGenerationLogsBadgeStore((state) => state.loading);
+    const loadingMore = useGenerationLogsBadgeStore((state) => state.loadingMore);
+    const hasMore = useGenerationLogsBadgeStore((state) => state.hasMore);
+    const refresh = useGenerationLogsBadgeStore((state) => state.refresh);
+    const loadMore = useGenerationLogsBadgeStore((state) => state.loadMore);
+    const markSeen = useGenerationLogsBadgeStore((state) => state.markSeen);
+    const [keyword, setKeyword] = useState("");
+    const [kindFilter, setKindFilter] = useState<KindFilter>("all");
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [preview, setPreview] = useState<GenerationAsset | null>(null);
+    const [downloading, setDownloading] = useState(false);
+    const [insertingId, setInsertingId] = useState<string | null>(null);
+
+    useEffect(() => {
+        markSeen();
+        void refresh();
+    }, [markSeen, refresh]);
+
+    useEffect(() => {
+        markSeen();
+    }, [items, markSeen]);
+
+    const filtered = useMemo(() => {
+        const query = keyword.trim().toLowerCase();
+        return items
+            .filter((item) => kindFilter === "all" || item.kind === kindFilter)
+            .filter((item) => {
+                if (!query) return true;
+                return [item.title, item.prompt, item.model, item.source].filter(Boolean).join(" ").toLowerCase().includes(query);
+            })
+            .sort((a, b) => createdAtMs(b.created_at) - createdAtMs(a.created_at));
+    }, [items, keyword, kindFilter]);
+
+    const allSelected = Boolean(filtered.length) && filtered.every((item) => selectedIds.includes(logClientId(item)));
+
+    const toggleAll = () => {
+        setSelectedIds(allSelected ? [] : filtered.map(logClientId));
+    };
+
+    const toggleSelected = (id: string, checked: boolean) => {
+        setSelectedIds((prev) => (checked ? [...prev, id] : prev.filter((item) => item !== id)));
+    };
+
+    const handleDeleteSelected = async () => {
+        if (!selectedIds.length) return;
+        const hide = message.loading(t("common.delete"), 0);
+        try {
+            await deleteGenerationAssetsByClientIds(selectedIds);
+            await refresh();
+            markSeen();
+            setSelectedIds([]);
+            if (preview && selectedIds.includes(logClientId(preview))) setPreview(null);
+            message.success(t("canvas.sidePanel.logsDeleted", { count: selectedIds.length }));
+        } catch {
+            message.error(t("canvas.sidePanel.addFailed"));
+        } finally {
+            hide();
+        }
+    };
+
+    const handleInsert = async (asset: GenerationAsset) => {
+        const files = mediaFiles(asset);
+        if (!files.length) {
+            message.warning(t("canvas.sidePanel.cannotInsertLog"));
+            return;
+        }
+        const id = logClientId(asset);
+        if (insertingId) return;
+        const title = asset.title || asset.prompt || t("workbench.untitled");
+        setInsertingId(id);
+        const hide = message.loading(t("canvas.sidePanel.insertingLog"), 0);
+        try {
+            if (asset.kind === "video") {
+                const file = files[0];
+                const url = String(file.url || "").trim();
+                if (!url) throw new Error("empty");
+                // Already on our object storage — insert without re-download / re-upload.
+                if (await isOwnObjectStorageUrl(url)) {
+                    onInsert({
+                        kind: "video",
+                        url,
+                        storageKey: file.storage_key || undefined,
+                        title,
+                        width: file.width,
+                        height: file.height,
+                    });
+                } else {
+                    const blob = await (await fetch(url)).blob();
+                    if (!blob.size) throw new Error("empty");
+                    const stored = await uploadMediaFile(
+                        new File([blob], `generation.${file.mime_type?.includes("webm") ? "webm" : "mp4"}`, {
+                            type: blob.type || file.mime_type || "video/mp4",
+                        }),
+                        "video",
+                    );
+                    onInsert({
+                        kind: "video",
+                        url: stored.url,
+                        storageKey: stored.storageKey,
+                        title,
+                        width: stored.width || file.width,
+                        height: stored.height || file.height,
+                    });
+                }
+            } else {
+                for (const [index, file] of files.entries()) {
+                    const url = String(file.url || "").trim();
+                    if (!url) throw new Error("empty");
+                    if (await isOwnObjectStorageUrl(url)) {
+                        onInsert({
+                            kind: "image",
+                            dataUrl: url,
+                            storageKey: file.storage_key || undefined,
+                            title: files.length > 1 ? `${title} ${index + 1}` : title,
+                        });
+                        continue;
+                    }
+                    const blob = await (await fetch(url)).blob();
+                    if (!blob.size) throw new Error("empty");
+                    const stored = await uploadImage(new File([blob], "generation.png", { type: blob.type || file.mime_type || "image/png" }));
+                    onInsert({
+                        kind: "image",
+                        dataUrl: stored.url,
+                        storageKey: stored.storageKey,
+                        title: files.length > 1 ? `${title} ${index + 1}` : title,
+                    });
+                }
+            }
+            message.success(t("canvas.sidePanel.inserted"));
+        } catch (error) {
+            console.error(error);
+            message.error(t("canvas.sidePanel.insertLogFailed"));
+        } finally {
+            hide();
+            setInsertingId(null);
+        }
+    };
+
+    const handleDownload = async (asset: GenerationAsset, onlyFile?: GenerationAssetFile) => {
+        const files = onlyFile ? [onlyFile] : mediaFiles(asset);
+        if (!files.length || !files[0]?.url) {
+            message.warning(t("canvas.sidePanel.cannotDownloadLog"));
+            return;
+        }
+        const base = safeDownloadName(asset.title || asset.prompt || t("workbench.untitled"));
+        setDownloading(true);
+        try {
+            for (const [index, file] of files.entries()) {
+                const ext = mediaExtension(file, asset.kind);
+                const filename = files.length > 1 ? `${base}-${index + 1}.${ext}` : `${base}.${ext}`;
+                await downloadMediaFile(file, filename);
+            }
+            message.info(t("canvas.sidePanel.logDownloadHint"));
+        } catch {
+            message.error(t("canvas.sidePanel.logDownloadFailed"));
+        } finally {
+            setDownloading(false);
+        }
+    };
+
+    return (
+        <div className="flex h-full flex-col">
+            <div className="px-3 pb-2 pt-1">
+                <Input
+                    size="small"
+                    allowClear
+                    prefix={<Search className="size-3.5 text-stone-400" />}
+                    placeholder={t("canvas.sidePanel.searchLogs")}
+                    value={keyword}
+                    onChange={(e) => setKeyword(e.target.value)}
+                />
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2">
+                {(
+                    [
+                        { id: "all", label: t("common.all") },
+                        { id: "image", label: t("canvas.sidePanel.filter.image") },
+                        { id: "video", label: t("canvas.sidePanel.filter.video") },
+                    ] as const
+                ).map((option) => (
+                    <Tag.CheckableTag
+                        key={option.id}
+                        checked={kindFilter === option.id}
+                        className={cn("prompt-filter-tag", kindFilter === option.id && "is-active")}
+                        onChange={() => setKindFilter(option.id)}
+                    >
+                        {option.label}
+                    </Tag.CheckableTag>
+                ))}
+                <div className="ml-auto flex items-center gap-1">
+                    <button
+                        type="button"
+                        disabled={!filtered.length}
+                        onClick={toggleAll}
+                        className="rounded-md px-1.5 py-1 text-[11px] font-medium opacity-70 transition hover:bg-black/5 hover:opacity-100 disabled:opacity-30 dark:hover:bg-white/10"
+                    >
+                        {allSelected ? t("common.cancel") : t("workbench.selectAll")}
+                    </button>
+                    <Popconfirm
+                        title={t("workbench.deleteLogsConfirm", { count: selectedIds.length })}
+                        okText={t("common.delete")}
+                        cancelText={t("common.cancel")}
+                        okButtonProps={{ danger: true }}
+                        disabled={!selectedIds.length}
+                        onConfirm={() => void handleDeleteSelected()}
+                    >
+                        <button
+                            type="button"
+                            disabled={!selectedIds.length}
+                            className="grid size-7 place-items-center rounded-md text-red-500 opacity-80 transition hover:bg-red-500/10 hover:opacity-100 disabled:opacity-30"
+                            aria-label={t("workbench.deleteLogs")}
+                            title={t("workbench.deleteLogs")}
+                        >
+                            <Trash2 className="size-3.5" />
+                        </button>
+                    </Popconfirm>
+                </div>
+            </div>
+            <div
+                className="min-h-0 flex-1 overflow-y-auto px-2 pb-3"
+                onScroll={(event) => {
+                    const el = event.currentTarget;
+                    if (!hasMore || loadingMore || loading) return;
+                    if (el.scrollHeight - el.scrollTop - el.clientHeight < 96) void loadMore();
+                }}
+            >
+                {loading && !items.length ? (
+                    <div className="flex justify-center py-16">
+                        <Spin size="small" />
+                    </div>
+                ) : filtered.length ? (
+                    <div className="space-y-1.5">
+                        {filtered.map((asset) => {
+                            const id = logClientId(asset);
+                            return (
+                                <GenerationLogRow
+                                    key={`${asset.kind}:${id}`}
+                                    asset={asset}
+                                    selected={selectedIds.includes(id)}
+                                    theme={theme}
+                                    locale={i18n.resolvedLanguage}
+                                    downloading={downloading}
+                                    inserting={insertingId === id}
+                                    insertBusy={Boolean(insertingId)}
+                                    onSelectedChange={(checked) => toggleSelected(id, checked)}
+                                    onPreview={() => setPreview(asset)}
+                                    onInsert={() => void handleInsert(asset)}
+                                    onDownload={() => void handleDownload(asset)}
+                                />
+                            );
+                        })}
+                        {loadingMore ? (
+                            <div className="flex justify-center py-3">
+                                <Spin size="small" />
+                            </div>
+                        ) : null}
+                    </div>
+                ) : (
+                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("workbench.noLogs")} className="pt-16" />
+                )}
+            </div>
+            <Modal
+                open={Boolean(preview)}
+                title={preview?.title || preview?.model || t("workbench.logs")}
+                onCancel={() => setPreview(null)}
+                footer={null}
+                width={720}
+                destroyOnHidden
+            >
+                {preview ? (
+                    <GenerationLogPreview
+                        asset={preview}
+                        theme={theme}
+                        downloading={downloading}
+                        inserting={insertingId === logClientId(preview)}
+                        onInsert={() => void handleInsert(preview)}
+                        onDownload={() => void handleDownload(preview)}
+                        onDownloadFile={(file) => void handleDownload(preview, file)}
+                    />
+                ) : null}
+            </Modal>
+        </div>
+    );
+});
+
+function GenerationLogRow({
+    asset,
+    selected,
+    theme,
+    locale,
+    downloading,
+    inserting,
+    insertBusy,
+    onSelectedChange,
+    onPreview,
+    onInsert,
+    onDownload,
+}: {
+    asset: GenerationAsset;
+    selected: boolean;
+    theme: CanvasTheme;
+    locale?: string;
+    downloading: boolean;
+    inserting: boolean;
+    insertBusy: boolean;
+    onSelectedChange: (checked: boolean) => void;
+    onPreview: () => void;
+    onInsert: () => void;
+    onDownload: () => void;
+}) {
+    const { t } = useTranslation();
+    const files = mediaFiles(asset);
+    const cover = files[0]?.url;
+    const canUseMedia = files.length > 0;
+    const KindIcon = asset.kind === "video" ? Video : ImageIcon;
+    const statusColor = asset.status === "success" ? "blue" : asset.status === "pending" ? "processing" : "red";
+    const statusLabel =
+        asset.status === "success" ? t("workbench.success") : asset.status === "pending" ? t("workbench.generating") : t("workbench.failed");
+    const actionStyle = { color: theme.node.muted };
+
+    return (
+        <div className="group relative flex items-start gap-2 rounded-lg px-2 py-2 transition hover:bg-black/5 dark:hover:bg-white/5">
+            <Checkbox className="mt-2.5" checked={selected} onChange={(event) => onSelectedChange(event.target.checked)} />
+            <button type="button" onClick={onPreview} className="min-w-0 flex-1 text-left">
+                <div className="flex items-start gap-2.5">
+                    {cover ? (
+                        asset.kind === "video" ? (
+                            <video src={`${cover}#t=0.1`} muted playsInline preload="metadata" className="size-12 shrink-0 rounded-md object-cover" />
+                        ) : (
+                            <img src={cover} alt="" className="size-12 shrink-0 rounded-md object-cover" loading="lazy" />
+                        )
+                    ) : (
+                        <span className="grid size-12 shrink-0 place-items-center rounded-md" style={{ background: theme.node.panel }}>
+                            <KindIcon className="size-4 opacity-50" />
+                        </span>
+                    )}
+                    <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium leading-snug">{asset.title || asset.prompt || t("workbench.untitled")}</div>
+                        <div className="mt-0.5 line-clamp-2 text-xs leading-snug opacity-50">{asset.prompt || asset.model}</div>
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                            <Tag className="m-0 flex h-5 items-center rounded px-1.5 text-[10px] leading-none">
+                                {t(`canvas.sidePanel.filter.${asset.kind}`)}
+                            </Tag>
+                            <Tag className="m-0 flex h-5 items-center rounded px-1.5 text-[10px] leading-none" color={statusColor}>
+                                {statusLabel}
+                            </Tag>
+                            <Tag className="m-0 flex h-5 items-center rounded px-1.5 text-[10px] leading-none opacity-80">
+                                {formatLogTime(asset.created_at, locale)}
+                            </Tag>
+                        </div>
+                    </div>
+                </div>
+            </button>
+            <div className="mt-1 flex shrink-0 flex-col gap-0.5">
+                <button
+                    type="button"
+                    disabled={!canUseMedia || downloading || insertBusy}
+                    onClick={onDownload}
+                    className="grid size-7 place-items-center rounded-md opacity-70 transition hover:bg-black/10 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-25 dark:hover:bg-white/10"
+                    style={actionStyle}
+                    aria-label={t("common.download")}
+                    title={canUseMedia ? t("common.download") : t("canvas.sidePanel.cannotDownloadLog")}
+                >
+                    <Download className="size-3.5" />
+                </button>
+                <button
+                    type="button"
+                    disabled={!canUseMedia || insertBusy}
+                    onClick={onInsert}
+                    className="grid size-7 place-items-center rounded-md opacity-70 transition hover:bg-black/10 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-25 dark:hover:bg-white/10"
+                    style={actionStyle}
+                    aria-label={t("canvas.sidePanel.inserted")}
+                    aria-busy={inserting}
+                    title={
+                        inserting
+                            ? t("canvas.sidePanel.insertingLog")
+                            : canUseMedia
+                              ? t("canvas.sidePanel.inserted")
+                              : t("canvas.sidePanel.cannotInsertLog")
+                    }
+                >
+                    {inserting ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function GenerationLogPreview({
+    asset,
+    theme,
+    downloading,
+    inserting,
+    onInsert,
+    onDownload,
+    onDownloadFile,
+}: {
+    asset: GenerationAsset;
+    theme: CanvasTheme;
+    downloading: boolean;
+    inserting: boolean;
+    onInsert: () => void;
+    onDownload: () => void;
+    onDownloadFile: (file: GenerationAssetFile) => void;
+}) {
+    const { t } = useTranslation();
+    const files = mediaFiles(asset);
+    const canUseMedia = files.length > 0;
+    const primaryButtonStyle = {
+        background: theme.node.activeStroke,
+        color: theme.node.panel,
+    };
+    const secondaryButtonStyle = {
+        background: theme.node.fill,
+        color: theme.node.text,
+        borderColor: theme.node.stroke,
+    };
+
+    return (
+        <div className="space-y-3">
+            <div className="text-sm opacity-70 whitespace-pre-wrap break-words">{asset.prompt || t("workbench.untitled")}</div>
+            <div className="flex flex-wrap gap-1.5 text-xs opacity-60">
+                <span>{asset.model || "-"}</span>
+                <span>·</span>
+                <span>{t(`canvas.sidePanel.filter.${asset.kind}`)}</span>
+                <span>·</span>
+                <span>{t(`canvas.sidePanel.logSource.${asset.source}`)}</span>
+            </div>
+            {files.length ? (
+                <div className={cn("grid gap-2", asset.kind === "video" ? "grid-cols-1" : "grid-cols-2")}>
+                    {files.map((file, index) => (
+                        <div key={`${asset.id}-${index}`} className="group relative overflow-hidden rounded-lg">
+                            {asset.kind === "video" ? (
+                                <video src={file.url} controls className="max-h-80 w-full bg-black object-contain" />
+                            ) : (
+                                <img src={file.url} alt="" className="w-full object-cover" />
+                            )}
+                            <button
+                                type="button"
+                                disabled={downloading || inserting}
+                                onClick={() => onDownloadFile(file)}
+                                className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium shadow-sm opacity-0 transition group-hover:opacity-100 disabled:opacity-40"
+                                style={primaryButtonStyle}
+                                aria-label={t("common.download")}
+                                title={t("common.download")}
+                            >
+                                <Download className="size-3.5" />
+                                {t("common.download")}
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={asset.error || t("canvas.sidePanel.cannotInsertLog")} />
+            )}
+            <div className="flex justify-end gap-2">
+                <button
+                    type="button"
+                    disabled={!canUseMedia || downloading || inserting}
+                    onClick={onDownload}
+                    className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                    style={secondaryButtonStyle}
+                >
+                    <Download className="size-3.5" />
+                    {t("common.download")}
+                </button>
+                <button
+                    type="button"
+                    disabled={!canUseMedia || inserting}
+                    onClick={onInsert}
+                    className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                    style={primaryButtonStyle}
+                    aria-busy={inserting}
+                >
+                    {inserting ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+                    {inserting ? t("canvas.sidePanel.insertingLogShort") : t("canvas.sidePanel.inserted")}
+                </button>
+            </div>
+        </div>
+    );
+}

@@ -70,13 +70,13 @@ export type ConfigTabKey = "channels" | "preferences" | "webdav" | "local-storag
 
 export const CONFIG_STORE_KEY = "minimalist-canvas:ai_config_store";
 const CHANNEL_MODEL_SEPARATOR = "::";
-const DEFAULT_OPENAI_BASE_URL = "http://1.14.99.158:9000";
+const DEFAULT_OPENAI_BASE_URL = "http://localhost:3000";
 const LEGACY_OPENAI_BASE_URL = "https://api.openai.com";
 const LEGACY_PRODUCT_BASE_URLS = [
-    "http://localhost:3000",
+    "https://canvas.lingecho.com",
+    "http://1.14.99.158:9000",
     "https://simplefuture.zone",
     "https://ai.lingecho.com",
-    "https://canvas.lingecho.com",
 ];
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
 /** Built-in relay key for this desktop build. */
@@ -146,7 +146,7 @@ type ConfigStore = {
     clearPromptContinue: () => void;
 };
 
-const VIDEO_KEYWORDS = ["video", "sora", "veo", "kling", "wan", "hailuo", "grok-imagine", "runway", "luma", "minimax", "seedance", "happyhorse"];
+const VIDEO_KEYWORDS = ["video", "sora", "veo", "kling", "wan", "hailuo", "grok-imagine", "runway", "luma", "minimax-h", "seedance", "happyhorse"];
 
 export function boolConfig(value: string, fallback: boolean) {
     return value ? value === "true" : fallback;
@@ -158,6 +158,8 @@ const IMAGE_KEYWORDS = ["seedream", "gpt-image", "nano-banana", "banana", "image
 /** Best-effort default capability for a freshly fetched model name; user can override in the channel editor. */
 export function guessCapability(name: string): ModelCapability {
     const value = name.toLowerCase();
+    // MiniMax-M2 / M2.x / M3 are chat models. Do not treat the whole MiniMax family as video.
+    if (/minimax-m\d/.test(value)) return "text";
     if (VIDEO_KEYWORDS.some((keyword) => value.includes(keyword))) return "video";
     if (AUDIO_KEYWORDS.some((keyword) => value.includes(keyword))) return "audio";
     if (IMAGE_KEYWORDS.some((keyword) => value.includes(keyword))) return "image";
@@ -178,6 +180,14 @@ export function modelCapabilityOf(config: AiConfig, value: string): ModelCapabil
 
 export function modelDescriptionOf(config: AiConfig, value: string) {
     return findChannelModel(config, value)?.model.description?.trim() || "";
+}
+
+/** Best-effort unit price snippet from model description (e.g. "2.99元一条"). */
+export function modelPriceHint(config: AiConfig, value: string) {
+    const description = modelDescriptionOf(config, value);
+    if (!description) return "";
+    const match = description.match(/(?:¥|￥|\$)\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?\s*元[^\s，,、]*/);
+    return match?.[0]?.trim() || "";
 }
 
 export function modelMatchesCapability(config: AiConfig, value: string, capability?: ModelCapability) {
@@ -244,30 +254,41 @@ export const useConfigStore = create<ConfigStore>()(
                 const persistedConfig = (persistedState.config || {}) as Partial<AiConfig>;
                 const persistedWebdav = (persistedState.webdav || {}) as Partial<WebdavSyncConfig>;
                 const config = { ...defaultConfig, ...persistedConfig };
-                if (!Array.isArray(persistedConfig.channels)) config.channels = [];
-                config.baseUrl = migrateLegacyOpenAIBaseUrl(config.baseUrl);
+                // Empty persisted channels wipe the baked-in default; restore it.
+                if (!Array.isArray(persistedConfig.channels) || persistedConfig.channels.length === 0) {
+                    config.channels = defaultConfig.channels;
+                }
+                config.baseUrl = migrateLegacyOpenAIBaseUrl(config.baseUrl || defaultConfig.baseUrl);
                 config.apiKey = config.apiKey?.trim() || BUILTIN_API_KEY;
                 const channels = stripPlaceholderChannelModels(
                     normalizeChannels(config).map((channel) => ({
                         ...channel,
-                        baseUrl: migrateLegacyOpenAIBaseUrl(channel.baseUrl),
+                        baseUrl: migrateLegacyOpenAIBaseUrl(channel.baseUrl || defaultConfig.baseUrl),
                         apiKey: channel.apiKey?.trim() || BUILTIN_API_KEY,
                     })),
                 );
                 const models = modelOptionsFromChannels(channels);
+                const textModel = normalizeModelOptionValue(config.textModel || config.model, channels)
+                    || pickHydratedDefaultModel(channels, "text");
                 return {
                     ...current,
                     webdav: { ...defaultWebdavSyncConfig, ...persistedWebdav },
                     config: {
                         ...config,
-                        channelMode: persistedConfig.channelMode === "remote" ? "remote" : "local",
+                        channelMode: persistedConfig.channelMode === "local" ? "local" : "remote",
                         apiFormat: normalizeApiFormat(config.apiFormat),
                         channels,
                         models,
-                        imageModel: normalizeModelOptionValue(config.imageModel || config.model, channels),
-                        videoModel: normalizeModelOptionValue(config.videoModel, channels),
-                        textModel: normalizeModelOptionValue(config.textModel || config.model, channels),
-                        audioModel: normalizeModelOptionValue(config.audioModel, channels),
+                        imageModel: normalizeModelOptionValue(config.imageModel || config.model, channels)
+                            || pickHydratedDefaultModel(channels, "image"),
+                        videoModel: normalizeModelOptionValue(config.videoModel, channels)
+                            || pickHydratedDefaultModel(channels, "video"),
+                        textModel,
+                        audioModel: normalizeModelOptionValue(config.audioModel, channels)
+                            || pickHydratedDefaultModel(channels, "audio"),
+                        model: normalizeModelOptionValue(config.model, channels)
+                            || textModel
+                            || pickHydratedDefaultModel(channels, "image"),
                         audioVoice: config.audioVoice || defaultConfig.audioVoice,
                         audioFormat: config.audioFormat || defaultConfig.audioFormat,
                         audioSpeed: config.audioSpeed || defaultConfig.audioSpeed,
@@ -286,6 +307,16 @@ export const useConfigStore = create<ConfigStore>()(
         },
     ),
 );
+
+function pickHydratedDefaultModel(channels: ModelChannel[], capability: ModelCapability) {
+    for (const channel of channels) {
+        const match = channel.models.find(
+            (model) => model.capability === capability || guessCapability(model.name) === capability,
+        );
+        if (match) return encodeChannelModel(channel.id, match.name);
+    }
+    return "";
+}
 
 export function useEffectiveConfig() {
     const config = useConfigStore((state) => state.config);

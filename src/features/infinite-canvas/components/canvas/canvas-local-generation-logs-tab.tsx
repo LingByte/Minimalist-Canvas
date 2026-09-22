@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { App, Empty, Input, Spin, Tag } from "antd";
 import { Download, Image as ImageIcon, Plus, Search, Video } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { toIntlLocale } from "@/i18n/languages";
 
 import type { CanvasTheme } from "@canvas/lib/canvas-theme";
 import { cn } from "@canvas/lib/utils";
@@ -22,7 +23,7 @@ type Props = {
 };
 
 function formatLogTime(value: number, locale?: string) {
-    return new Date(value).toLocaleString(locale, { hour12: false });
+    return new Date(value).toLocaleString(toIntlLocale(locale), { hour12: false });
 }
 
 async function resolveEntryMedia(entry: LocalGenerationLogEntry): Promise<LocalGenerationLogEntry> {

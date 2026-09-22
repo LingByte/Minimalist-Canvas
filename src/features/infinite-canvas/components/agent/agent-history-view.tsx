@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button, Checkbox } from "antd";
 import { FolderOpen, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { toIntlLocale } from "@/i18n/languages";
 
 import { canvasThemes } from "@canvas/lib/canvas-theme";
 import type { AgentThreadSummary } from "@canvas/stores/use-agent-store";
@@ -130,5 +131,5 @@ export function AgentHistoryView({
 
 function formatThreadTime(value: number | undefined, locale: string) {
     if (!value) return "";
-    return new Date(value * 1000).toLocaleString(locale);
+    return new Date(value * 1000).toLocaleString(toIntlLocale(locale));
 }

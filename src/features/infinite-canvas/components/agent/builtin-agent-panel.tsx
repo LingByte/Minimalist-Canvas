@@ -12,6 +12,8 @@ import { randomId } from "@canvas/lib/utils";
 import { requestImageQuestion, type AiTextMessage } from "@canvas/services/api/image";
 import { useAgentStore, type AgentChatItem, type AgentModel } from "@canvas/stores/use-agent-store";
 import {
+    encodeChannelModel,
+    guessCapability,
     modelOptionName,
     resolveModelChannel,
     selectableModelsByCapability,
@@ -19,6 +21,8 @@ import {
     useEffectiveConfig,
 } from "@canvas/stores/use-config-store";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
+import { getDefaultChannel } from "@canvas/integration/gateway-utils";
+import { syncGatewayModels } from "@canvas/integration/sync-gateway-models";
 
 /**
  * Built-in side-panel chat: uses the user's channel Base URL + API Key.
@@ -34,26 +38,64 @@ export function BuiltinAgentPanel() {
     const updateConfig = useConfigStore((state) => state.updateConfig);
     const {
         prompt,
-        messages,
         sending,
         waiting,
         activeTab,
         activity,
-        connectError,
+        messages,
     } = useAgentStore();
     const setAgentState = useAgentStore((state) => state.setAgentState);
     const closePanel = useAgentStore((state) => state.closePanel);
     const abortRef = useRef<AbortController | null>(null);
     const [streamId, setStreamId] = useState("");
+    const [syncingModels, setSyncingModels] = useState(false);
+    const didSyncModelsRef = useRef(false);
 
-    const textModels = useMemo(() => selectableModelsByCapability(config, "text"), [config]);
+    const textModels = useMemo(() => {
+        const listed = selectableModelsByCapability(config, "text");
+        if (listed.length) return listed;
+        // Catalog may omit capability labels; fall back to name heuristics.
+        return config.channels.flatMap((channel) =>
+            channel.models
+                .filter((model) => model.capability === "text" || guessCapability(model.name) === "text")
+                .map((model) => encodeChannelModel(channel.id, model.name)),
+        );
+    }, [config]);
     const textModel = useMemo(() => {
         if (config.textModel && textModels.includes(config.textModel)) return config.textModel;
         if (config.model && textModels.includes(config.model)) return config.model;
         return textModels[0] || "";
     }, [config.model, config.textModel, textModels]);
     const ready = Boolean(textModel) && isAiConfigReady(config, textModel);
-    const channel = textModel ? resolveModelChannel(config, textModel) : null;
+    const channel = textModel ? resolveModelChannel(config, textModel) : getDefaultChannel(config) || null;
+
+    // Pull gateway models once when the chat panel has no text model yet.
+    useEffect(() => {
+        if (textModels.length || didSyncModelsRef.current || syncingModels) return;
+        const apiKey = (channel?.apiKey || config.apiKey || "").trim();
+        if (!apiKey) return;
+        didSyncModelsRef.current = true;
+        let cancelled = false;
+        setSyncingModels(true);
+        void syncGatewayModels(apiKey, true)
+            .catch(() => false)
+            .finally(() => {
+                if (!cancelled) setSyncingModels(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [channel?.apiKey, config.apiKey, syncingModels, textModels.length]);
+
+    // Persist the resolved default so workbenches and reconnect share the same text model.
+    useEffect(() => {
+        if (!textModel) return;
+        if (config.textModel === textModel) return;
+        updateConfig("textModel", textModel);
+        if (!config.model || !textModels.includes(config.model)) {
+            updateConfig("model", textModel);
+        }
+    }, [config.model, config.textModel, textModel, textModels, updateConfig]);
 
     const composerModels = useMemo<AgentModel[]>(
         () =>
@@ -76,14 +118,15 @@ export function BuiltinAgentPanel() {
             connected: ready,
             enabled: ready,
             activity: ready ? (textModel ? modelOptionName(textModel) : "") : "",
-            connectError: ready ? "" : t("agent.connect.configureAiFirst"),
+            // Keep connectError empty for "not configured" — status UI should not say 连接失败.
+            connectError: "",
         });
-    }, [ready, setAgentState, t, textModel]);
+    }, [ready, setAgentState, textModel]);
 
     const channelLabel = useMemo(() => {
-        if (!ready) return t("agent.connect.aiNotReady");
+        if (!ready) return syncingModels ? t("agent.connect.syncingModels") : t("agent.connect.aiNotReady");
         return modelOptionName(textModel) || t("agent.connect.aiReady");
-    }, [ready, t, textModel]);
+    }, [ready, syncingModels, t, textModel]);
 
     const stopTurn = () => {
         abortRef.current?.abort();
@@ -119,7 +162,8 @@ export function BuiltinAgentPanel() {
         };
         const assistantId = randomId();
         const nextStreamId = randomId();
-        const history: AiTextMessage[] = [...messages]
+        const messages = useAgentStore.getState().messages;
+        const history: AiTextMessage[] = messages
             .filter((item) => item.role === "user" || item.role === "assistant")
             .map((item) => ({ role: item.role as "user" | "assistant", content: item.text }));
         history.push({ role: "user", content: text });
@@ -193,9 +237,7 @@ export function BuiltinAgentPanel() {
 
     useEffect(() => () => abortRef.current?.abort(), []);
 
-    const statusText = ready
-        ? channelLabel
-        : connectError || t("agent.status.disconnected");
+    const statusText = channelLabel || t("agent.status.disconnected");
     const statusColor = ready ? "#16a34a" : "#d97706";
 
     return (
@@ -263,10 +305,10 @@ export function BuiltinAgentPanel() {
                     theme={theme}
                     connected={ready}
                     activity={activity}
-                    connectError={ready ? "" : t("agent.connect.configureAiFirst")}
+                    connectError=""
                     onToggleEnabled={() => openConfigDialog(false, "channels")}
                     builtin
-                    baseUrl={channel?.baseUrl || ""}
+                    baseUrl={channel?.baseUrl || config.baseUrl || ""}
                     channelName={channel?.name || ""}
                     modelLabel={textModel ? modelOptionName(textModel) : ""}
                 />
@@ -289,7 +331,9 @@ export function BuiltinAgentPanel() {
                         placeholder={
                             ready
                                 ? t("agent.panel.placeholderBuiltin")
-                                : t("agent.connect.configureAiFirst")
+                                : syncingModels
+                                  ? t("agent.connect.syncingModels")
+                                  : t("agent.connect.configureAiFirst")
                         }
                         theme={theme}
                         models={composerModels}

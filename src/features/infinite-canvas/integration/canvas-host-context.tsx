@@ -17,9 +17,9 @@ export type CanvasHostContextValue = {
 const defaultValue: CanvasHostContextValue = {
   embedded: false,
   homeHref: '/',
-  logo: '/logo.png',
-  brandName: '至简画布',
-  brandTagline: 'MINIMALIST CANVAS',
+  logo: DEFAULT_LOGO,
+  brandName: DEFAULT_SYSTEM_NAME,
+  brandTagline: DEFAULT_SYSTEM_TAGLINE,
 }
 
 const CanvasHostContext = createContext<CanvasHostContextValue>(defaultValue)
@@ -34,10 +34,9 @@ export function CanvasHostProvider({
   const merged: CanvasHostContextValue = {
     ...defaultValue,
     ...value,
-    logo: value.logo ?? (value.embedded ? DEFAULT_LOGO : defaultValue.logo),
-    brandName: value.brandName ?? (value.embedded ? DEFAULT_SYSTEM_NAME : defaultValue.brandName),
-    brandTagline:
-      value.brandTagline ?? (value.embedded ? DEFAULT_SYSTEM_TAGLINE : defaultValue.brandTagline),
+    logo: value.logo ?? DEFAULT_LOGO,
+    brandName: value.brandName ?? DEFAULT_SYSTEM_NAME,
+    brandTagline: value.brandTagline ?? DEFAULT_SYSTEM_TAGLINE,
     homeHref: value.homeHref ?? (value.embedded ? '/dashboard' : defaultValue.homeHref),
   }
   return <CanvasHostContext.Provider value={merged}>{children}</CanvasHostContext.Provider>

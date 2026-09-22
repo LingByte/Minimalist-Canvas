@@ -52,6 +52,7 @@ import { CanvasSidePanel } from "@canvas/components/canvas/canvas-side-panel";
 import { CanvasZoomControls } from "@canvas/components/canvas/canvas-zoom-controls";
 import { CanvasToolsDrawer } from "@canvas/components/canvas/canvas-tools-drawer";
 import { useAgentStore } from "@canvas/stores/use-agent-store";
+import { useGenerationLogsBadgeStore } from "@canvas/stores/use-generation-logs-badge-store";
 import { useCanvasStore } from "@canvas/stores/canvas/use-canvas-store";
 import { useAgentBridge } from "@canvas/pages/canvas/hooks/use-agent-bridge";
 import { usePluginHost } from "@canvas/pages/canvas/hooks/use-plugin-host";
@@ -189,8 +190,8 @@ function canvasVideoAssetConfigFromAi(
         size?: string;
         videoSeconds?: string;
         vquality?: string;
-        videoGenerateAudio?: boolean;
-        videoWatermark?: boolean;
+        videoGenerateAudio?: boolean | string;
+        videoWatermark?: boolean | string;
     },
     opts?: { images?: string[]; videos?: string[]; audios?: string[]; taskProvider?: string },
 ) {
@@ -199,8 +200,18 @@ function canvasVideoAssetConfigFromAi(
         seconds: generationConfig.videoSeconds,
         resolution: generationConfig.vquality,
         quality: generationConfig.vquality,
-        generateAudio: generationConfig.videoGenerateAudio,
-        watermark: generationConfig.videoWatermark,
+        generateAudio:
+            typeof generationConfig.videoGenerateAudio === "boolean"
+                ? generationConfig.videoGenerateAudio
+                : generationConfig.videoGenerateAudio == null
+                  ? undefined
+                  : String(generationConfig.videoGenerateAudio) === "true",
+        watermark:
+            typeof generationConfig.videoWatermark === "boolean"
+                ? generationConfig.videoWatermark
+                : generationConfig.videoWatermark == null
+                  ? undefined
+                  : String(generationConfig.videoWatermark) === "true",
         images: opts?.images,
         videos: opts?.videos,
         audios: opts?.audios,
@@ -247,6 +258,8 @@ function InfiniteCanvasPage() {
     const agentPanelOpen = useAgentStore((state) => state.panelOpen);
     const toggleAgentPanel = useAgentStore((state) => state.togglePanel);
     const openAgentPanel = useAgentStore((state) => state.openPanel);
+    const startGenerationLogsWatch = useGenerationLogsBadgeStore((state) => state.startWatching);
+    const stopGenerationLogsWatch = useGenerationLogsBadgeStore((state) => state.stopWatching);
     const containerRef = useRef<HTMLDivElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const uploadTargetRef = useRef<{ nodeId?: string; position?: Position } | null>(null);
@@ -412,6 +425,7 @@ function InfiniteCanvasPage() {
                 prompt?: string;
                 model?: string;
                 taskId?: string;
+                attemptId?: string;
                 excludeUrls?: string[];
                 config?: Record<string, unknown>;
             },
@@ -425,6 +439,7 @@ function InfiniteCanvasPage() {
                     prompt: sync.prompt,
                     model: sync.model,
                     taskId: sync.taskId,
+                    attemptId: sync.attemptId,
                     url: file.url,
                     storageKey: file.storageKey,
                     mimeType: file.mimeType,
@@ -483,6 +498,11 @@ function InfiniteCanvasPage() {
         if (!projectLoaded || !["new", "recent", "choose"].includes(searchParams.get("mode") || "")) return;
         if (!searchParams.has("agentUrl")) openAgentPanel();
     }, [openAgentPanel, projectLoaded, searchParams]);
+
+    useEffect(() => {
+        startGenerationLogsWatch();
+        return () => stopGenerationLogsWatch();
+    }, [startGenerationLogsWatch, stopGenerationLogsWatch]);
 
     useEffect(() => {
         if (!projectLoaded || applyingHistoryRef.current || historyPausedRef.current) return;
@@ -2582,6 +2602,16 @@ function InfiniteCanvasPage() {
                                     : node,
                             ),
                         );
+                        void syncCanvasVideoGenerationAsset({
+                            clientId: videoId,
+                            prompt: effectivePrompt,
+                            model: generationConfig.model,
+                            taskId: task.id,
+                            attemptId: task.attemptId,
+                            status: "pending",
+                            excludeUrls: mergeReferenceUrlLists(ignoreResultUrls, task.submittedReferenceUrls),
+                            config: { ...videoAssetConfig, task_provider: task.provider },
+                        });
                         const video = await storeGeneratedVideo(
                             await waitForVideoGenerationTask(
                                 generationConfig,
@@ -2601,6 +2631,7 @@ function InfiniteCanvasPage() {
                                     prompt: effectivePrompt,
                                     model: generationConfig.model,
                                     taskId: task.id,
+                                    attemptId: task.attemptId,
                                     excludeUrls: mergeReferenceUrlLists(ignoreResultUrls, task.submittedReferenceUrls),
                                     config: { ...videoAssetConfig, task_provider: task.provider },
                                 }),
@@ -2612,6 +2643,7 @@ function InfiniteCanvasPage() {
                             prompt: effectivePrompt,
                             model: generationConfig.model,
                             taskId: task.id,
+                            attemptId: task.attemptId,
                             url: video.url,
                             storageKey: video.storageKey,
                             mimeType: video.mimeType,
@@ -2764,6 +2796,16 @@ function InfiniteCanvasPage() {
                             taskId && (node.type === CanvasNodeType.Video || mode === "video")
                                 ? `${errorDetails}\n${t("canvas.projectPage.videoTaskId", { id: taskId })}`
                                 : errorDetails;
+                        if (taskId && (node.type === CanvasNodeType.Video || mode === "video")) {
+                            void syncCanvasVideoGenerationAsset({
+                                clientId: node.id,
+                                prompt: node.metadata?.prompt || effectivePrompt,
+                                model: node.metadata?.model || generationConfig.model,
+                                taskId,
+                                status: "failed",
+                                error: errorDetails,
+                            });
+                        }
                         return { ...node, metadata: { ...node.metadata, status: NODE_STATUS_ERROR, errorDetails: details } };
                     }),
                 );
@@ -2904,6 +2946,16 @@ function InfiniteCanvasPage() {
                                 : item,
                         ),
                     );
+                    void syncCanvasVideoGenerationAsset({
+                        clientId: node.id,
+                        prompt,
+                        model: generationConfig.model,
+                        taskId: task.id,
+                        attemptId: task.attemptId,
+                        status: "pending",
+                        excludeUrls: mergeReferenceUrlLists(ignoreResultUrls, task.submittedReferenceUrls),
+                        config: { ...videoAssetConfig, task_provider: task.provider },
+                    });
                     const video = await storeGeneratedVideo(
                         await waitForVideoGenerationTask(
                             generationConfig,
@@ -2923,6 +2975,7 @@ function InfiniteCanvasPage() {
                                 prompt,
                                 model: generationConfig.model,
                                 taskId: task.id,
+                                attemptId: task.attemptId,
                                 excludeUrls: mergeReferenceUrlLists(ignoreResultUrls, task.submittedReferenceUrls),
                                 config: { ...videoAssetConfig, task_provider: task.provider },
                             }),
@@ -2934,6 +2987,7 @@ function InfiniteCanvasPage() {
                         prompt,
                         model: generationConfig.model,
                         taskId: task.id,
+                        attemptId: task.attemptId,
                         url: video.url,
                         storageKey: video.storageKey,
                         mimeType: video.mimeType,
@@ -3059,6 +3113,16 @@ function InfiniteCanvasPage() {
                 if (isGenerationCanceled(error)) return;
                 const errorDetails = error instanceof Error ? error.message : t("canvas.projectPage.generationFailed");
                 message.error(errorDetails);
+                if (node.type === CanvasNodeType.Video && node.metadata?.videoTaskId) {
+                    void syncCanvasVideoGenerationAsset({
+                        clientId: node.id,
+                        prompt: node.metadata?.prompt || prompt,
+                        model: generationConfig.model,
+                        taskId: node.metadata.videoTaskId,
+                        status: "failed",
+                        error: errorDetails,
+                    });
+                }
                 setNodes((prev) => prev.map((item) => (item.id === node.id ? { ...item, metadata: { ...item.metadata, status: item.metadata?.content ? NODE_STATUS_SUCCESS : NODE_STATUS_ERROR, errorDetails: item.metadata?.content ? undefined : errorDetails, images: item.metadata?.images?.map((image) => (image.id === imageId ? { ...image, status: NODE_STATUS_ERROR, errorDetails } : image)) } } : item)));
             } finally {
                 finishGenerationRequest(node.id, controller);
@@ -3255,6 +3319,16 @@ function InfiniteCanvasPage() {
             );
             const controller = startGenerationRequest(node.id, node.id, node.id);
             try {
+                void syncCanvasVideoGenerationAsset({
+                    clientId: node.id,
+                    prompt: node.metadata?.prompt,
+                    model: task.model || generationConfig.model,
+                    taskId: task.id,
+                    attemptId: task.attemptId,
+                    status: "pending",
+                    excludeUrls: mergeReferenceUrlLists(ignoreResultUrls, task.submittedReferenceUrls),
+                    config: videoAssetConfig,
+                });
                 const state = await pollVideoGenerationTask(generationConfig, task, {
                     signal: controller.signal,
                     ...(ignoreResultUrls.length ? { ignoreResultUrls } : {}),
@@ -3289,6 +3363,7 @@ function InfiniteCanvasPage() {
                                 prompt: node.metadata?.prompt,
                                 model: task.model || generationConfig.model,
                                 taskId: task.id,
+                                attemptId: task.attemptId,
                                 excludeUrls: mergeReferenceUrlLists(ignoreResultUrls, task.submittedReferenceUrls),
                                 config: videoAssetConfig,
                             }),
@@ -3300,6 +3375,7 @@ function InfiniteCanvasPage() {
                         prompt: node.metadata?.prompt,
                         model: task.model || generationConfig.model,
                         taskId: task.id,
+                        attemptId: task.attemptId,
                         url: video.url,
                         storageKey: video.storageKey,
                         mimeType: video.mimeType,
@@ -3352,6 +3428,17 @@ function InfiniteCanvasPage() {
                                 : item,
                         ),
                     );
+                    void syncCanvasVideoGenerationAsset({
+                        clientId: node.id,
+                        prompt: node.metadata?.prompt,
+                        model: task.model || generationConfig.model,
+                        taskId: task.id,
+                        attemptId: task.attemptId,
+                        status: "failed",
+                        error: state.error,
+                        excludeUrls: mergeReferenceUrlLists(ignoreResultUrls, task.submittedReferenceUrls),
+                        config: videoAssetConfig,
+                    });
                     message.error(state.error);
                     return true;
                 }
@@ -3360,6 +3447,7 @@ function InfiniteCanvasPage() {
                         prompt: node.metadata?.prompt,
                         model: task.model || generationConfig.model,
                         taskId: task.id,
+                        attemptId: task.attemptId,
                         excludeUrls: mergeReferenceUrlLists(ignoreResultUrls, task.submittedReferenceUrls),
                         config: videoAssetConfig,
                     }),
@@ -3370,6 +3458,7 @@ function InfiniteCanvasPage() {
                     prompt: node.metadata?.prompt,
                     model: task.model || generationConfig.model,
                     taskId: task.id,
+                    attemptId: task.attemptId,
                     url: video.url,
                     storageKey: video.storageKey,
                     mimeType: video.mimeType,
@@ -3410,6 +3499,17 @@ function InfiniteCanvasPage() {
                 if (!isGenerationCanceled(error)) {
                     const errorDetails = error instanceof Error ? error.message : t("canvas.projectPage.generationFailed");
                     if (!options?.silent) message.error(errorDetails);
+                    void syncCanvasVideoGenerationAsset({
+                        clientId: node.id,
+                        prompt: node.metadata?.prompt,
+                        model: task.model || generationConfig.model,
+                        taskId: task.id,
+                        attemptId: task.attemptId,
+                        status: "failed",
+                        error: errorDetails,
+                        excludeUrls: mergeReferenceUrlLists(ignoreResultUrls, task.submittedReferenceUrls),
+                        config: videoAssetConfig,
+                    });
                     setNodes((prev) =>
                         prev.map((item) =>
                             item.id === node.id

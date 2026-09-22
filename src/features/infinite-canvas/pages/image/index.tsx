@@ -2,22 +2,32 @@ import { ArrowLeft, ArrowRight, BookOpen, CheckSquare, ClipboardPaste, Download,
 import { useEffect, useRef, useState } from "react";
 import { App, Button, Checkbox, Drawer, Empty, Image, Input, Modal, Tag, Tooltip, Typography } from "antd";
 import { useTranslation } from "react-i18next";
+import { toIntlLocale } from "@/i18n/languages";
 
-import { ImageSettingsPanel } from "@canvas/components/image-settings-panel";
+import { ImageSettingsPanel, imageQualityLabel, imageSizeLabel } from "@canvas/components/image-settings-panel";
 import { ModelPicker } from "@canvas/components/model-picker";
 import { PromptSelectDialog } from "@canvas/components/prompts/prompt-select-dialog";
 import { AssetPickerModal, type InsertAssetPayload } from "@canvas/components/canvas/asset-picker-modal";
+import {
+    WorkbenchAddTile,
+    WorkbenchBottomBar,
+    WorkbenchModeTabs,
+    WorkbenchReferenceZone,
+    workbenchAsideClassName,
+    workbenchComposerClassName,
+    workbenchPageClassName,
+    workbenchPromptShellClassName,
+    workbenchResultsClassName,
+} from "@canvas/components/workbench/workbench-studio";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
 import { imageReferenceLabel } from "@canvas/lib/image-reference-prompt";
-import { modelOptionLabel, useConfigStore, useEffectiveConfig, type AiConfig } from "@canvas/stores/use-config-store";
+import { modelPriceHint, useConfigStore, useEffectiveConfig, type AiConfig } from "@canvas/stores/use-config-store";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { nanoid } from "nanoid";
 import { formatBytes, formatDuration, getDataUrlByteSize, readImageMeta } from "@canvas/lib/image-utils";
 import { requestEdit, requestGeneration } from "@canvas/services/api/image";
-import { deleteGenerationAssetsByClientIds, upsertGenerationAsset } from "@canvas/services/api/generation-assets";
-import { deleteStoredImages, resolveImageUrl, uploadImage } from "@canvas/services/image-storage";
-import { IMAGE_GENERATION_LOG_STORE } from "@canvas/services/local-generation-logs";
-import { kvStore } from "@canvas/services/fs-store";
+import { deleteGenerationAssetsByClientIds, listGenerationAssets, upsertGenerationAsset, type GenerationAsset } from "@canvas/services/api/generation-assets";
+import { deleteStoredImages, uploadImage } from "@canvas/services/image-storage";
 import { saveBlobAs } from "@canvas/lib/save-file";
 import { useAssetStore } from "@canvas/stores/use-asset-store";
 import { useWorkbenchAgentStore } from "@canvas/stores/use-workbench-agent-store";
@@ -68,8 +78,6 @@ type GenerationLogConfig = Pick<AiConfig, "model" | "imageModel" | "quality" | "
 type UpdateAiConfig = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
 
 const RESULT_ACTION_BUTTON_CLASS = "min-w-0 px-1.5 [&_.ant-btn-icon]:shrink-0 [&>span:last-child]:min-w-0 [&>span:last-child]:truncate";
-const logStore = kvStore(IMAGE_GENERATION_LOG_STORE);
-
 export default function ImagePage() {
     const { message } = App.useApp();
     const { t } = useTranslation();
@@ -95,6 +103,8 @@ export default function ImagePage() {
     const [selectedLogIds, setSelectedLogIds] = useState<string[]>([]);
     const [previewLog, setPreviewLog] = useState<GenerationLog | null>(null);
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const [imageLogCursor, setImageLogCursor] = useState("");
+    const [imageLogHasMore, setImageLogHasMore] = useState(false);
     const [isReferenceDragActive, setIsReferenceDragActive] = useState(false);
     const [autoRunToken, setAutoRunToken] = useState(0);
     const imageCommand = useWorkbenchAgentStore((state) => state.imageCommand);
@@ -104,6 +114,7 @@ export default function ImagePage() {
     const agentTaskIdRef = useRef<string | undefined>(undefined);
 
     const model = effectiveConfig.imageModel || effectiveConfig.model;
+    const priceHint = modelPriceHint(effectiveConfig, model);
     const canGenerate = Boolean(prompt.trim());
     const generationCount = Math.max(1, Math.min(10, Number(config.count) || 1));
 
@@ -147,6 +158,23 @@ export default function ImagePage() {
         } catch {
             message.error(t("imageWorkbench.clipboardEmpty"));
         }
+    };
+
+    const confirmGenerate = () => {
+        if (!canGenerate || running) return;
+        const count = generationCount;
+        const content = priceHint
+            ? count > 1
+                ? t("workbench.confirmSpendCount", { count, price: priceHint })
+                : t("workbench.confirmSpend", { price: priceHint })
+            : t("workbench.confirmSpendTitle");
+        Modal.confirm({
+            title: t("workbench.confirmSpendTitle"),
+            content,
+            okText: t("workbench.confirmSpendOk"),
+            cancelText: t("common.cancel"),
+            onOk: () => void generate(),
+        });
     };
 
     const generate = async () => {
@@ -288,9 +316,8 @@ export default function ImagePage() {
         const imageKeys = selected.flatMap((log) => log.images.map((image) => image.storageKey).filter((key): key is string => Boolean(key)));
         void Promise.all([
             deleteStoredImages(imageKeys),
-            ...selectedLogIds.map((id) => logStore.removeItem(id)),
             deleteGenerationAssetsByClientIds(selectedLogIds),
-        ]).then(refreshLogs);
+        ]).then(() => void refreshLogs());
         if (previewLog && selectedLogIds.includes(previewLog.id)) {
             setPreviewLog(null);
             setResults([]);
@@ -300,12 +327,25 @@ export default function ImagePage() {
     };
 
     const saveLog = (log: GenerationLog) => {
-        void logStore.setItem(log.id, serializeLog(log)).then(refreshLogs);
-        void syncGenerationAsset(log);
+        void syncGenerationAsset(log).then(() => refreshLogs());
     };
 
     const refreshLogs = async () => {
-        setLogs(await readStoredLogs());
+        const page = await readMergedImageLogs();
+        setLogs(page.logs);
+        setImageLogCursor(page.nextCursor);
+        setImageLogHasMore(page.hasMore);
+    };
+
+    const loadMoreImageLogs = async () => {
+        if (!imageLogHasMore || !imageLogCursor) return;
+        const page = await readMergedImageLogs(imageLogCursor);
+        setLogs((current) => {
+            const ids = new Set(current.map((item) => item.id));
+            return [...current, ...page.logs.filter((log) => !ids.has(log.id))].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        });
+        setImageLogCursor(page.nextCursor);
+        setImageLogHasMore(page.hasMore);
     };
 
     const previewGenerationLog = async (log: GenerationLog) => {
@@ -381,9 +421,9 @@ export default function ImagePage() {
     };
 
     return (
-        <div className="flex h-full flex-col overflow-hidden bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
-            <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 lg:grid-cols-[300px_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[320px_minmax(0,1fr)]">
-                <aside className="thin-scrollbar hidden min-h-0 overflow-y-auto rounded-lg border border-stone-200 bg-card p-4 shadow-sm dark:border-stone-800 lg:block">
+        <div className={workbenchPageClassName()}>
+            <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 lg:grid-cols-[280px_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[300px_minmax(0,1fr)]">
+                <aside className={workbenchAsideClassName()}>
                     <LogPanel
                         logs={logs}
                         selectedLogIds={selectedLogIds}
@@ -395,124 +435,138 @@ export default function ImagePage() {
                     />
                 </aside>
 
-                <section className="grid gap-3 lg:min-h-0 lg:overflow-hidden xl:grid-cols-[420px_minmax(0,1fr)]">
-                    <div className="thin-scrollbar flex flex-col rounded-lg border border-stone-200 bg-card p-4 shadow-sm dark:border-stone-800 lg:min-h-0 lg:overflow-y-auto">
-                        <div>
-                            <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                    <h1 className="text-2xl font-semibold text-stone-950 dark:text-stone-100">{t("imageWorkbench.title")}</h1>
-                                </div>
-                                <div className="flex shrink-0 gap-2 lg:hidden">
-                                    <Button icon={<History className="size-4" />} onClick={() => setLogsOpen(true)}>
-                                        {t("workbench.logs")}
-                                    </Button>
-                                    <Button icon={<SlidersHorizontal className="size-4" />} onClick={() => setSettingsOpen(true)}>
-                                        {t("workbench.settings")}
-                                    </Button>
-                                </div>
+                <section className="grid gap-3 lg:min-h-0 lg:overflow-hidden xl:grid-cols-[min(440px,42%)_minmax(0,1fr)]">
+                    <div className={workbenchComposerClassName()}>
+                        <div className="flex items-start justify-between gap-3">
+                            <WorkbenchModeTabs className="min-w-0 flex-1" />
+                            <div className="flex shrink-0 gap-1.5 lg:hidden">
+                                <Button size="small" icon={<History className="size-3.5" />} onClick={() => setLogsOpen(true)} />
+                                <Button size="small" icon={<SlidersHorizontal className="size-3.5" />} onClick={() => setSettingsOpen(true)} />
                             </div>
                         </div>
 
-                        <div className="mt-6 space-y-5">
-                            <div>
-                                <div className="mb-2 flex items-center justify-between gap-3">
-                                    <span className="text-base font-semibold">{t("workbench.prompt")}</span>
-                                    <div className="flex gap-2">
-                                        <Button size="small" icon={<BookOpen className="size-3.5" />} onClick={() => setPromptDialogOpen(true)}>
-                                            {t("workbench.viewPrompts")}
-                                        </Button>
-                                        <Button size="small" icon={<FolderPlus className="size-3.5" />} onClick={() => setAssetPickerOpen(true)}>
-                                            {t("workbench.viewAssets")}
-                                        </Button>
-                                    </div>
-                                </div>
-                                <Input.TextArea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={7} placeholder={t("imageWorkbench.promptPlaceholder")} />
-                            </div>
+                        <div className="mt-3 min-w-0">
+                            <span className="mb-1.5 block text-xs font-medium text-stone-500">{t("workbench.model")}</span>
+                            <ModelPicker
+                                config={effectiveConfig}
+                                value={model}
+                                onChange={(value) => updateConfig("imageModel", value)}
+                                capability="image"
+                                fullWidth
+                                className="!h-10 !rounded-xl !px-3.5 !text-[13px]"
+                                onMissingConfig={() => openConfigDialog(false)}
+                            />
+                        </div>
 
-                            <div className="min-w-0">
-                                <div className="mb-2 flex items-center justify-between gap-3">
-                                    <span className="text-base font-semibold">{t("imageWorkbench.references")}</span>
-                                    <div className="flex gap-2">
-                                        <Button size="small" icon={<ClipboardPaste className="size-3.5" />} onClick={() => void addReferencesFromClipboard()}>
+                        <div className="mt-4 space-y-4">
+                            <WorkbenchReferenceZone
+                                title={t("imageWorkbench.references")}
+                                countLabel={`${references.length}/10`}
+                                dragActive={isReferenceDragActive}
+                                onDragEnter={(event) => {
+                                    event.preventDefault();
+                                    dragDepthRef.current += 1;
+                                    if (event.dataTransfer.types.includes("Files")) setIsReferenceDragActive(true);
+                                }}
+                                onDragOver={(event) => {
+                                    event.preventDefault();
+                                    event.dataTransfer.dropEffect = "copy";
+                                }}
+                                onDragLeave={(event) => {
+                                    event.preventDefault();
+                                    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+                                    if (!dragDepthRef.current) setIsReferenceDragActive(false);
+                                }}
+                                onDrop={(event) => {
+                                    event.preventDefault();
+                                    dragDepthRef.current = 0;
+                                    setIsReferenceDragActive(false);
+                                    void addReferences(event.dataTransfer.files);
+                                }}
+                                onWheel={(event) => {
+                                    if (event.currentTarget.scrollWidth <= event.currentTarget.clientWidth) return;
+                                    event.preventDefault();
+                                    event.currentTarget.scrollLeft += event.deltaY;
+                                }}
+                                actions={
+                                    <>
+                                        <Button size="small" type="text" icon={<ClipboardPaste className="size-3.5" />} onClick={() => void addReferencesFromClipboard()}>
                                             {t("workbench.clipboard")}
                                         </Button>
-                                        <Button size="small" icon={<Upload className="size-3.5" />} onClick={() => fileInputRef.current?.click()}>
-                                            {t("workbench.upload")}
+                                        <Button size="small" type="text" icon={<FolderPlus className="size-3.5" />} onClick={() => setAssetPickerOpen(true)}>
+                                            {t("workbench.viewAssets")}
                                         </Button>
+                                    </>
+                                }
+                            >
+                                <WorkbenchAddTile
+                                    onClick={() => fileInputRef.current?.click()}
+                                    label={t("workbench.upload")}
+                                />
+                                {references.map((item, index) => (
+                                    <div key={item.id} className="group relative size-[5.5rem] shrink-0 overflow-hidden rounded-xl border border-stone-200 dark:border-stone-800">
+                                        <SmartImage src={item.dataUrl} alt={item.name} className="size-full object-cover" fallbackClassName="size-full" fallbackIconClassName="size-4" />
+                                        <span className="absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">{imageReferenceLabel(index)}</span>
+                                        <ReferenceOrderButtons index={index} total={references.length} onMove={(offset) => setReferences((value) => moveListItem(value, index, offset))} />
+                                        <button
+                                            type="button"
+                                            className="absolute right-1 top-1 hidden size-6 items-center justify-center rounded bg-black/60 text-white group-hover:flex"
+                                            onClick={() => setReferences((value) => value.filter((ref) => ref.id !== item.id))}
+                                            aria-label={t("imageWorkbench.removeReference")}
+                                        >
+                                            <Trash2 className="size-3.5" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </WorkbenchReferenceZone>
+
+                            <div>
+                                <div className={workbenchPromptShellClassName()}>
+                                    <Input.TextArea
+                                        value={prompt}
+                                        onChange={(event) => setPrompt(event.target.value)}
+                                        rows={7}
+                                        placeholder={t("imageWorkbench.promptPlaceholder")}
+                                        variant="borderless"
+                                        className="!min-h-[160px] !bg-transparent !px-3 !pt-3 !pb-12 !text-sm !leading-6"
+                                    />
+                                    <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-end gap-2 p-2">
+                                        <button
+                                            type="button"
+                                            className="pointer-events-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-stone-500 transition hover:text-emerald-600 dark:text-stone-400 dark:hover:text-emerald-300"
+                                            onClick={() => setPromptDialogOpen(true)}
+                                        >
+                                            <BookOpen className="size-3.5" />
+                                            {t("workbench.styleLibrary")}
+                                        </button>
                                     </div>
                                 </div>
-                                <div
-                                    className={`hover-scrollbar hover-scrollbar-hint relative flex min-h-24 w-full min-w-0 max-w-full gap-2 overflow-x-scroll overflow-y-hidden rounded-lg border border-dashed p-2 pb-3 overscroll-x-contain transition-colors ${isReferenceDragActive ? "border-stone-900 bg-stone-100/80 dark:border-stone-100 dark:bg-stone-900/80" : "border-stone-300 dark:border-stone-700"}`}
-                                    onDragEnter={(event) => {
-                                        event.preventDefault();
-                                        dragDepthRef.current += 1;
-                                        if (event.dataTransfer.types.includes("Files")) setIsReferenceDragActive(true);
-                                    }}
-                                    onDragOver={(event) => {
-                                        event.preventDefault();
-                                        event.dataTransfer.dropEffect = "copy";
-                                    }}
-                                    onDragLeave={(event) => {
-                                        event.preventDefault();
-                                        dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-                                        if (!dragDepthRef.current) setIsReferenceDragActive(false);
-                                    }}
-                                    onDrop={(event) => {
-                                        event.preventDefault();
-                                        dragDepthRef.current = 0;
-                                        setIsReferenceDragActive(false);
-                                        void addReferences(event.dataTransfer.files);
-                                    }}
-                                    onWheel={(event) => {
-                                        if (event.currentTarget.scrollWidth <= event.currentTarget.clientWidth) return;
-                                        event.preventDefault();
-                                        event.currentTarget.scrollLeft += event.deltaY;
-                                    }}
-                                >
-                                    {references.map((item, index) => (
-                                        <div key={item.id} className="group relative size-20 shrink-0 overflow-hidden rounded-md border border-stone-200 dark:border-stone-800">
-                                            <SmartImage src={item.dataUrl} alt={item.name} className="size-full object-cover" fallbackClassName="size-full" fallbackIconClassName="size-4" />
-                                            <span className="absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">{imageReferenceLabel(index)}</span>
-                                            <ReferenceOrderButtons index={index} total={references.length} onMove={(offset) => setReferences((value) => moveListItem(value, index, offset))} />
-                                            <button
-                                                type="button"
-                                                className="absolute right-1 top-1 hidden size-6 items-center justify-center rounded bg-black/60 text-white group-hover:flex"
-                                                onClick={() => setReferences((value) => value.filter((ref) => ref.id !== item.id))}
-                                                aria-label={t("imageWorkbench.removeReference")}
-                                            >
-                                                <Trash2 className="size-3.5" />
-                                            </button>
-                                        </div>
-                                    ))}
-                                    {!references.length ? <div className="flex min-w-full items-center justify-center text-sm text-stone-500">{isReferenceDragActive ? t("imageWorkbench.dropReferences") : t("imageWorkbench.noReferences")}</div> : null}
-                                </div>
                             </div>
+                        </div>
 
-                            <div className="flex items-center justify-between rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm dark:border-stone-800 dark:bg-stone-900 sm:hidden">
-                                <span className="truncate text-stone-500 dark:text-stone-400">
-                                    {modelOptionLabel(effectiveConfig, model)} · {effectiveConfig.size} · {effectiveConfig.quality}
-                                </span>
-                                <Button size="small" type="text" icon={<SlidersHorizontal className="size-4" />} onClick={() => setSettingsOpen(true)}>
-                                    {t("workbench.adjust")}
-                                </Button>
-                            </div>
-
-                            <div className="hidden gap-4 sm:grid sm:grid-cols-2">
+                        <WorkbenchBottomBar
+                            summary={
+                                <>
+                                    {imageQualityLabel(effectiveConfig.quality, model)} · {imageSizeLabel(effectiveConfig.size)} · {generationCount}
+                                </>
+                            }
+                            settingsOpen={settingsOpen}
+                            onSettingsOpenChange={setSettingsOpen}
+                            settings={
                                 <GenerationSettings config={effectiveConfig} model={model} updateConfig={updateConfig} openConfigDialog={openConfigDialog} />
-                            </div>
-                        </div>
-
-                        <div className="mt-auto pt-6">
-                            <Button type="primary" size="large" block icon={<Sparkles className="size-4" />} loading={running} disabled={!canGenerate || running} onClick={() => void generate()}>
-                                {t("workbench.generate")}
-                            </Button>
-                        </div>
+                            }
+                            generateLabel={t("workbench.generate")}
+                            generatePrice={priceHint || undefined}
+                            generating={running}
+                            disabled={!canGenerate || running}
+                            onGenerate={confirmGenerate}
+                        />
                     </div>
 
-                    <div className="thin-scrollbar rounded-lg border border-stone-200 bg-card p-4 shadow-sm dark:border-stone-800 lg:min-h-0 lg:overflow-y-auto lg:p-5">
+                    <div className={workbenchResultsClassName()}>
                         <div className="mb-4 flex items-center justify-between gap-3">
                             <div>
-                                <h2 className="text-xl font-semibold">{t("workbench.results")}</h2>
+                                <h2 className="text-lg font-semibold tracking-tight">{t("workbench.results")}</h2>
                             </div>
                             {running ? <Tag className="m-0 px-2 py-1">{t("workbench.waiting", { time: formatDuration(elapsedMs) })}</Tag> : null}
                         </div>
@@ -529,8 +583,7 @@ export default function ImagePage() {
                                 )}
                             </div>
                         ) : (
-                            <div className="flex min-h-[320px] flex-col items-center justify-center rounded-lg border border-dashed border-stone-300 text-center dark:border-stone-700 lg:min-h-[560px]">
-                                <ImagePlus className="mb-4 size-11 text-stone-400" />
+                            <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-stone-300 text-center dark:border-stone-700 lg:min-h-[560px]">
                                 <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("imageWorkbench.empty")} />
                             </div>
                         )}
@@ -558,11 +611,11 @@ export default function ImagePage() {
                     onDeleteSelected={() => setDeleteConfirmOpen(true)}
                     onPreviewLog={(log) => void previewGenerationLog(log)}
                 />
-            </Drawer>
-            <Drawer title={t("workbench.settings")} placement="bottom" size="82vh" open={settingsOpen} onClose={() => setSettingsOpen(false)}>
-                <div className="grid grid-cols-2 gap-3 pb-4">
-                    <GenerationSettings config={effectiveConfig} model={model} updateConfig={updateConfig} openConfigDialog={openConfigDialog} />
-                </div>
+                {imageLogHasMore ? (
+                    <div className="flex justify-center py-3">
+                        <Button onClick={() => void loadMoreImageLogs()}>{t("canvas.sidePanel.loadMoreLogs")}</Button>
+                    </div>
+                ) : null}
             </Drawer>
             <PromptSelectDialog open={promptDialogOpen} onOpenChange={setPromptDialogOpen} onSelect={setPrompt} />
             <AssetPickerModal open={assetPickerOpen} defaultTab="my-assets" onInsert={(payload) => void insertPickedAsset(payload)} onClose={() => setAssetPickerOpen(false)} />
@@ -573,20 +626,11 @@ export default function ImagePage() {
     );
 }
 
-function GenerationSettings({ config, model, updateConfig, openConfigDialog }: { config: AiConfig; model: string; updateConfig: UpdateAiConfig; openConfigDialog: (shouldPromptContinue?: boolean) => void }) {
+function GenerationSettings({ config, model, updateConfig }: { config: AiConfig; model: string; updateConfig: UpdateAiConfig; openConfigDialog: (shouldPromptContinue?: boolean) => void }) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
-    const { t } = useTranslation();
 
     return (
-        <>
-            <label className="col-span-2 block min-w-0 sm:col-span-1">
-                <span className="mb-1.5 block text-sm font-semibold sm:mb-2 sm:text-base">{t("workbench.model")}</span>
-                <ModelPicker config={config} value={model} onChange={(value) => updateConfig("imageModel", value)} capability="image" fullWidth onMissingConfig={() => openConfigDialog(false)} />
-            </label>
-            <div className="col-span-2">
-                <ImageSettingsPanel config={{ ...config, model }} onConfigChange={(key, value) => updateConfig(key, value)} theme={theme} showTitle={false} className="space-y-4" maxCount={10} />
-            </div>
-        </>
+        <ImageSettingsPanel config={{ ...config, model }} onConfigChange={(key, value) => updateConfig(key, value)} theme={theme} showTitle={false} className="space-y-3" maxCount={10} quickCount={9} compact />
     );
 }
 
@@ -786,63 +830,60 @@ function LogCard({ log, selected, active, onSelectedChange, onClick }: { log: Ge
     );
 }
 
-async function readStoredLogs() {
-    if (typeof window === "undefined") return [];
+async function readMergedImageLogs(cursor = "") {
     try {
-        const values: GenerationLog[] = [];
-        await logStore.iterate<GenerationLog, void>((value) => {
-            values.push(value);
-        });
-        const logs = await Promise.all(values.map(normalizeLog));
-        return logs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        const remote = await listGenerationAssets({ kind: "image", cursor, limit: 10 });
+        return {
+            logs: (remote.items || []).map(remoteImageAssetToLog),
+            nextCursor: remote.next_cursor || "",
+            hasMore: Boolean(remote.has_more),
+        };
     } catch {
-        return [];
+        return { logs: [], nextCursor: "", hasMore: false };
     }
 }
 
-async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog> {
-    const references = await Promise.all(
-        (log.references || []).map(async (item) => ({
-            ...item,
-            dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl),
-        })),
-    );
-    const images = await Promise.all(
-        (log.images || []).map(async (item) => ({
-            ...item,
-            dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl),
-        })),
-    );
-    const config = normalizeLogConfig(log);
+function remoteImageAssetToLog(asset: GenerationAsset): GenerationLog {
+    const createdAtMs = asset.created_at > 1e12 ? asset.created_at : asset.created_at * 1000;
+    const images = (asset.assets || []).map((item, index) => ({
+        id: `${asset.id}-${index}`,
+        dataUrl: item.url || "",
+        storageKey: item.storage_key,
+        durationMs: item.duration_ms || 0,
+        width: item.width || 0,
+        height: item.height || 0,
+        bytes: item.bytes || 0,
+        mimeType: item.mime_type,
+    }));
+    const config = {
+        model: asset.model || "",
+        imageModel: asset.model || "",
+        quality: String(asset.config?.quality || ""),
+        size: String(asset.config?.size || ""),
+        count: String(images.length || 1),
+    };
     return {
-        id: log.id || nanoid(),
-        createdAt: log.createdAt || Date.now(),
-        title: log.title || log.model || i18n.t("workbench.untitled"),
-        prompt: log.prompt || log.title || "",
-        time: log.time || new Date().toLocaleString(i18n.resolvedLanguage, { hour12: false }),
-        model: log.model || config.imageModel || "",
+        id: asset.client_id || `remote:${asset.id}`,
+        createdAt: createdAtMs,
+        title: asset.title || asset.model || i18n.t("workbench.untitled"),
+        prompt: asset.prompt || "",
+        time: new Date(createdAtMs).toLocaleString(toIntlLocale(i18n.resolvedLanguage), { hour12: false }),
+        model: asset.model || "",
         config,
-        references,
-        durationMs: log.durationMs || 0,
-        successCount: log.successCount ?? log.imageCount ?? 0,
-        failCount: log.failCount || 0,
-        imageCount: log.imageCount || log.successCount || 0,
-        size: log.size || config.size || "",
-        quality: log.quality || config.quality || "",
-        status: log.status || "success",
+        references: [],
+        durationMs: Number(asset.config?.duration_ms || 0),
+        successCount: images.length,
+        failCount: asset.status === "failed" ? 1 : 0,
+        imageCount: images.length,
+        size: config.size,
+        quality: config.quality,
+        status: asset.status === "failed" ? "failed" : "success",
         images,
         thumbnails: images.map((image) => image.dataUrl).filter(Boolean),
     };
 }
 
-function serializeLog(log: GenerationLog): GenerationLog {
-    return {
-        ...log,
-        references: log.references.map((item) => ({ ...item, dataUrl: item.storageKey ? "" : item.dataUrl })),
-        images: log.images.map((image) => ({ ...image, dataUrl: image.storageKey ? "" : image.dataUrl })),
-        thumbnails: [],
-    };
-}
+
 
 async function syncGenerationAsset(log: GenerationLog) {
     const referenceUrls = workbenchImageReferenceUrls(log.references);
@@ -898,15 +939,6 @@ function workbenchImageReferenceUrls(references: ReferenceImage[] | undefined) {
     return urls;
 }
 
-function normalizeLogConfig(log: Partial<GenerationLog>): GenerationLogConfig {
-    return {
-        model: log.config?.model || log.model || "",
-        imageModel: log.config?.imageModel || log.model || "",
-        quality: log.config?.quality || log.quality || "",
-        size: log.config?.size || log.size || "",
-        count: log.config?.count || String(log.imageCount || log.successCount || 1),
-    };
-}
 
 function moveListItem<T>(items: T[], index: number, offset: number) {
     const targetIndex = index + offset;
@@ -959,7 +991,7 @@ function buildLog({
         createdAt: Date.now(),
         title: prompt.slice(0, 12) || i18n.t("workbench.untitled"),
         prompt,
-        time: new Date().toLocaleString(i18n.resolvedLanguage, { hour12: false }),
+        time: new Date().toLocaleString(toIntlLocale(i18n.resolvedLanguage), { hour12: false }),
         model,
         config: logConfig,
         references,

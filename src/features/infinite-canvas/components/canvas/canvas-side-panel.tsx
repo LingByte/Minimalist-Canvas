@@ -23,7 +23,8 @@ import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { CanvasNodeType, type CanvasNodeData } from "@canvas/types/canvas";
 
 import type { InsertAssetPayload } from "./asset-picker-modal";
-import { CanvasLocalGenerationLogsTab } from "./canvas-local-generation-logs-tab";
+import { CanvasGenerationLogsTab } from "./canvas-generation-logs-tab";
+import { useGenerationLogsBadgeStore } from "@canvas/stores/use-generation-logs-badge-store";
 
 const PANEL_MOTION_SECONDS = CANVAS_SIDE_PANEL_MOTION_MS / 1000;
 const PANEL_EASE = [0.22, 1, 0.36, 1] as const;
@@ -69,16 +70,40 @@ export function CanvasSidePanel({ nodes, selectedNodeIds, onFocusNode, onPreview
     const requestedTab = useCanvasSidePanelStore((state) => state.requestedTab);
     const clearRequestedTab = useCanvasSidePanelStore((state) => state.clearRequestedTab);
     const [resizing, setResizing] = useState(false);
+    const pendingCount = useGenerationLogsBadgeStore((state) => state.pendingCount);
+    const unreadCount = useGenerationLogsBadgeStore((state) => state.unreadCount);
+    const startWatching = useGenerationLogsBadgeStore((state) => state.startWatching);
+    const stopWatching = useGenerationLogsBadgeStore((state) => state.stopWatching);
+    const markSeen = useGenerationLogsBadgeStore((state) => state.markSeen);
+
+    useEffect(() => {
+        if (!panelMounted) return;
+        startWatching();
+        return () => stopWatching();
+    }, [panelMounted, startWatching, stopWatching]);
 
     useEffect(() => {
         if (!requestedTab) return;
         setTab(requestedTab);
+        if (requestedTab === "logs") markSeen();
         clearRequestedTab();
-    }, [clearRequestedTab, requestedTab]);
+    }, [clearRequestedTab, markSeen, requestedTab]);
+
+    const openLogsTab = () => {
+        setTab("logs");
+        markSeen();
+    };
 
     const goBack = () => {
         navigate("/canvas");
     };
+
+    const logsBadge =
+        pendingCount > 0
+            ? { count: pendingCount, tone: "pending" as const }
+            : unreadCount > 0
+              ? { count: unreadCount, tone: "new" as const }
+              : null;
 
     const startResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
         event.preventDefault();
@@ -130,11 +155,16 @@ export function CanvasSidePanel({ nodes, selectedNodeIds, onFocusNode, onPreview
                         <span className="min-w-0 truncate text-sm font-semibold tracking-tight">{brandName}</span>
                     </button>
                 </div>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 pt-3">
-                    <TabButton label={t("canvas.sidePanel.canvas")} active={tab === "canvas"} theme={theme} onClick={() => setTab("canvas")} />
-                    <TabButton label={t("canvas.sidePanel.assets")} active={tab === "assets"} theme={theme} onClick={() => setTab("assets")} />
-                    <TabButton label={t("canvas.sidePanel.prompts")} active={tab === "prompts"} theme={theme} onClick={() => setTab("prompts")} />
-                    <TabButton label={t("canvas.sidePanel.logs")} active={tab === "logs"} theme={theme} onClick={() => setTab("logs")} />
+                <div data-tour="canvas-logs-guide">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 pt-3">
+                        <TabButton label={t("canvas.sidePanel.canvas")} active={tab === "canvas"} theme={theme} onClick={() => setTab("canvas")} />
+                        <TabButton label={t("canvas.sidePanel.assets")} active={tab === "assets"} theme={theme} onClick={() => setTab("assets")} />
+                        <TabButton label={t("canvas.sidePanel.prompts")} active={tab === "prompts"} theme={theme} onClick={() => setTab("prompts")} />
+                        <TabButton label={t("canvas.sidePanel.logs")} active={tab === "logs"} theme={theme} badge={logsBadge} dataTour="canvas-logs-tab" onClick={openLogsTab} />
+                    </div>
+                    <div className="mx-3 mt-1.5 rounded-md border border-amber-500/35 bg-amber-500/10 px-2 py-1 dark:border-amber-400/30 dark:bg-amber-400/10" data-tour="canvas-logs-authority-tip">
+                        <p className="text-[11px] font-medium leading-snug text-amber-900/90 dark:text-amber-100/90">{t("canvas.sidePanel.logsAuthorityTip")}</p>
+                    </div>
                 </div>
                 <div className="mt-2 min-h-0 flex-1 overflow-hidden">
                     {tab === "canvas" ? (
@@ -144,8 +174,17 @@ export function CanvasSidePanel({ nodes, selectedNodeIds, onFocusNode, onPreview
                     ) : tab === "prompts" ? (
                         <CanvasPromptsTab onInsert={onInsertAsset} theme={theme} />
                     ) : (
-                        <CanvasLocalGenerationLogsTab onInsert={onInsertAsset} theme={theme} />
+                        <CanvasGenerationLogsTab onInsert={onInsertAsset} theme={theme} />
                     )}
+                </div>
+                <div
+                    className="shrink-0 border-t px-3 py-2.5"
+                    style={{ borderColor: theme.toolbar.border }}
+                    data-tour="canvas-retention-tip"
+                >
+                    <p className="text-[11px] leading-relaxed opacity-55">
+                        {t("canvas.sidePanel.retentionTip")}
+                    </p>
                 </div>
                 <button type="button" className="absolute inset-y-0 right-0 z-40 w-4 translate-x-1/2 cursor-col-resize" onPointerDown={startResize} aria-label={t("canvas.sidePanel.resize")} />
             </motion.aside>

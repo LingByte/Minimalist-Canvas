@@ -3,7 +3,7 @@ import type { NavigateFunction } from "react-router-dom";
 import i18n from "@canvas/i18n";
 import { fetchPrompts } from "@canvas/services/api/prompts";
 import { uploadImage } from "@canvas/services/image-storage";
-import { imageAspectOptions, imageQualityOptions } from "@canvas/components/image-settings-panel";
+import { imageAspectOptionsForModel, imageQualityOptions } from "@canvas/components/image-settings-panel";
 import { videoResolutionOptions, videoSecondOptions, videoSizeOptions } from "@canvas/components/video-settings-panel";
 import type { CanvasAgentSnapshot } from "@canvas/lib/canvas/canvas-agent-ops";
 import { useCanvasStore } from "@canvas/stores/canvas/use-canvas-store";
@@ -152,7 +152,7 @@ function getImageConfig() {
         current: { model, modelName: modelOptionName(model), quality: config.quality || "auto", size: config.size || "1:1", count: config.count || "1" },
         models: selectableModelsByCapability(config, "image").map((value) => ({ value, label: modelOptionLabel(config, value) })),
         qualityOptions: imageQualityOptions,
-        sizeOptions: imageAspectOptions,
+        sizeOptions: imageAspectOptionsForModel(model),
         countRange: { min: 1, max: 15 },
     };
 }
