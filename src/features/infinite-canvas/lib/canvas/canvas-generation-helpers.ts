@@ -3,6 +3,8 @@ import { defaultConfig, resolveModelForCapability, type AiConfig } from "@canvas
 import i18n from "@canvas/i18n";
 import { resolveImageUrl, uploadImage } from "@canvas/services/image-storage";
 import { resolveMediaUrl } from "@canvas/services/file-storage";
+import { getGenerationAssetByClientId } from "@canvas/services/api/generation-assets";
+import { isUnstableMediaUrl } from "@canvas/lib/signed-url";
 import { imageMetadata, referenceUrl } from "@canvas/lib/canvas/canvas-node-factory";
 import type { NodeGenerationInput } from "@canvas/components/canvas/canvas-node-generation";
 import type { CanvasNodeGenerationMode } from "@canvas/components/canvas/canvas-node-prompt-panel";
@@ -76,11 +78,32 @@ export async function hydrateCanvasImages(nodes: CanvasNodeData[]) {
     return Promise.all(
         nodes.map(async (node) => {
             const content = node.metadata?.content;
-            // Keep durable https content for video/audio so generation ignore lists can
-            // still match upstream reference echoes after project reload.
             if ((node.type === CanvasNodeType.Video || node.type === CanvasNodeType.Audio) && node.metadata?.storageKey) {
-                if (content && /^https?:\/\//i.test(content)) return node;
-                return { ...node, metadata: { ...node.metadata, content: await resolveMediaUrl(node.metadata.storageKey, content) } };
+                const storageKey = node.metadata.storageKey;
+                // Keep durable own-CDN https; never trust short-lived upstream hotlinks alone.
+                if (content && /^https?:\/\//i.test(content) && !isUnstableMediaUrl(content)) {
+                    return node;
+                }
+                const local = await resolveMediaUrl(storageKey, "").catch(() => "");
+                if (local) {
+                    return { ...node, metadata: { ...node.metadata, content: local } };
+                }
+                try {
+                    const asset = await getGenerationAssetByClientId(node.id);
+                    const fresh = (asset?.assets || [])
+                        .map((item) => item.url || item.backup_url)
+                        .find((url): url is string => Boolean(url && /^https?:\/\//i.test(url) && !isUnstableMediaUrl(url)));
+                    if (fresh) {
+                        return { ...node, metadata: { ...node.metadata, content: fresh } };
+                    }
+                } catch {
+                    // Keep whatever content we still have; playback will retry heal on error.
+                }
+                // Drop dead upstream https so the UI can fall back instead of looping a 403/404.
+                if (content && isUnstableMediaUrl(content)) {
+                    return { ...node, metadata: { ...node.metadata, content: "" } };
+                }
+                return node;
             }
             if (node.type !== CanvasNodeType.Image || !content) return node;
             const images = await Promise.all((node.metadata?.images || []).map(async (image) => (image.content ? { ...image, content: await resolveImageUrl(image.storageKey, image.content) } : image)));

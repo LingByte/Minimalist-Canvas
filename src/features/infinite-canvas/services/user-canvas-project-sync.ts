@@ -30,14 +30,57 @@ import {
 import type { CanvasBackgroundMode } from '@canvas/lib/canvas-theme'
 import type { ViewportTransform } from '@canvas/types/canvas'
 
-const PUT_DEBOUNCE_MS = 1500
+/** Coalesce rapid dirty marks before starting the cloud throttle window. */
+const DIRTY_COALESCE_MS = 1500
+/** Upload a new object-storage JSON version at most this often per project. */
+const CLOUD_THROTTLE_MS = 10 * 60 * 1000
 const initialViewport: ViewportTransform = { x: 0, y: 0, k: 1 }
 
 let subscribed = false
+let flushListenersBound = false
 let skipPushUntil = 0
 let restorePromise: Promise<void> | null = null
-const putTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const dirtyCoalesceTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const throttleTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const deleteTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const dirtyProjectIds = new Set<string>()
+const inFlightPutIds = new Set<string>()
+const saveStatusListeners = new Set<() => void>()
+
+function notifySaveStatus() {
+  for (const listener of saveStatusListeners) listener()
+}
+
+export type CanvasProjectSaveStatus = {
+  dirty: boolean
+  saving: boolean
+}
+
+export function getCanvasProjectSaveStatus(projectId?: string): CanvasProjectSaveStatus {
+  if (projectId) {
+    const saving = inFlightPutIds.has(projectId)
+    const dirty =
+      saving ||
+      dirtyProjectIds.has(projectId) ||
+      dirtyCoalesceTimers.has(projectId) ||
+      throttleTimers.has(projectId)
+    return { dirty, saving }
+  }
+  const saving = inFlightPutIds.size > 0
+  const dirty =
+    saving ||
+    dirtyProjectIds.size > 0 ||
+    dirtyCoalesceTimers.size > 0 ||
+    throttleTimers.size > 0
+  return { dirty, saving }
+}
+
+export function subscribeCanvasProjectSaveStatus(listener: () => void): () => void {
+  saveStatusListeners.add(listener)
+  return () => {
+    saveStatusListeners.delete(listener)
+  }
+}
 
 function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
@@ -98,29 +141,69 @@ async function pushProject(projectId: string) {
     .projects.find((item) => item.id === projectId)
   if (!project) return
   const sanitized = sanitizeProjectForSync(project)
-  await putUserCanvasProjectByClientId(projectId, sanitized)
+  inFlightPutIds.add(projectId)
+  notifySaveStatus()
+  try {
+    await putUserCanvasProjectByClientId(projectId, sanitized)
+    dirtyProjectIds.delete(projectId)
+  } finally {
+    inFlightPutIds.delete(projectId)
+    notifySaveStatus()
+  }
 }
 
-function schedulePut(projectId: string) {
+function clearProjectTimers(projectId: string) {
+  const coalesce = dirtyCoalesceTimers.get(projectId)
+  if (coalesce) {
+    clearTimeout(coalesce)
+    dirtyCoalesceTimers.delete(projectId)
+  }
+  const throttle = throttleTimers.get(projectId)
+  if (throttle) {
+    clearTimeout(throttle)
+    throttleTimers.delete(projectId)
+  }
+}
+
+/** Mark project dirty for cloud; upload after CLOUD_THROTTLE_MS (not every edit). */
+function markCloudDirty(projectId: string) {
   if (Date.now() < skipPushUntil) return
-  const existing = putTimers.get(projectId)
-  if (existing) clearTimeout(existing)
-  putTimers.set(
+  dirtyProjectIds.add(projectId)
+  notifySaveStatus()
+
+  const existingCoalesce = dirtyCoalesceTimers.get(projectId)
+  if (existingCoalesce) clearTimeout(existingCoalesce)
+  dirtyCoalesceTimers.set(
     projectId,
     setTimeout(() => {
-      putTimers.delete(projectId)
-      void pushProject(projectId).catch(() => undefined)
-    }, PUT_DEBOUNCE_MS)
+      dirtyCoalesceTimers.delete(projectId)
+      ensureThrottleTimer(projectId)
+      notifySaveStatus()
+    }, DIRTY_COALESCE_MS)
   )
+}
+
+function ensureThrottleTimer(projectId: string) {
+  if (throttleTimers.has(projectId)) return
+  throttleTimers.set(
+    projectId,
+    setTimeout(() => {
+      throttleTimers.delete(projectId)
+      if (!dirtyProjectIds.has(projectId)) {
+        notifySaveStatus()
+        return
+      }
+      void pushProject(projectId).catch(() => undefined)
+    }, CLOUD_THROTTLE_MS)
+  )
+  notifySaveStatus()
 }
 
 function scheduleDelete(projectId: string) {
   if (Date.now() < skipPushUntil) return
-  const putTimer = putTimers.get(projectId)
-  if (putTimer) {
-    clearTimeout(putTimer)
-    putTimers.delete(projectId)
-  }
+  clearProjectTimers(projectId)
+  dirtyProjectIds.delete(projectId)
+  notifySaveStatus()
   const existing = deleteTimers.get(projectId)
   if (existing) clearTimeout(existing)
   deleteTimers.set(
@@ -132,9 +215,24 @@ function scheduleDelete(projectId: string) {
   )
 }
 
+function projectNeedsCloudSync(older: CanvasProject | undefined, project: CanvasProject) {
+  if (!older) return true
+  // Ignore updatedAt: viewport-only patches also bump it in the store.
+  // Viewport pan/zoom stays local — do not create OSS versions for it.
+  return (
+    older.title !== project.title ||
+    older.nodes !== project.nodes ||
+    older.connections !== project.connections ||
+    older.chatSessions !== project.chatSessions ||
+    older.activeChatId !== project.activeChatId ||
+    older.backgroundMode !== project.backgroundMode ||
+    older.showImageInfo !== project.showImageInfo
+  )
+}
+
 /**
- * Push-only cloud backup after local edits.
- * IndexedDB remains the source of truth; server errors are ignored.
+ * Local IndexedDB remains the source of truth for continuous edits.
+ * Object-storage JSON versions upload on a long throttle, manual save, or page hide.
  */
 export function ensureCanvasProjectBackupSubscription() {
   if (subscribed) return
@@ -152,21 +250,68 @@ export function ensureCanvasProjectBackupSubscription() {
 
     for (const project of state.projects) {
       const older = prevMap.get(project.id)
-      if (
-        !older ||
-        older.updatedAt !== project.updatedAt ||
-        older.title !== project.title ||
-        older.nodes !== project.nodes ||
-        older.connections !== project.connections ||
-        older.chatSessions !== project.chatSessions ||
-        older.activeChatId !== project.activeChatId ||
-        older.backgroundMode !== project.backgroundMode ||
-        older.showImageInfo !== project.showImageInfo ||
-        older.viewport !== project.viewport
-      ) {
-        schedulePut(project.id)
+      if (projectNeedsCloudSync(older, project)) {
+        markCloudDirty(project.id)
       }
     }
+  })
+  ensureCanvasProjectFlushListeners()
+}
+
+/** Flush pending cloud PUTs (pagehide / hide / beforeunload). */
+export async function flushCanvasProjectBackup(): Promise<void> {
+  ensureCanvasProjectBackupSubscription()
+  const ids = new Set(dirtyProjectIds)
+  for (const [id, timer] of dirtyCoalesceTimers) {
+    clearTimeout(timer)
+    dirtyCoalesceTimers.delete(id)
+    ids.add(id)
+  }
+  for (const [id, timer] of throttleTimers) {
+    clearTimeout(timer)
+    throttleTimers.delete(id)
+    ids.add(id)
+  }
+  notifySaveStatus()
+  await Promise.all(Array.from(ids).map((id) => pushProject(id).catch(() => undefined)))
+}
+
+/** Immediate cloud upload for manual Save / ⌘S. */
+export async function saveCanvasProjectNow(projectId?: string): Promise<void> {
+  ensureCanvasProjectBackupSubscription()
+  const ids = new Set<string>()
+  if (projectId) {
+    ids.add(projectId)
+    clearProjectTimers(projectId)
+    dirtyProjectIds.delete(projectId)
+  } else {
+    for (const id of dirtyProjectIds) ids.add(id)
+    for (const id of dirtyCoalesceTimers.keys()) ids.add(id)
+    for (const id of throttleTimers.keys()) ids.add(id)
+    for (const id of ids) clearProjectTimers(id)
+    dirtyProjectIds.clear()
+  }
+  notifySaveStatus()
+  if (ids.size === 0 && projectId) ids.add(projectId)
+
+  const results = await Promise.allSettled(Array.from(ids).map((id) => pushProject(id)))
+  const failed = results.find((result) => result.status === 'rejected')
+  if (failed && failed.status === 'rejected') {
+    throw failed.reason instanceof Error
+      ? failed.reason
+      : new Error('Failed to save canvas project')
+  }
+}
+
+function ensureCanvasProjectFlushListeners() {
+  if (flushListenersBound || typeof window === 'undefined') return
+  flushListenersBound = true
+  const flush = () => {
+    void flushCanvasProjectBackup()
+  }
+  window.addEventListener('pagehide', flush)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flush()
   })
 }
 
@@ -216,7 +361,6 @@ export async function restoreCanvasProjectsIfLocalEmpty(): Promise<void> {
     )
 
     if (!restored.length) return
-    // Local may have gained projects while we fetched; never clobber them.
     if (useCanvasStore.getState().projects.length > 0) return
 
     skipPushUntil = Date.now() + 2500

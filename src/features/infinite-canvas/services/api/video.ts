@@ -44,6 +44,8 @@ type RequestOptions = {
     onProgress?: (progress: number) => void;
     /** URLs that must not be treated as a finished generation result (e.g. reference videos). */
     ignoreResultUrls?: string[];
+    /** One id for this click, shared with the later generation-asset sync. */
+    attemptId?: string;
 };
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
 
@@ -61,6 +63,8 @@ export type VideoGenerationTask = {
     model: string;
     /** Public media URLs actually submitted upstream (after resolve/upload). */
     submittedReferenceUrls?: string[];
+    /** Shared with the generation-asset sync for this click. */
+    attemptId?: string;
 };
 export type VideoGenerationTaskState =
     | { status: "pending"; progress?: number }
@@ -74,11 +78,18 @@ function aiApiUrl(config: AiConfig, path: string) {
     return buildApiUrl(config.baseUrl, path);
 }
 
-function aiHeaders(config: AiConfig, contentType?: string) {
+function aiHeaders(config: AiConfig, contentType?: string, extra?: Record<string, string>) {
     return {
         Authorization: `Bearer ${config.apiKey}`,
         ...(contentType ? { "Content-Type": contentType } : {}),
+        ...(extra || {}),
     };
+}
+
+function generationAttemptId(existing?: string) {
+    const value = existing?.trim() || "";
+    if (/^[A-Za-z0-9_-]{8,64}$/.test(value)) return value;
+    return nanoid();
 }
 
 export async function requestVideoGeneration(config: AiConfig, prompt: string, references: ReferenceImage[] | VideoGenerationReferences = [], options?: RequestOptions): Promise<VideoGenerationResult> {
@@ -217,7 +228,7 @@ async function createPluginVideoTask(config: AiConfig, model: string, script: st
     );
     const id = nanoid();
     pluginVideoResults.set(id, result);
-    return { id, provider: "plugin", model, submittedReferenceUrls };
+    return { id, provider: "plugin", model, submittedReferenceUrls, attemptId: generationAttemptId(options?.attemptId) };
 }
 
 function videoPluginResult(result: unknown, ignoreResultUrls?: string[]): VideoGenerationResult {
@@ -282,19 +293,26 @@ export async function storeGeneratedVideo(
 
 /** Best-effort server remirror; updates the node via onRemirrored when CDN is ready. */
 async function remirrorPublicVideoInBackground(url: string, mimeType: string | undefined, onRemirrored: ((file: UploadedFile) => void) | undefined, localKey: string) {
-    try {
-        const mirrored = await mirrorRemoteToObjectStorage(url, "video");
-        if (!mirrored?.accessUrl) return;
-        const file: UploadedFile = {
-            url: mirrored.accessUrl,
-            storageKey: localKey,
-            bytes: mirrored.bytes || 0,
-            mimeType: mirrored.mimeType || mimeType || "video/mp4",
-        };
-        void cachePublicVideoLocally(localKey, file.url, file.mimeType);
-        onRemirrored?.(file);
-    } catch {
-        // Upstream may expire; the node already shows the original public URL.
+    const delays = [0, 2_000, 8_000, 20_000];
+    for (let attempt = 0; attempt < delays.length; attempt += 1) {
+        if (delays[attempt]) {
+            await new Promise((resolve) => window.setTimeout(resolve, delays[attempt]));
+        }
+        try {
+            const mirrored = await mirrorRemoteToObjectStorage(url, "video");
+            if (!mirrored?.accessUrl) continue;
+            const file: UploadedFile = {
+                url: mirrored.accessUrl,
+                storageKey: localKey,
+                bytes: mirrored.bytes || 0,
+                mimeType: mirrored.mimeType || mimeType || "video/mp4",
+            };
+            void cachePublicVideoLocally(localKey, file.url, file.mimeType);
+            onRemirrored?.(file);
+            return;
+        } catch {
+            // Retry — upstream TTL often outlives the first remirror attempt.
+        }
     }
 }
 
@@ -344,6 +362,8 @@ async function createOpenAIVideoTask(config: AiConfig, model: string, prompt: st
                 payload.aspect_ratio = ratio;
             }
         }
+        payload.generate_audio = boolConfig(config.videoGenerateAudio, true);
+        payload.watermark = boolConfig(config.videoWatermark, false);
         // Upstream (e.g. dq-sd933) rejects multiple image fields at once:
         // "use only one image reference field, got images and image"
         if (imageRefs.length === 1) {
@@ -356,10 +376,11 @@ async function createOpenAIVideoTask(config: AiConfig, model: string, prompt: st
         if (videoRefs.length) payload.videos = videoRefs;
         if (audioRefs.length) payload.audios = audioRefs;
 
+        const attemptId = generationAttemptId(options?.attemptId);
         const created = unwrapVideoResponse(
             (
                 await axios.post<ApiVideoResponse>(aiApiUrl(config, "/videos"), payload, {
-                    headers: aiHeaders(config, "application/json"),
+                    headers: aiHeaders(config, "application/json", { "X-Generation-Attempt-Id": attemptId }),
                     signal: options?.signal,
                 })
             ).data,
@@ -370,6 +391,7 @@ async function createOpenAIVideoTask(config: AiConfig, model: string, prompt: st
             provider: "openai",
             model,
             submittedReferenceUrls: mergeIgnoreResultUrls(imageRefs, videoRefs, audioRefs, options?.ignoreResultUrls),
+            attemptId,
         };
     } catch (error) {
         throw new Error(readAxiosError(error, apiText("videoTaskCreateFailed")));

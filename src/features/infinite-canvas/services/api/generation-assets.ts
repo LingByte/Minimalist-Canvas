@@ -48,6 +48,8 @@ export type UpsertGenerationAssetInput = {
   error?: string;
   config?: Record<string, unknown>;
   assets?: GenerationAssetFile[];
+  /** One id per canvas/workbench click. Sent as a header, not stored in the body. */
+  attempt_id?: string;
 };
 
 export type RunCanvasImageJobInput = {
@@ -62,6 +64,7 @@ export type RunCanvasImageJobInput = {
   quality?: string;
   background?: string;
   references?: string[];
+  attempt_id?: string;
 };
 
 type ApiEnvelope<T> = {
@@ -76,31 +79,10 @@ export type GenerationAssetPage = {
   has_more: boolean;
 };
 
-export async function listGenerationAssets(params?: {
-  kind?: GenerationAssetKind;
-  source?: GenerationAssetSource;
-  status?: GenerationAssetStatus;
-  keyword?: string;
-  cursor?: string;
-  limit?: number;
-}): Promise<GenerationAssetPage> {
-  const query = new URLSearchParams();
-  if (params?.kind) query.set("kind", params.kind);
-  if (params?.source) query.set("source", params.source);
-  if (params?.status) query.set("status", params.status);
-  if (params?.keyword) query.set("keyword", params.keyword);
-  if (params?.cursor) query.set("cursor", params.cursor);
-  query.set("limit", String(params?.limit || 10));
-  const res = await api.get<ApiEnvelope<GenerationAssetPage>>(`/api/generation-assets/?${query.toString()}`, {
-    skipErrorHandler: true,
-  });
-  return (
-    res.data?.data || {
-      items: [],
-      next_cursor: "",
-      has_more: false,
-    }
-  );
+function attemptHeaders(attemptId?: string) {
+  const value = attemptId?.trim() || "";
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(value)) return undefined;
+  return { "X-Generation-Attempt-Id": value };
 }
 
 function isDurableUrl(url?: string) {
@@ -158,7 +140,7 @@ export async function upsertGenerationAsset(input: UpsertGenerationAssetInput): 
         config: input.config || {},
         assets,
       },
-      { skipErrorHandler: true },
+      { skipErrorHandler: true, headers: attemptHeaders(input.attempt_id) },
     );
     if (!res.data?.success || !res.data.data) return null;
     return res.data.data;
@@ -185,13 +167,40 @@ export async function runCanvasImageJob(input: RunCanvasImageJobInput): Promise<
         background: input.background || "",
         references: input.references || [],
       },
-      { skipErrorHandler: true },
+      { skipErrorHandler: true, headers: attemptHeaders(input.attempt_id) },
     );
     if (!res.data?.success || !res.data.data) return null;
     return res.data.data;
   } catch {
     return null;
   }
+}
+
+export async function listGenerationAssets(params?: {
+  kind?: GenerationAssetKind;
+  source?: GenerationAssetSource;
+  status?: GenerationAssetStatus;
+  keyword?: string;
+  cursor?: string;
+  limit?: number;
+}): Promise<GenerationAssetPage> {
+  const query = new URLSearchParams();
+  if (params?.kind) query.set("kind", params.kind);
+  if (params?.source) query.set("source", params.source);
+  if (params?.status) query.set("status", params.status);
+  if (params?.keyword) query.set("keyword", params.keyword);
+  if (params?.cursor) query.set("cursor", params.cursor);
+  query.set("limit", String(params?.limit || 10));
+  const res = await api.get<ApiEnvelope<GenerationAssetPage>>(`/api/generation-assets/?${query.toString()}`, {
+    skipErrorHandler: true,
+  });
+  return (
+    res.data?.data || {
+      items: [],
+      next_cursor: "",
+      has_more: false,
+    }
+  );
 }
 
 export async function getGenerationAssetByClientId(clientId: string): Promise<GenerationAsset | null> {

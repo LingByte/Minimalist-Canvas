@@ -1,5 +1,6 @@
 import { upsertGenerationAsset } from "@canvas/services/api/generation-assets";
-import { syncCanvasImageToLocalLogs, syncCanvasVideoToLocalLogs } from "@canvas/services/local-generation-logs";
+import { useGenerationLogsBadgeStore } from "@canvas/stores/use-generation-logs-badge-store";
+import { isUnstableMediaUrl } from "@canvas/lib/signed-url";
 
 export type GenerationAssetConfigSnapshot = Record<string, unknown>;
 
@@ -33,6 +34,7 @@ type CanvasVideoAssetInput = {
   /** Reference media URLs that must not be persisted as the generation result. */
   excludeUrls?: string[];
   config?: GenerationAssetConfigSnapshot;
+  attemptId?: string;
 };
 
 /** Compact request-param snapshot for generation_assets.config. */
@@ -43,12 +45,16 @@ export function buildCanvasImageAssetConfig(input: {
   mode?: string;
   count?: string | number;
   images?: string[];
+  resolution?: string;
+  ratio?: string;
 }): GenerationAssetConfigSnapshot {
   const config: GenerationAssetConfigSnapshot = {};
   putString(config, "size", input.size);
   putString(config, "quality", input.quality);
   putString(config, "background", input.background);
   putString(config, "mode", input.mode);
+  putString(config, "resolution", input.resolution);
+  putString(config, "ratio", input.ratio);
   if (input.count != null && String(input.count).trim() !== "") {
     config.count = String(input.count);
   }
@@ -87,24 +93,8 @@ export function buildCanvasVideoAssetConfig(input: {
   return config;
 }
 
-/**
- * Persist canvas image generation to the shared local workbench log store
- * (image_generation_logs), and best-effort sync to the cloud API.
- */
+/** Best-effort persist a canvas image generation for later download. */
 export function syncCanvasImageGenerationAsset(input: CanvasImageAssetInput) {
-  void syncCanvasImageToLocalLogs({
-    clientId: input.clientId,
-    prompt: input.prompt,
-    model: input.model,
-    url: input.url,
-    storageKey: input.storageKey,
-    mimeType: input.mimeType,
-    width: input.width,
-    height: input.height,
-    bytes: input.bytes,
-    status: "success",
-    config: input.config,
-  }).catch(() => undefined);
   void upsertGenerationAsset({
     client_id: input.clientId,
     kind: "image",
@@ -124,32 +114,20 @@ export function syncCanvasImageGenerationAsset(input: CanvasImageAssetInput) {
         bytes: input.bytes,
       },
     ],
+  }).then((row) => {
+    if (row) void useGenerationLogsBadgeStore.getState().refresh();
   });
 }
 
-/**
- * Persist canvas video generation to the shared local workbench log store
- * (video_generation_logs), and best-effort sync to the cloud API.
- */
+/** Best-effort persist a canvas video generation for later download. */
 export async function syncCanvasVideoGenerationAsset(input: CanvasVideoAssetInput) {
   if (isExcludedAssetUrl(input.url, input.excludeUrls)) return;
-  await syncCanvasVideoToLocalLogs({
-    clientId: input.clientId,
-    prompt: input.prompt,
-    model: input.model,
-    taskId: input.taskId,
-    url: input.url,
-    storageKey: input.storageKey,
-    mimeType: input.mimeType,
-    width: input.width,
-    height: input.height,
-    bytes: input.bytes,
-    durationMs: input.durationMs,
-    status: input.status || "success",
-    error: input.error,
-    config: input.config,
-  }).catch(() => undefined);
-  await upsertGenerationAsset({
+  // Never persist short-lived upstream hotlinks into generation_assets.
+  if (input.url && isUnstableMediaUrl(input.url)) return;
+  // Local config gaps and poll give-ups must not mark the generation record
+  // failed while the task log is still running.
+  if (shouldKeepVideoAssetPending(input.status, input.error)) return;
+  const row = await upsertGenerationAsset({
     client_id: input.clientId,
     kind: "video",
     source: "canvas",
@@ -159,6 +137,7 @@ export async function syncCanvasVideoGenerationAsset(input: CanvasVideoAssetInpu
     status: input.status || "success",
     task_id: input.taskId,
     error: input.error,
+    attempt_id: input.attemptId,
     config: input.config && Object.keys(input.config).length ? input.config : undefined,
     assets: input.url || input.storageKey
       ? [
@@ -174,6 +153,65 @@ export async function syncCanvasVideoGenerationAsset(input: CanvasVideoAssetInpu
         ]
       : [],
   });
+  if (row) void useGenerationLogsBadgeStore.getState().refresh();
+}
+
+/** True when a failed sync is only the browser giving up, not an upstream result. */
+export function shouldKeepVideoAssetPending(status?: string, error?: string) {
+  return status === "failed" && (isClientConfigIncompleteError(error) || isClientPollGiveUp(error) || isClientRemirrorError(error));
+}
+
+/** Remirror / OSS upload failures must not mark generation_assets failed. */
+function isClientRemirrorError(message?: string) {
+  const msg = message?.trim() || "";
+  if (!msg) return false;
+  const lower = msg.toLowerCase();
+  const needles = [
+    "object storage is required",
+    "画布媒体必须上传到对象存储",
+    "failed to download upstream video",
+    "upstream video download was empty",
+    "failed to presign upload",
+    "proxy upload failed",
+    "direct upload failed",
+    "failed to mirror remote media",
+    "failed to fetch",
+    "networkerror",
+    "network request failed",
+    "load failed",
+    "cors",
+  ];
+  return needles.some((needle) => msg.includes(needle) || lower.includes(needle));
+}
+
+function isClientPollGiveUp(message?: string) {
+  const msg = message?.trim() || "";
+  if (!msg) return false;
+  const lower = msg.toLowerCase();
+  const needles = [
+    "视频生成超时",
+    "video generation timed out",
+    "视频任务查询失败",
+    "failed to query video task",
+    "请求已取消",
+    "request canceled",
+    "画布媒体必须上传到对象存储",
+    "object storage is required",
+  ];
+  return needles.some((needle) => msg.includes(needle) || lower.includes(needle));
+}
+
+function isClientConfigIncompleteError(message?: string) {
+  const msg = message?.trim() || "";
+  if (!msg) return false;
+  return (
+    msg.includes("请先配置 API Key") ||
+    msg.includes("Configure the API key first") ||
+    msg.includes("请先配置 Base URL") ||
+    msg.includes("Configure the Base URL first") ||
+    msg.includes("请先填写接口地址和 API Key") ||
+    msg.includes("Enter an API endpoint and API key first")
+  );
 }
 
 function putString(config: GenerationAssetConfigSnapshot, key: string, value?: string) {

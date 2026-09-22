@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { isUnstableMediaUrl } from '@canvas/lib/signed-url'
 import type { CanvasProject } from '@canvas/stores/canvas/use-canvas-store'
 import type {
   CanvasAssistantMessage,
@@ -26,7 +27,8 @@ import type {
 } from '@canvas/types/canvas'
 
 function isDurableUrl(value: string) {
-  return /^https?:\/\//i.test(value.trim())
+  const trimmed = value.trim()
+  return /^https?:\/\//i.test(trimmed) && !isUnstableMediaUrl(trimmed)
 }
 
 function sanitizeMediaUrl(value: unknown): string {
@@ -51,10 +53,8 @@ function sanitizeMetadata(
   if (!metadata) return metadata
   const next: CanvasNodeMetadata = { ...metadata }
   if (typeof next.content === 'string') {
-    const durable = sanitizeMediaUrl(next.content)
-    if (next.content.startsWith('blob:') || next.content.startsWith('data:')) {
-      next.content = durable
-    }
+    // Drop blob/data and short-lived upstream hotlinks (Dola/TOS/etc.).
+    next.content = sanitizeMediaUrl(next.content)
   }
   if (Array.isArray(next.images)) {
     next.images = next.images.map(sanitizeNodeImage)

@@ -494,6 +494,43 @@ function absoluteAccessUrl(url: string) {
   return new URL(url, window.location.origin).toString()
 }
 
+/** Public http(s) that workers / other devices can fetch (not localhost / private LAN). */
+export function isPubliclyReachableMediaUrl(value: string) {
+  if (!/^https?:\/\//i.test(value || '')) return false
+  try {
+    const host = new URL(value).hostname.toLowerCase()
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '0.0.0.0') {
+      return false
+    }
+    if (host.endsWith('.local') || host.endsWith('.internal')) return false
+    if (
+      /^10\./.test(host) ||
+      /^192\.168\./.test(host) ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+    ) {
+      return false
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** True when URL already points at our configured object-storage public base. */
+export async function isOwnObjectStorageUrl(url: string): Promise<boolean> {
+  if (!isPubliclyReachableMediaUrl(url)) return false
+  try {
+    const status = await getObjectStorageStatus()
+    const base = (status.public_base || '').trim()
+    if (!base) return false
+    const baseUrl = absoluteAccessUrl(base).replace(/\/+$/, '')
+    const target = absoluteAccessUrl(url)
+    return target === baseUrl || target.startsWith(`${baseUrl}/`)
+  } catch {
+    return false
+  }
+}
+
 function guessFilename(mimeType: string) {
   const ext =
     mimeType === 'image/png'
