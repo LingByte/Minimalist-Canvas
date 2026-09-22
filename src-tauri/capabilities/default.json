@@ -24,6 +24,7 @@
         { "url": "http://localhost:3000/*" },
         { "url": "http://127.0.0.1:3000/*" },
         { "url": "http://1.14.99.158:9000/*" },
+        { "url": "https://canvas.lingecho.com/*" },
         { "url": "https://simplefuture.zone/*" },
         { "url": "https://*.simplefuture.zone/*" },
         { "url": "https://*.lingecho.com/*" },
