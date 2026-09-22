@@ -1,15 +1,13 @@
 import type { CSSProperties, ReactNode } from "react";
-import { Dropdown, Tooltip } from "antd";
+import { Dropdown } from "antd";
 import { Keyboard, MoreHorizontal, Puzzle, Settings2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { LanguageSwitcher } from "@/components/language-switcher";
 import { ProfileDropdown } from "@/components/profile-dropdown";
 import { ThemeSwitch } from "@/components/theme-switch";
 
 import { AnimatedThemeToggler } from "@canvas/components/ui/animated-theme-toggler";
 import { useCanvasHost } from "@canvas/integration/canvas-host-context";
-import { changeAppLocale, type AppLocale } from "@canvas/i18n";
 import { cn } from "@canvas/lib/utils";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
 import { useConfigStore } from "@canvas/stores/use-config-store";
@@ -20,6 +18,8 @@ type UserStatusActionsProps = {
     variant?: "default" | "canvas";
     /** Collapse secondary actions into a "more" menu below the md breakpoint. */
     compactOnMobile?: boolean;
+    /** Vertical stack for narrow sidebars; default is a horizontal row. */
+    orientation?: "horizontal" | "vertical";
     onOpenShortcuts?: () => void;
     onOpenPlugins?: () => void;
 };
@@ -35,10 +35,11 @@ export function UserStatusActions({
     showConfig = true,
     variant = "default",
     compactOnMobile = false,
+    orientation = "horizontal",
     onOpenShortcuts,
     onOpenPlugins,
 }: UserStatusActionsProps) {
-    const { i18n, t } = useTranslation();
+    const { t } = useTranslation();
     const { embedded } = useCanvasHost();
     const theme = useThemeStore((state) => state.theme);
     const setTheme = useThemeStore((state) => state.setTheme);
@@ -47,9 +48,6 @@ export function UserStatusActions({
     const naturalIconClass =
         "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-stone-600 transition-colors hover:bg-black/5 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white [&_svg]:size-4";
     const iconStyle: CSSProperties | undefined = variant === "canvas" ? { color: canvasTheme.node.text } : undefined;
-    const locale = i18n.resolvedLanguage as AppLocale;
-    const nextLocale = locale === "zh-CN" ? "en-US" : "zh-CN";
-    const languageLabel = t("topNav.switchLanguage", { language: t(nextLocale === "zh-CN" ? "locale.zhCN" : "locale.enUS") });
     // Use md (768px) so phone/tablet portrait keep the compact strip.
     const desktopOnlyClass = compactOnMobile ? "hidden md:inline-flex" : "inline-flex";
 
@@ -74,15 +72,6 @@ export function UserStatusActions({
                   } satisfies MoreMenuItem,
               ]
             : []),
-        ...(!embedded
-            ? [
-                  {
-                      key: "language",
-                      label: languageLabel,
-                      onClick: () => void changeAppLocale(nextLocale),
-                  } satisfies MoreMenuItem,
-              ]
-            : []),
         ...(onOpenShortcuts
             ? [
                   {
@@ -95,8 +84,17 @@ export function UserStatusActions({
             : []),
     ];
 
+    const stack = orientation === "vertical";
+
     return (
-        <div className="inline-flex shrink-0 items-center gap-0.5 md:gap-1">
+        <div
+            className={cn(
+                "shrink-0",
+                stack
+                    ? "flex w-full flex-col items-center gap-1.5"
+                    : "inline-flex items-center gap-0.5 md:gap-1",
+            )}
+        >
             {onOpenPlugins ? (
                 <button
                     type="button"
@@ -124,32 +122,18 @@ export function UserStatusActions({
                 </button>
             ) : null}
             {embedded ? (
-                <span className={cn("items-center gap-1", desktopOnlyClass)}>
-                    <LanguageSwitcher />
+                <span className={cn(desktopOnlyClass, stack ? "flex flex-col items-center gap-1.5" : "items-center gap-1")}>
                     <ThemeSwitch />
                 </span>
             ) : (
-                <>
-                    <Tooltip title={languageLabel} mouseEnterDelay={0.2}>
-                        <button
-                            type="button"
-                            className={cn(naturalIconClass, desktopOnlyClass, "text-[11px] font-semibold tracking-tight")}
-                            style={iconStyle}
-                            onClick={() => void changeAppLocale(nextLocale)}
-                            aria-label={languageLabel}
-                        >
-                            {locale === "zh-CN" ? "中" : "EN"}
-                        </button>
-                    </Tooltip>
-                    <AnimatedThemeToggler
-                        theme={theme}
-                        onThemeChange={setTheme}
-                        className={cn(naturalIconClass, desktopOnlyClass)}
-                        style={iconStyle}
-                        aria-label={t(theme === "dark" ? "topNav.lightTheme" : "topNav.darkTheme")}
-                        title={t(theme === "dark" ? "topNav.lightTheme" : "topNav.darkTheme")}
-                    />
-                </>
+                <AnimatedThemeToggler
+                    theme={theme}
+                    onThemeChange={setTheme}
+                    className={cn(naturalIconClass, desktopOnlyClass)}
+                    style={iconStyle}
+                    aria-label={t(theme === "dark" ? "topNav.lightTheme" : "topNav.darkTheme")}
+                    title={t(theme === "dark" ? "topNav.lightTheme" : "topNav.darkTheme")}
+                />
             )}
             {onOpenShortcuts ? (
                 <button

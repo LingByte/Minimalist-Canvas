@@ -63,12 +63,6 @@ export function AuthLayout({ children, mode }: AuthLayoutProps) {
             >
               {t('Back to home')}
             </Link>
-            <Link
-              to='/docs'
-              className='text-muted-foreground hidden text-sm transition-colors hover:text-foreground sm:inline'
-            >
-              {t('Docs')}
-            </Link>
             <LanguageSwitcher />
             <ThemeSwitch />
             {mode === 'sign-up' ? (
