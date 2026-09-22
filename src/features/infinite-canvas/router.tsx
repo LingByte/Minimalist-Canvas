@@ -13,11 +13,32 @@ import ProfilePage from "@canvas/pages/profile";
 import PromptsPage from "@canvas/pages/prompts";
 import VideoPage from "@canvas/pages/video";
 
+import { ForgotPassword } from "@/features/auth/forgot-password";
+import { OAuthCallbackPage } from "@/features/auth/oauth-callback-page";
+import { Otp } from "@/features/auth/otp";
+import { ResetPasswordPage } from "@/features/auth/reset-password-page";
+import { SignIn } from "@/features/auth/sign-in";
+import { SignUp } from "@/features/auth/sign-up";
 import { ApiKeys } from "@/features/keys";
 
 import { CANVAS_BASENAME } from "./integration/constants";
+import {
+    SiteDashboardPage,
+    SiteDocsPage,
+    SiteFaqDetailPage,
+    SiteFaqPage,
+    SitePricingModelPage,
+    SitePricingPage,
+} from "./pages/site";
 
 const canvasRoutes: RouteObject[] = [
+    { path: "sign-in", element: <SignIn /> },
+    { path: "sign-up", element: <SignUp /> },
+    { path: "register", element: <SignUp /> },
+    { path: "forgot-password", element: <ForgotPassword /> },
+    { path: "otp", element: <Otp /> },
+    { path: "reset", element: <ResetPasswordPage /> },
+    { path: "oauth/:provider", element: <OAuthCallbackPage /> },
     {
         // Local-first app: no auth gate — canvas and other local features work
         // signed out; server-backed calls degrade gracefully.
@@ -39,6 +60,14 @@ const canvasRoutes: RouteObject[] = [
             { path: "config", element: <ConfigPage /> },
             { path: "profile", element: <ProfilePage /> },
             { path: "keys", element: <ApiKeys /> },
+            { path: "dashboard", element: <SiteDashboardPage /> },
+            { path: "dashboard/:section", element: <SiteDashboardPage /> },
+            { path: "docs", element: <SiteDocsPage /> },
+            { path: "docs/:section", element: <SiteDocsPage /> },
+            { path: "faq", element: <SiteFaqPage /> },
+            { path: "faq/:faqId", element: <SiteFaqDetailPage /> },
+            { path: "pricing", element: <SitePricingPage /> },
+            { path: "pricing/:modelId", element: <SitePricingModelPage /> },
         ],
     },
     { path: "*", element: <NotFound /> },

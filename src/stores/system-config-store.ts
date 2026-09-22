@@ -98,9 +98,34 @@ export const useSystemConfigStore = create<SystemConfigState>()(
       name: 'system-config-storage',
       storage: createJSONStorage(() => localForageStorage),
       partialize: (state) => ({
-        config: state.config,
+        // Branding only — currency rates must always come from /api/status,
+        // otherwise a stale local 7× CNY rate can stick after the admin
+        // changes USDExchangeRate (e.g. 7 → 1).
+        config: {
+          systemName: state.config.systemName,
+          logo: state.config.logo,
+          footerHtml: state.config.footerHtml,
+          demoSiteEnabled: state.config.demoSiteEnabled,
+          displayTokenStatEnabled: state.config.displayTokenStatEnabled,
+        },
         loadedLogoUrl: state.loadedLogoUrl,
       }),
+      merge: (persisted, current) => {
+        const saved = (persisted ?? {}) as Partial<{
+          config: Partial<SystemConfig>
+          loadedLogoUrl: string
+        }>
+        const savedConfig = saved.config ?? {}
+        return {
+          ...current,
+          ...saved,
+          config: {
+            ...current.config,
+            ...savedConfig,
+            currency: { ...current.config.currency },
+          },
+        }
+      },
     }
   )
 )

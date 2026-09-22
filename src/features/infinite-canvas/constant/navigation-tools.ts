@@ -1,5 +1,9 @@
-import { FileText, ImagePlus, Images, Maximize2, Settings2, Video } from "lucide-react";
+import { FileText, Images, Maximize2, Settings2, Sparkles } from "lucide-react";
 
+/**
+ * Canvas tool rail. Image + video share one "generate" entry (/image);
+ * in-page tabs switch between image and video modes.
+ */
 export const navigationTools = [
     {
         slug: "canvas",
@@ -7,11 +11,9 @@ export const navigationTools = [
     },
     {
         slug: "image",
-        icon: ImagePlus,
-    },
-    {
-        slug: "video",
-        icon: Video,
+        icon: Sparkles,
+        /** Paths that highlight this nav item. */
+        matchSlugs: ["image", "video"] as const,
     },
     {
         slug: "prompts",
@@ -28,3 +30,13 @@ export const navigationTools = [
 ] as const;
 
 export type NavigationToolSlug = (typeof navigationTools)[number]["slug"];
+
+export function navigationToolActive(slug: NavigationToolSlug, pathSlug: string | undefined) {
+    if (!pathSlug) return false;
+    const tool = navigationTools.find((item) => item.slug === slug);
+    if (!tool) return false;
+    if ("matchSlugs" in tool && tool.matchSlugs) {
+        return (tool.matchSlugs as readonly string[]).includes(pathSlug);
+    }
+    return tool.slug === pathSlug;
+}
