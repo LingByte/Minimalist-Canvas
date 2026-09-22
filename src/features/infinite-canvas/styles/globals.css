@@ -607,3 +607,55 @@
     border-radius: 0.6rem;
     font-size: 0.75rem;
 }
+
+/* Ant Design Message (v6): holder is full-viewport; pin to top-right + soften opacity.
+   Notices also get left:50%/opacity:1 from placement + motion — override those too. */
+.ant-message.ant-message-top,
+.ant-message.canvas-ant-message-tr {
+  left: auto !important;
+  right: 0 !important;
+  width: auto !important;
+  max-width: min(100vw, 28rem) !important;
+  height: auto !important;
+  max-height: 100vh !important;
+  transform: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-end !important;
+  pointer-events: none !important;
+}
+
+.ant-message.ant-message-top .ant-message-list-content,
+.ant-message.canvas-ant-message-tr .ant-message-list-content {
+  width: auto !important;
+  align-items: flex-end !important;
+}
+
+.ant-message.ant-message-top .ant-message-notice,
+.ant-message.canvas-ant-message-tr .ant-message-notice {
+  left: auto !important;
+  right: 0 !important;
+  transform: none !important;
+  opacity: 0.82 !important;
+  pointer-events: auto !important;
+  transition: opacity 0.15s ease !important;
+}
+
+.ant-message.ant-message-top .ant-message-notice.ant-message-fade-appear-active,
+.ant-message.ant-message-top .ant-message-notice.ant-message-fade-enter-active,
+.ant-message.ant-message-top .ant-message-notice.ant-message-fade-appear-done,
+.ant-message.ant-message-top .ant-message-notice.ant-message-fade-enter-done,
+.ant-message.canvas-ant-message-tr .ant-message-notice.ant-message-fade-appear-active,
+.ant-message.canvas-ant-message-tr .ant-message-notice.ant-message-fade-enter-active,
+.ant-message.canvas-ant-message-tr .ant-message-notice.ant-message-fade-appear-done,
+.ant-message.canvas-ant-message-tr .ant-message-notice.ant-message-fade-enter-done {
+  opacity: 0.82 !important;
+  transform: none !important;
+}
+
+.ant-message.ant-message-top .ant-message-notice:hover,
+.ant-message.ant-message-top .ant-message-notice-wrapper:hover .ant-message-notice,
+.ant-message.canvas-ant-message-tr .ant-message-notice:hover,
+.ant-message.canvas-ant-message-tr .ant-message-notice-wrapper:hover .ant-message-notice {
+  opacity: 1 !important;
+}

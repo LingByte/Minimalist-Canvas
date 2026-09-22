@@ -20,6 +20,9 @@ import i18n from 'i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
 import { initReactI18next } from 'react-i18next'
 
+import canvasEn from '@canvas/i18n/locales/en-US'
+import canvasZh from '@canvas/i18n/locales/zh-CN'
+
 import { convertDetectedLanguage } from './languages'
 import en from './locales/en.json'
 import fr from './locales/fr.json'
@@ -29,14 +32,56 @@ import vi from './locales/vi.json'
 import zhTW from './locales/zh-TW.json'
 import zhCN from './locales/zh.json'
 
+function mergeTranslation(
+  host: Record<string, unknown>,
+  canvas: Record<string, unknown>
+): Record<string, unknown> {
+  return { ...host, ...canvas }
+}
+
 export const resources = {
-  en,
-  zhCN,
-  fr,
-  ru,
-  ja,
-  vi,
-  zhTW,
+  en: {
+    translation: mergeTranslation(
+      en.translation as Record<string, unknown>,
+      canvasEn as Record<string, unknown>
+    ),
+  },
+  zhCN: {
+    translation: mergeTranslation(
+      zhCN.translation as Record<string, unknown>,
+      canvasZh as Record<string, unknown>
+    ),
+  },
+  fr: {
+    translation: mergeTranslation(
+      fr.translation as Record<string, unknown>,
+      canvasEn as Record<string, unknown>
+    ),
+  },
+  ru: {
+    translation: mergeTranslation(
+      ru.translation as Record<string, unknown>,
+      canvasEn as Record<string, unknown>
+    ),
+  },
+  ja: {
+    translation: mergeTranslation(
+      ja.translation as Record<string, unknown>,
+      canvasEn as Record<string, unknown>
+    ),
+  },
+  vi: {
+    translation: mergeTranslation(
+      vi.translation as Record<string, unknown>,
+      canvasEn as Record<string, unknown>
+    ),
+  },
+  zhTW: {
+    translation: mergeTranslation(
+      zhTW.translation as Record<string, unknown>,
+      canvasZh as Record<string, unknown>
+    ),
+  },
 } as const
 
 i18n

@@ -1,0 +1,87 @@
+/* Loaded directly from app-providers — bypasses Tailwind layering. */
+#canvas-antd-message-host {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 10000;
+  display: flex;
+  width: max-content;
+  max-width: min(100vw - 32px, 28rem);
+  flex-direction: column;
+  align-items: flex-end;
+  pointer-events: none;
+}
+
+#canvas-antd-message-host .ant-message,
+#canvas-antd-message-host .ant-message-list,
+#canvas-antd-message-host .ant-message-top,
+#canvas-antd-message-host .canvas-ant-message-tr {
+  position: relative !important;
+  inset: auto !important;
+  left: auto !important;
+  right: auto !important;
+  top: auto !important;
+  bottom: auto !important;
+  width: auto !important;
+  max-width: 100% !important;
+  height: auto !important;
+  max-height: none !important;
+  transform: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-end !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  pointer-events: none !important;
+}
+
+#canvas-antd-message-host .ant-message-list-content {
+  width: auto !important;
+  align-items: flex-end !important;
+}
+
+#canvas-antd-message-host .ant-message-notice,
+#canvas-antd-message-host .ant-message-notice-wrapper {
+  position: relative !important;
+  left: auto !important;
+  right: auto !important;
+  top: auto !important;
+  transform: none !important;
+  opacity: 0.82 !important;
+  pointer-events: auto !important;
+}
+
+#canvas-antd-message-host .ant-message-notice.ant-message-fade-appear-active,
+#canvas-antd-message-host .ant-message-notice.ant-message-fade-enter-active,
+#canvas-antd-message-host .ant-message-notice.ant-message-fade-appear-done,
+#canvas-antd-message-host .ant-message-notice.ant-message-fade-enter-done,
+#canvas-antd-message-host .ant-message-fade-appear-active,
+#canvas-antd-message-host .ant-message-fade-enter-active {
+  opacity: 0.82 !important;
+  transform: none !important;
+}
+
+#canvas-antd-message-host .ant-message-notice:hover,
+#canvas-antd-message-host .ant-message-notice-wrapper:hover .ant-message-notice {
+  opacity: 1 !important;
+}
+
+/* Fallback when message still portals to body */
+body > .ant-message.ant-message-top,
+body > .ant-message.canvas-ant-message-tr {
+  left: auto !important;
+  right: 16px !important;
+  top: 16px !important;
+  width: auto !important;
+  max-width: min(100vw - 32px, 28rem) !important;
+  height: auto !important;
+  transform: none !important;
+  align-items: flex-end !important;
+}
+
+body > .ant-message .ant-message-notice {
+  left: auto !important;
+  right: 0 !important;
+  transform: none !important;
+  opacity: 0.82 !important;
+}

@@ -608,15 +608,66 @@
     font-size: 0.75rem;
 }
 
-/* Aeris homepage with AeroShards WebGPU background */
+/* Homepage header over video + tile field: force light chrome for contrast */
+.aeris-site-header {
+  --foreground: #f5f4f1;
+  --muted-foreground: rgb(245 244 241 / 0.82);
+  --background: rgb(255 255 255 / 0.16);
+  --muted: rgb(255 255 255 / 0.12);
+  --border: rgb(255 255 255 / 0.2);
+  --accent: rgb(255 255 255 / 0.1);
+  color: #f5f4f1;
+}
+
+.aeris-site-header nav {
+  border-color: rgb(255 255 255 / 0.18) !important;
+  background: rgb(255 255 255 / 0.1) !important;
+}
+
+.aeris-site-header nav a {
+  color: rgb(245 244 241 / 0.82) !important;
+}
+
+.aeris-site-header nav a:hover {
+  color: #fff !important;
+}
+
+.aeris-site-header nav a > span.absolute {
+  background: rgb(255 255 255 / 0.2) !important;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14) !important;
+}
+
+.aeris-site-header nav a.bg-foreground,
+.aeris-site-header a.bg-foreground {
+  background: #f5f4f1 !important;
+  color: #111216 !important;
+}
+
+.aeris-site-header button,
+.aeris-site-header .ant-btn {
+  color: rgb(245 244 241 / 0.88) !important;
+}
+
+.aeris-site-header button:hover,
+.aeris-site-header .ant-btn:hover {
+  color: #fff !important;
+  background: rgb(255 255 255 / 0.1) !important;
+}
+
+.aeris-site-header [class*='bg-border'],
+.aeris-site-header .mx-0\.5 {
+  background-color: rgb(255 255 255 / 0.28) !important;
+}
+
+/* Aeris tile-field homepage with looping video underlay */
 .aeris-landing {
   position: relative;
   width: 100%;
   min-height: 100%;
   height: 100%;
   overflow: hidden;
-  background: #0d0a12;
-  color: #f5f4f1;
+  background: #0a0b0d;
+  color: #131416;
   font-family: var(--font-body);
 }
 
@@ -627,29 +678,42 @@
   pointer-events: none;
 }
 
-.aeris-shards {
-  width: 100%;
-  height: 100%;
-}
-
-.aeris-shards-fallback {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-}
-
-.aeris-shards-fallback__canvas {
+.aeris-video {
   display: block;
   width: 100%;
   height: 100%;
+  object-fit: cover;
+  object-position: center;
+  pointer-events: none;
+  opacity: 0.92;
 }
 
 .aeris-veil {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, rgb(13 10 18 / 0.18) 0%, rgb(13 10 18 / 0.06) 42%, rgb(13 10 18 / 0.42) 100%);
+    linear-gradient(
+      180deg,
+      rgb(8 10 14 / 0.42) 0%,
+      rgb(8 10 14 / 0.12) 38%,
+      rgb(8 10 14 / 0.08) 58%,
+      rgb(8 10 14 / 0.55) 100%
+    );
   pointer-events: none;
+}
+
+.aeris-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: auto;
+}
+
+.aeris-canvas > div,
+.aeris-canvas canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
 }
 
 .aeris-copy {
@@ -659,97 +723,199 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  padding: 2rem 1.25rem 5.5rem;
+  justify-content: flex-end;
+  gap: 1.75rem;
+  padding: 0 1.5rem 16vh;
   text-align: center;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+}
+
+.aeris-copy.is-falling {
+  opacity: 0;
   pointer-events: none;
 }
 
-.aeris-copy h1 {
-  margin: 0;
-  max-width: 16ch;
-  font-size: clamp(2.4rem, 6vw, 4.4rem);
-  font-weight: 650;
-  letter-spacing: -0.04em;
-  line-height: 1.05;
-  color: #f7f6f2;
-  text-shadow: 0 10px 40px rgb(0 0 0 / 0.35);
+.aeris-copy > * {
+  pointer-events: none;
 }
 
-.aeris-tagline {
-  margin: 0;
-  max-width: 34rem;
-  font-size: clamp(1rem, 2.2vw, 1.25rem);
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  color: rgb(245 244 241 / 0.88);
+.aeris-copy .aeris-actions {
+  pointer-events: auto;
 }
 
-.aeris-subtitle {
-  margin: 0;
+.aeris-hero {
   max-width: 36rem;
-  font-size: clamp(0.9rem, 1.6vw, 1.05rem);
+  color: #f4f6f8;
+}
+
+.aeris-hero-eyebrow {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: rgb(186 230 253 / 0.88);
+}
+
+.aeris-hero-title {
+  margin: 0.7rem 0 0;
+  font-family: var(--font-display, var(--font-body));
+  font-size: clamp(2.1rem, 4.6vw, 3.35rem);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+  text-shadow: 0 10px 36px rgb(0 0 0 / 0.35);
+}
+
+.aeris-hero-tagline {
+  margin: 0.85rem 0 0;
+  font-size: clamp(0.98rem, 1.6vw, 1.15rem);
+  font-weight: 500;
+  line-height: 1.45;
+  color: rgb(241 245 249 / 0.92);
+}
+
+.aeris-hero-subtitle {
+  margin: 0.55rem 0 0;
+  font-size: 0.92rem;
   line-height: 1.55;
-  color: rgb(245 244 241 / 0.62);
+  color: rgb(203 213 225 / 0.82);
 }
 
 .aeris-actions {
-  pointer-events: auto;
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: center;
   gap: 0.75rem;
-  margin-top: 1.25rem;
+  margin-top: 0;
 }
 
 .aeris-enter {
-  appearance: none;
-  border: 1px solid rgb(255 255 255 / 0.18);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3.1rem;
+  padding: 0 2rem;
+  border: 1px solid rgb(56 189 248 / 0.45);
   border-radius: 999px;
-  background: rgb(255 255 255 / 0.92);
-  color: #111216;
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.95rem;
+  color: #ffffff;
+  background: linear-gradient(180deg, rgb(14 165 233 / 0.95), rgb(2 132 199 / 0.98));
+  box-shadow:
+    0 10px 28px -14px rgb(14 165 233 / 0.65),
+    inset 0 1px 0 rgb(255 255 255 / 0.18);
+  font-size: 0.98rem;
   font-weight: 600;
-  letter-spacing: 0.01em;
-  padding: 0.8rem 1.45rem;
+  letter-spacing: 0.03em;
+  text-decoration: none;
+  cursor: pointer;
   transition:
-    transform 160ms ease,
-    background-color 160ms ease,
-    box-shadow 160ms ease;
-  box-shadow: 0 12px 40px rgb(0 0 0 / 0.28);
+    opacity 200ms ease,
+    transform 200ms ease,
+    box-shadow 200ms ease,
+    border-color 200ms ease;
 }
 
 .aeris-enter--ghost {
-  background: rgb(255 255 255 / 0.08);
-  color: #f5f4f1;
+  color: #e2e8f0;
+  background: rgb(15 23 42 / 0.42);
+  border-color: rgb(148 163 184 / 0.35);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 28px -16px rgb(0 0 0 / 0.45);
 }
 
 .aeris-enter:hover:not(:disabled),
 .aeris-enter:focus-visible:not(:disabled) {
-  transform: translateY(-1px);
-  background: #fff;
-  box-shadow: 0 16px 48px rgb(0 0 0 / 0.34);
+  opacity: 0.96;
+  transform: translateY(-2px);
+  box-shadow:
+    0 14px 32px -12px rgb(14 165 233 / 0.55),
+    inset 0 1px 0 rgb(255 255 255 / 0.2);
+}
+
+.aeris-enter--ghost:hover:not(:disabled),
+.aeris-enter--ghost:focus-visible:not(:disabled) {
+  border-color: rgb(125 211 252 / 0.5);
+  background: rgb(15 23 42 / 0.55);
 }
 
 .aeris-enter:disabled {
-  cursor: not-allowed;
+  cursor: default;
   opacity: 0.55;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .aeris-copy {
-    padding: 1.5rem 1rem 4.5rem;
-    align-items: stretch;
+    gap: 1.35rem;
+    padding-bottom: 12vh;
+  }
+
+  .aeris-hero-eyebrow {
+    letter-spacing: 0.2em;
   }
 
   .aeris-actions {
     flex-direction: column;
+    width: min(100%, 17.5rem);
   }
 
   .aeris-enter {
     width: 100%;
+    padding: 0 1.35rem;
+    font-size: 0.95rem;
   }
+}
+
+/* Ant Design Message (v6): holder is full-viewport; pin to top-right + soften opacity.
+   Notices also get left:50%/opacity:1 from placement + motion — override those too. */
+.ant-message.ant-message-top,
+.ant-message.canvas-ant-message-tr {
+  left: auto !important;
+  right: 0 !important;
+  width: auto !important;
+  max-width: min(100vw, 28rem) !important;
+  height: auto !important;
+  max-height: 100vh !important;
+  transform: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-end !important;
+  pointer-events: none !important;
+}
+
+.ant-message.ant-message-top .ant-message-list-content,
+.ant-message.canvas-ant-message-tr .ant-message-list-content {
+  width: auto !important;
+  align-items: flex-end !important;
+}
+
+.ant-message.ant-message-top .ant-message-notice,
+.ant-message.canvas-ant-message-tr .ant-message-notice {
+  left: auto !important;
+  right: 0 !important;
+  transform: none !important;
+  opacity: 0.82 !important;
+  pointer-events: auto !important;
+  transition: opacity 0.15s ease !important;
+}
+
+.ant-message.ant-message-top .ant-message-notice.ant-message-fade-appear-active,
+.ant-message.ant-message-top .ant-message-notice.ant-message-fade-enter-active,
+.ant-message.ant-message-top .ant-message-notice.ant-message-fade-appear-done,
+.ant-message.ant-message-top .ant-message-notice.ant-message-fade-enter-done,
+.ant-message.canvas-ant-message-tr .ant-message-notice.ant-message-fade-appear-active,
+.ant-message.canvas-ant-message-tr .ant-message-notice.ant-message-fade-enter-active,
+.ant-message.canvas-ant-message-tr .ant-message-notice.ant-message-fade-appear-done,
+.ant-message.canvas-ant-message-tr .ant-message-notice.ant-message-fade-enter-done {
+  opacity: 0.82 !important;
+  transform: none !important;
+}
+
+.ant-message.ant-message-top .ant-message-notice:hover,
+.ant-message.ant-message-top .ant-message-notice-wrapper:hover .ant-message-notice,
+.ant-message.canvas-ant-message-tr .ant-message-notice:hover,
+.ant-message.canvas-ant-message-tr .ant-message-notice-wrapper:hover .ant-message-notice {
+  opacity: 1 !important;
 }
