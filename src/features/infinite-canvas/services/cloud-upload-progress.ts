@@ -25,13 +25,25 @@ type Job = CloudUploadJobView & {
 
 let nextId = 1;
 let jobs: Job[] = [];
-let snapshot: CloudUploadSnapshot | null = null;
+let snapshot: CloudUploadSnapshot = {
+    current: null,
+    pending: [],
+    count: 0,
+    failedCount: 0,
+};
 const listeners = new Set<() => void>();
 const urlListeners = new Set<(storageKey: string, url: string) => void>();
 
+const EMPTY_SNAPSHOT: CloudUploadSnapshot = {
+    current: null,
+    pending: [],
+    count: 0,
+    failedCount: 0,
+};
+
 function publish() {
     if (!jobs.length) {
-        snapshot = null;
+        snapshot = EMPTY_SNAPSHOT;
     } else {
         const current = jobs.find((job) => job.status === "uploading") || jobs.find((job) => job.status === "waiting") || null;
         snapshot = {

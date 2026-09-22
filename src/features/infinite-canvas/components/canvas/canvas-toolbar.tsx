@@ -11,6 +11,7 @@ import { useCanvasHost } from "@canvas/integration/canvas-host-context";
 import { useCanvasSidePanelStore } from "@canvas/stores/use-canvas-side-panel-store";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { AnimatedThemeToggler } from "@canvas/components/ui/animated-theme-toggler";
+import { CloudUploadProgress } from "@canvas/components/canvas/cloud-upload-progress";
 import { useTranslation } from "react-i18next";
 import { cn } from "@canvas/lib/utils";
 
@@ -193,6 +194,18 @@ export function CanvasToolbar({
                 <ToolbarButton id="tool-clear" label={t("canvas.toolbar.clear")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onClear} danger>
                     <Eraser className="size-4.5" />
                 </ToolbarButton>
+                <Divider theme={theme} />
+                <CloudUploadProgress
+                    variant="toolbar"
+                    toolbar={{
+                        hovered,
+                        hoverStyle,
+                        activeStyle,
+                        wrapRef,
+                        onTipX: setTipX,
+                        onHover: setHovered,
+                    }}
+                />
             </div>
 
             {extensionsOpen && extensionDefs.length ? (
@@ -387,6 +400,7 @@ function toolLabel(id: string, t: (key: string) => string) {
     if (id === "tool-style") return t("canvas.toolbar.appearance");
     if (id === "tool-delete") return t("canvas.deleteSelected");
     if (id === "tool-clear") return t("canvas.toolbar.clear");
+    if (id === "tool-cloud-upload") return t("canvas.cloudUpload.title");
     return "";
 }
 

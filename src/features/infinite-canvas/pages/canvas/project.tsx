@@ -46,7 +46,6 @@ import { Minimap } from "@canvas/components/canvas/canvas-mini-map";
 import { CanvasNode } from "@canvas/components/canvas/canvas-node";
 import { CanvasNodePromptPanel, type CanvasNodeGenerationMode } from "@canvas/components/canvas/canvas-node-prompt-panel";
 import { CanvasToolbar } from "@canvas/components/canvas/canvas-toolbar";
-import { CloudUploadProgress } from "@canvas/components/canvas/cloud-upload-progress";
 import { AssetPickerModal, type InsertAssetPayload } from "@canvas/components/canvas/asset-picker-modal";
 import { CanvasSidePanel } from "@canvas/components/canvas/canvas-side-panel";
 import { CanvasZoomControls } from "@canvas/components/canvas/canvas-zoom-controls";
@@ -3979,7 +3978,6 @@ function InfiniteCanvasPage() {
                 {isMiniMapOpen ? <Minimap nodes={nodes} viewport={viewport} viewportSize={size} onViewportChange={setViewport} /> : null}
 
                 <CanvasZoomControls scale={viewport.k} onScaleChange={setZoomScale} onReset={resetViewport} isMiniMapOpen={isMiniMapOpen} onToggleMiniMap={() => setIsMiniMapOpen((value) => !value)} />
-                <CloudUploadProgress />
                 <CanvasToolsDrawer />
 
                 {contextMenu ? (

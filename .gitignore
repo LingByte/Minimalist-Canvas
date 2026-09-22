@@ -31,3 +31,6 @@ src-tauri/gen/
 
 # Updater signing keys (never commit)
 .tauri/
+
+# Local tooling
+tools/

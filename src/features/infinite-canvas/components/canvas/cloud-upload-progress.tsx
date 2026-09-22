@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type RefObject } from "react";
 import { CloudUpload, RefreshCw, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -16,7 +16,7 @@ import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { cn } from "@/lib/utils";
 
 function useCloudUploadProgress() {
-    return useSyncExternalStore(subscribeCloudUpload, getCloudUploadSnapshot, () => null);
+    return useSyncExternalStore(subscribeCloudUpload, getCloudUploadSnapshot, getCloudUploadSnapshot);
 }
 
 function statusLabel(job: CloudUploadJobView, t: (key: string) => string) {
@@ -25,19 +25,46 @@ function statusLabel(job: CloudUploadJobView, t: (key: string) => string) {
     return t("canvas.cloudUpload.uploading");
 }
 
-export function CloudUploadProgress({ variant = "canvas" }: { variant?: "canvas" | "page" }) {
+export function CloudUploadProgress({
+    variant = "canvas",
+    toolbar,
+}: {
+    variant?: "canvas" | "page" | "toolbar";
+    /** When embedded in the bottom canvas dock. */
+    toolbar?: {
+        hovered: string | null;
+        hoverStyle: CSSProperties;
+        activeStyle: CSSProperties;
+        wrapRef: RefObject<HTMLDivElement | null>;
+        onTipX: (x: number) => void;
+        onHover: (id: string | null) => void;
+    };
+}) {
     const progress = useCloudUploadProgress();
     const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const [expanded, setExpanded] = useState(false);
     const [retryingId, setRetryingId] = useState<number | null>(null);
-    if (!progress) return null;
+    const rootRef = useRef<HTMLDivElement>(null);
 
     const current = progress.current;
     const percent = current ? Math.min(100, Math.round((current.loaded / current.total) * 100)) : 0;
     const jobs = progress.pending;
     const hasFailed = progress.failedCount > 0;
-    const positionClass = variant === "page" ? "fixed bottom-6 right-6" : "absolute bottom-[88px] right-5";
+    const hasJobs = progress.count > 0;
+    const positionClass =
+        variant === "page" ? "fixed bottom-6 right-6" : variant === "toolbar" ? "relative" : "absolute bottom-[88px] right-5";
+
+    useEffect(() => {
+        if (!expanded || variant !== "toolbar") return;
+        const handlePointerDown = (event: PointerEvent) => {
+            if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+                setExpanded(false);
+            }
+        };
+        document.addEventListener("pointerdown", handlePointerDown, true);
+        return () => document.removeEventListener("pointerdown", handlePointerDown, true);
+    }, [expanded, variant]);
 
     const handleRetry = (id: number) => {
         if (retryingId != null) return;
@@ -45,37 +72,14 @@ export function CloudUploadProgress({ variant = "canvas" }: { variant?: "canvas"
         void retryCloudUpload(id).finally(() => setRetryingId((currentId) => (currentId === id ? null : currentId)));
     };
 
-    if (!expanded) {
-        return (
-            <button
-                type="button"
-                className={cn(
-                    "pointer-events-auto z-50 inline-flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur transition hover:scale-[1.03]",
-                    positionClass,
-                )}
-                style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
-                aria-label={t("canvas.cloudUpload.title")}
-                title={t("canvas.cloudUpload.title")}
-                onClick={() => setExpanded(true)}
-                onMouseDown={(event) => event.stopPropagation()}
-                onPointerDown={(event) => event.stopPropagation()}
-            >
-                <CloudUpload className="size-4" style={{ color: hasFailed ? "#ef4444" : theme.node.muted }} />
-                <span
-                    className={cn(
-                        "absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-4 text-white",
-                        hasFailed ? "bg-red-500" : "bg-sky-500",
-                    )}
-                >
-                    {progress.count}
-                </span>
-            </button>
-        );
-    }
-
-    return (
+    const panel = expanded ? (
         <div
-            className={cn("pointer-events-auto z-50 w-[280px] rounded-xl border px-3 py-2.5 shadow-lg backdrop-blur", positionClass)}
+            className={cn(
+                "pointer-events-auto z-50 w-[280px] rounded-xl border px-3 py-2.5 shadow-lg backdrop-blur",
+                variant === "toolbar"
+                    ? "absolute bottom-[calc(100%+10px)] left-1/2 -translate-x-1/2"
+                    : positionClass,
+            )}
             style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
             onMouseDown={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
@@ -124,7 +128,11 @@ export function CloudUploadProgress({ variant = "canvas" }: { variant?: "canvas"
                 </div>
             ) : (
                 <div className="mt-2 text-xs" style={{ color: theme.node.muted }}>
-                    {hasFailed ? t("canvas.cloudUpload.failedHint") : t("canvas.cloudUpload.pendingTitle")}
+                    {hasFailed
+                        ? t("canvas.cloudUpload.failedHint")
+                        : hasJobs
+                          ? t("canvas.cloudUpload.pendingTitle")
+                          : t("canvas.cloudUpload.empty")}
                 </div>
             )}
 
@@ -175,5 +183,85 @@ export function CloudUploadProgress({ variant = "canvas" }: { variant?: "canvas"
                 </div>
             ) : null}
         </div>
-    );
+    ) : null;
+
+    if (variant === "toolbar" && toolbar) {
+        const id = "tool-cloud-upload";
+        const active = expanded;
+        const hovered = toolbar.hovered === id;
+        return (
+            <div ref={rootRef} className="relative">
+                <button
+                    type="button"
+                    aria-label={t("canvas.cloudUpload.title")}
+                    className="relative inline-flex !h-8 !w-8 !min-w-8 items-center justify-center rounded-md border-0 bg-transparent p-0 transition"
+                    style={
+                        active
+                            ? toolbar.activeStyle
+                            : hovered
+                              ? toolbar.hoverStyle
+                              : { color: hasFailed ? "#ef4444" : theme.toolbar.item }
+                    }
+                    onMouseEnter={(event) => {
+                        toolbar.onHover(id);
+                        toolbar.onTipX(getTipX(toolbar.wrapRef.current, event.currentTarget));
+                    }}
+                    onMouseLeave={() => toolbar.onHover(null)}
+                    onClick={() => setExpanded((value) => !value)}
+                >
+                    <CloudUpload className="size-4.5" />
+                    {hasJobs ? (
+                        <span
+                            className={cn(
+                                "absolute -right-0.5 -top-0.5 inline-flex min-w-3.5 items-center justify-center rounded-full px-0.5 text-[9px] font-semibold leading-3.5 text-white",
+                                hasFailed ? "bg-red-500" : "bg-sky-500",
+                            )}
+                        >
+                            {progress.count}
+                        </span>
+                    ) : null}
+                </button>
+                {panel}
+            </div>
+        );
+    }
+
+    if (!expanded) {
+        return (
+            <button
+                type="button"
+                className={cn(
+                    "pointer-events-auto z-50 inline-flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur transition hover:scale-[1.03]",
+                    positionClass,
+                )}
+                style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
+                aria-label={t("canvas.cloudUpload.title")}
+                title={t("canvas.cloudUpload.title")}
+                onClick={() => setExpanded(true)}
+                onMouseDown={(event) => event.stopPropagation()}
+                onPointerDown={(event) => event.stopPropagation()}
+            >
+                <CloudUpload className="size-4" style={{ color: hasFailed ? "#ef4444" : theme.node.muted }} />
+                {hasJobs ? (
+                    <span
+                        className={cn(
+                            "absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-4 text-white",
+                            hasFailed ? "bg-red-500" : "bg-sky-500",
+                        )}
+                    >
+                        {progress.count}
+                    </span>
+                ) : null}
+            </button>
+        );
+    }
+
+    return panel;
+}
+
+function getTipX(wrap: HTMLDivElement | null, target: HTMLElement) {
+    if (!wrap) return 0;
+    const wrapBox = wrap.parentElement?.getBoundingClientRect() || wrap.getBoundingClientRect();
+    const box = target.getBoundingClientRect();
+    return box.left - wrapBox.left + box.width / 2;
 }
