@@ -28,6 +28,8 @@ import { useAuthStore } from "@/stores/auth-store";
 
 const EXIT_NAV_MS = 450;
 const HOME_VIDEO_SRC = "/public.mp4";
+/** Delay WebGL tile field so the DOM video paints first. */
+const TILE_FIELD_DELAY_MS = 280;
 
 interface AerisLandingProps {
     className?: string;
@@ -50,6 +52,7 @@ interface BlockState {
 const BLOCK_SIZE = 0.45;
 const BLOCK_THICKNESS = 0.08;
 const PITCH = BLOCK_SIZE;
+/** Match original field extent so tiles fill the viewport. */
 const GRID_COLS = 30;
 const GRID_ROWS = 16;
 const HALF_SIZE = BLOCK_SIZE / 2;
@@ -227,18 +230,25 @@ function AerisBlocks(props: AerisBlocksProps) {
 
     const states = useMemo<BlockState[]>(() => blocks.map(() => ({ value: 0 })), [blocks]);
 
+    const hasTextOverlay = Boolean(
+        props.title.trim() || props.tagline.trim() || props.subtitle.trim()
+    );
+
     const textCanvas = useMemo(() => {
+        if (!hasTextOverlay) return null;
         const canvas = document.createElement("canvas");
-        canvas.width = 2048;
-        canvas.height = 1080;
+        canvas.width = 1024;
+        canvas.height = 576;
         const texture = new THREE.CanvasTexture(canvas);
         texture.colorSpace = THREE.SRGBColorSpace;
-        texture.anisotropy = 8;
+        texture.anisotropy = 1;
+        texture.generateMipmaps = false;
         texture.premultiplyAlpha = false;
         return { canvas, texture };
-    }, []);
+    }, [hasTextOverlay]);
 
     const drawText = useCallback(() => {
+        if (!textCanvas) return;
         const ctx = textCanvas.canvas.getContext("2d");
         if (!ctx) return;
         const { width, height } = textCanvas.canvas;
@@ -285,9 +295,10 @@ function AerisBlocks(props: AerisBlocksProps) {
     }, [props.title, props.tagline, props.subtitle, textCanvas]);
 
     useEffect(() => {
+        if (!textCanvas) return;
         drawText();
         document.fonts?.ready.then(drawText).catch(() => {});
-    }, [drawText]);
+    }, [drawText, textCanvas]);
 
     const uvData = useMemo(() => {
         const fieldW = GRID_COLS * PITCH;
@@ -320,23 +331,34 @@ function AerisBlocks(props: AerisBlocksProps) {
             map,
             toneMapped: false,
         });
-        face.onBeforeCompile = (shader) => {
-            shader.uniforms.uTextMap = { value: textCanvas.texture };
-            shader.vertexShader =
-                "attribute vec2 aUvOffset;\nattribute vec2 aUvScale;\n" +
-                shader.vertexShader.replace(
-                    "#include <uv_vertex>",
-                    "#include <uv_vertex>\n#ifdef USE_MAP\n  vMapUv = aUvOffset + vMapUv * aUvScale;\n#endif"
-                );
-            shader.fragmentShader =
-                "uniform sampler2D uTextMap;\n" +
-                shader.fragmentShader.replace(
-                    "#include <map_fragment>",
-                    `#include <map_fragment>
+        if (textCanvas) {
+            face.onBeforeCompile = (shader) => {
+                shader.uniforms.uTextMap = { value: textCanvas.texture };
+                shader.vertexShader =
+                    "attribute vec2 aUvOffset;\nattribute vec2 aUvScale;\n" +
+                    shader.vertexShader.replace(
+                        "#include <uv_vertex>",
+                        "#include <uv_vertex>\n#ifdef USE_MAP\n  vMapUv = aUvOffset + vMapUv * aUvScale;\n#endif"
+                    );
+                shader.fragmentShader =
+                    "uniform sampler2D uTextMap;\n" +
+                    shader.fragmentShader.replace(
+                        "#include <map_fragment>",
+                        `#include <map_fragment>
 vec4 textSample = texture2D(uTextMap, vMapUv);
 diffuseColor.rgb = mix(diffuseColor.rgb, textSample.rgb, textSample.a);`
-                );
-        };
+                    );
+            };
+        } else {
+            face.onBeforeCompile = (shader) => {
+                shader.vertexShader =
+                    "attribute vec2 aUvOffset;\nattribute vec2 aUvScale;\n" +
+                    shader.vertexShader.replace(
+                        "#include <uv_vertex>",
+                        "#include <uv_vertex>\n#ifdef USE_MAP\n  vMapUv = aUvOffset + vMapUv * aUvScale;\n#endif"
+                    );
+            };
+        }
         return [side, side, side, side, face, side];
     }, [props.video, textCanvas]);
 
@@ -551,30 +573,20 @@ export function AerisTileField(props: AerisTileFieldProps) {
         <Canvas
             flat
             camera={{ position: [0, 0, 7], fov: 40 }}
-            dpr={[1, 1.25]}
-            gl={{ alpha: true, antialias: true, powerPreference: "high-performance" }}
+            dpr={1}
+            gl={{
+                alpha: true,
+                antialias: false,
+                powerPreference: "high-performance",
+                stencil: false,
+                depth: true,
+            }}
             onCreated={({ gl }) => {
                 gl.setClearColor(0x000000, 0);
             }}
-            shadows
         >
             <ambientLight color="#ffffff" intensity={1} />
-            <directionalLight
-                castShadow
-                color="#ffffff"
-                intensity={0.7}
-                position={[-4, 6, 8]}
-                shadow-bias={-0.0002}
-                shadow-camera-bottom={-8}
-                shadow-camera-far={25}
-                shadow-camera-left={-10}
-                shadow-camera-near={1}
-                shadow-camera-right={10}
-                shadow-camera-top={8}
-                shadow-mapSize={[1024, 1024]}
-                shadow-radius={5}
-            />
-            <directionalLight color="#d9e8e6" intensity={0.35} position={[-4, -2, 1]} />
+            <directionalLight color="#ffffff" intensity={0.55} position={[-4, 6, 8]} />
             <AerisBlocks
                 falling={props.falling ?? false}
                 interactive={props.interactive ?? true}
@@ -595,6 +607,8 @@ export function AerisLanding(props: AerisLandingProps) {
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
     const [falling, setFalling] = useState(false);
+    const [tilesReady, setTilesReady] = useState(false);
+    const [videoReady, setVideoReady] = useState(false);
 
     const title = DEFAULT_SYSTEM_NAME;
     const tagline = t("Simplicity is the way. Create the future.");
@@ -606,12 +620,49 @@ export function AerisLanding(props: AerisLandingProps) {
         const video = videoRef.current;
         if (!video) return;
         video.muted = true;
+        const markReady = () => setVideoReady(true);
         const play = () => {
             void video.play().catch(() => undefined);
         };
+        if (video.readyState >= 2) {
+            markReady();
+            play();
+        }
+        video.addEventListener("loadeddata", markReady);
+        video.addEventListener("canplay", play);
         play();
-        video.addEventListener("loadeddata", play);
-        return () => video.removeEventListener("loadeddata", play);
+        return () => {
+            video.removeEventListener("loadeddata", markReady);
+            video.removeEventListener("canplay", play);
+        };
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        let idleId = 0;
+        let timeoutId = 0;
+
+        const enable = () => {
+            if (!cancelled) setTilesReady(true);
+        };
+
+        const schedule = () => {
+            if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+                idleId = window.requestIdleCallback(enable, { timeout: 900 });
+            } else {
+                timeoutId = window.setTimeout(enable, TILE_FIELD_DELAY_MS);
+            }
+        };
+
+        timeoutId = window.setTimeout(schedule, TILE_FIELD_DELAY_MS);
+
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timeoutId);
+            if (idleId && "cancelIdleCallback" in window) {
+                window.cancelIdleCallback(idleId);
+            }
+        };
     }, []);
 
     const enterWithAuth = useCallback(
@@ -633,15 +684,17 @@ export function AerisLanding(props: AerisLandingProps) {
         [falling, hasAccessToken, isAuthenticated, navigate]
     );
 
+    const bindVideoRef = useCallback((node: HTMLVideoElement | null) => {
+        videoRef.current = node;
+        setVideoEl((prev) => (prev === node ? prev : node));
+    }, []);
+
     return (
         <main className={cn("aeris-landing", props.className)}>
             <div className="aeris-media" aria-hidden="true">
                 <video
-                    ref={(node) => {
-                        videoRef.current = node;
-                        setVideoEl(node);
-                    }}
-                    className="aeris-video"
+                    ref={bindVideoRef}
+                    className={cn("aeris-video", videoReady && "is-ready")}
                     autoPlay
                     muted
                     loop
@@ -652,15 +705,17 @@ export function AerisLanding(props: AerisLandingProps) {
                 </video>
                 <div className="aeris-veil" />
             </div>
-            <div className="aeris-canvas" aria-hidden="true">
-                <AerisTileField
-                    falling={falling}
-                    subtitle=""
-                    tagline=""
-                    title=""
-                    video={videoEl}
-                />
-            </div>
+            {tilesReady ? (
+                <div className="aeris-canvas" aria-hidden="true">
+                    <AerisTileField
+                        falling={falling}
+                        subtitle=""
+                        tagline=""
+                        title=""
+                        video={videoEl}
+                    />
+                </div>
+            ) : null}
             <div className={cn("aeris-copy", falling && "is-falling")}>
                 <div className="aeris-hero">
                     <p className="aeris-hero-eyebrow">{DEFAULT_SYSTEM_TAGLINE}</p>
