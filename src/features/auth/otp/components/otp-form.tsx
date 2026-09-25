@@ -41,6 +41,10 @@ import {
 } from '@/features/auth/constants'
 import { useAuthRedirect } from '@/features/auth/hooks/use-auth-redirect'
 import {
+  authFieldClassName,
+  authSubmitClassName,
+} from '@/features/auth/lib/auth-form-styles'
+import {
   isValidOTP,
   isValidBackupCode,
   formatBackupCode,
@@ -145,18 +149,20 @@ export function OtpForm({ className, ...props }: OtpFormProps) {
           control={form.control}
           name='otp'
           render={({ field }) => (
-            <FormItem>
-              <FormLabel>
+            <FormItem className='gap-1.5'>
+              <FormLabel className='text-muted-foreground text-sm font-normal'>
                 {useBackupCode ? t('Backup Code') : t('Verification Code')}
               </FormLabel>
               <FormControl>
                 {useBackupCode ? (
                   <Input
+                    size='large'
+                    variant='filled'
                     placeholder={t('Enter backup code (e.g., CAWD-OQDV)')}
                     {...field}
                     maxLength={BACKUP_CODE_LENGTH}
                     autoComplete='off'
-                    className='font-mono uppercase'
+                    className={cn(authFieldClassName, 'font-mono uppercase')}
                     onChange={(e) => {
                       const formatted = formatBackupCode(e.target.value)
                       field.onChange(formatted)
@@ -168,6 +174,7 @@ export function OtpForm({ className, ...props }: OtpFormProps) {
                     value={field.value}
                     onChange={field.onChange}
                     onBlur={field.onBlur}
+                    size='large'
                   />
                 )}
               </FormControl>
@@ -184,10 +191,10 @@ export function OtpForm({ className, ...props }: OtpFormProps) {
         <Button
           type='primary'
           htmlType='submit'
-          className='mt-2'
           block
           disabled={!isFormValid || isLoading}
           loading={isLoading}
+          className={authSubmitClassName}
         >
           {t('Verify and Sign In')}
         </Button>

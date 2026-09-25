@@ -20,6 +20,7 @@ import i18next from 'i18next'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import type { CaptchaProof } from '@/components/captcha'
 import { useCountdown } from '@/hooks/use-countdown'
 
 import { sendEmailVerification } from '../api'
@@ -42,22 +43,25 @@ export function useEmailVerification(options?: UseEmailVerificationOptions) {
   } = useCountdown({ initialSeconds: EMAIL_VERIFICATION_COUNTDOWN })
 
   /**
-   * Send verification code to email
+   * Send verification code to email (requires captcha proof).
    */
-  const sendCode = async (email: string) => {
+  const sendCode = async (email: string, captcha: CaptchaProof) => {
     if (!email) {
       toast.error(i18next.t('Please enter your email first'))
       return false
     }
 
-    // Validate turnstile if validation function is provided
     if (options?.validateTurnstile && !options.validateTurnstile()) {
       return false
     }
 
     setIsSending(true)
     try {
-      const res = await sendEmailVerification(email, options?.turnstileToken)
+      const res = await sendEmailVerification(
+        email,
+        options?.turnstileToken,
+        captcha
+      )
       if (res?.success) {
         startCountdown()
         toast.success(i18next.t('Verification email sent'))

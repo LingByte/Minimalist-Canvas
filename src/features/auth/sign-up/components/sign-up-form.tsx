@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Button, Input, Modal, Typography } from 'antd'
+import { Lock, Mail, User } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
@@ -25,6 +26,7 @@ import { toast } from 'sonner'
 import type { z } from 'zod'
 
 import { PasswordInput } from '@/components/password-input'
+import { SmartImage } from '@/components/smart-image'
 import { Turnstile } from '@/components/turnstile'
 import {
   Form,
@@ -39,8 +41,14 @@ import { LegalConsent } from '@/features/auth/components/legal-consent'
 import { OAuthProviders } from '@/features/auth/components/oauth-providers'
 import { registerFormSchema } from '@/features/auth/constants'
 import { useAuthRedirect } from '@/features/auth/hooks/use-auth-redirect'
+import { useCaptchaGate } from '@/features/auth/hooks/use-captcha-gate'
 import { useEmailVerification } from '@/features/auth/hooks/use-email-verification'
 import { useTurnstile } from '@/features/auth/hooks/use-turnstile'
+import {
+  authFieldClassName,
+  authSecondaryButtonClassName,
+  authSubmitClassName,
+} from '@/features/auth/lib/auth-form-styles'
 import {
   getAffiliateCode,
   saveAffiliateCode,
@@ -49,7 +57,6 @@ import { useStatus } from '@/hooks/use-status'
 import { isAuthBundle } from '@/lib/api'
 import { getServerErrorMessageKey } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
-import { SmartImage } from '@/components/smart-image'
 
 export function SignUpForm({
   className,
@@ -73,6 +80,7 @@ export function SignUpForm({
     setTurnstileToken,
     validateTurnstile,
   } = useTurnstile()
+  const { openGate, captchaModal, formSubmitting } = useCaptchaGate()
   const { redirectToLogin, handleLoginSuccess } = useAuthRedirect()
   const {
     isSending: isSendingCode,
@@ -83,6 +91,8 @@ export function SignUpForm({
     turnstileToken,
     validateTurnstile,
   })
+
+  const busy = isLoading || formSubmitting
 
   const form = useForm<z.infer<typeof registerFormSchema>>({
     resolver: zodResolver(registerFormSchema),
@@ -155,35 +165,51 @@ export function SignUpForm({
 
     if (!validateTurnstile()) return
 
-    setIsLoading(true)
-    try {
-      const res = await register({
-        username: data.username,
-        password: data.password,
-        email: data.email || undefined,
-        verification_code: verificationCode || undefined,
-        aff_code: getAffiliateCode(),
-        turnstile: turnstileToken,
-      })
-
-      if (res?.success) {
-        toast.success(t('Account created! Please sign in'))
-        redirectToLogin()
-      } else {
-        toast.error(res?.message || t('Failed to create account'))
-      }
-    } catch {
-      // Errors are handled by global interceptor
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  async function handleSendVerificationCode() {
-    if (await sendCode(emailValue || '')) {
+    const submittedTurnstileToken = turnstileToken
+    if (isTurnstileEnabled) {
       setTurnstileToken('')
       setTurnstileWidgetKey((current) => current + 1)
     }
+
+    openGate(async (proof) => {
+      setIsLoading(true)
+      try {
+        const res = await register({
+          username: data.username,
+          password: data.password,
+          email: data.email || undefined,
+          verification_code: verificationCode || undefined,
+          aff_code: getAffiliateCode(),
+          turnstile: submittedTurnstileToken,
+          captcha: proof,
+        })
+
+        if (res?.success) {
+          toast.success(t('Account created! Please sign in'))
+          redirectToLogin()
+        } else {
+          toast.error(res?.message || t('Failed to create account'))
+        }
+      } catch {
+        // Errors are handled by global interceptor
+      } finally {
+        setIsLoading(false)
+      }
+    }, { formSubmit: true })
+  }
+
+  function handleSendVerificationCode() {
+    if (!emailValue) {
+      toast.error(t('Please enter your email first'))
+      return
+    }
+    if (!validateTurnstile()) return
+    openGate(async (proof) => {
+      if (await sendCode(emailValue, proof)) {
+        setTurnstileToken('')
+        setTurnstileWidgetKey((current) => current + 1)
+      }
+    })
   }
 
   const handleOpenWeChatDialog = () => {
@@ -242,31 +268,28 @@ export function SignUpForm({
         className={cn('grid gap-4', className)}
         {...props}
       >
-        {/* Username Field */}
         <FormField
           control={form.control}
           name='username'
           render={({ field }) => (
-            <FormItem>
-              <FormLabel>{t('Username')}</FormLabel>
+            <FormItem className='gap-1.5'>
+              <FormLabel className='text-muted-foreground text-sm font-normal'>
+                {t('Username')}
+              </FormLabel>
               <FormControl>
-                <Input placeholder={t('Enter your username')} {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Password Field */}
-        <FormField
-          control={form.control}
-          name='password'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>{t('Password')}</FormLabel>
-              <FormControl>
-                <PasswordInput
-                  placeholder={t('Enter password (8-20 characters)')}
+                <Input
+                  size='large'
+                  variant='filled'
+                  autoComplete='username'
+                  placeholder={t('Enter your username')}
+                  prefix={
+                    <User
+                      className='text-muted-foreground size-4'
+                      strokeWidth={1.75}
+                      aria-hidden
+                    />
+                  }
+                  className={authFieldClassName}
                   {...field}
                 />
               </FormControl>
@@ -275,37 +298,91 @@ export function SignUpForm({
           )}
         />
 
-        {/* Confirm Password Field */}
         <FormField
           control={form.control}
-          name='confirmPassword'
+          name='password'
           render={({ field }) => (
-            <FormItem>
-              <FormLabel>{t('Confirm password')}</FormLabel>
+            <FormItem className='gap-1.5'>
+              <FormLabel className='text-muted-foreground text-sm font-normal'>
+                {t('Password')}
+              </FormLabel>
               <FormControl>
-                <PasswordInput placeholder={t('Confirm password')} {...field} />
+                <PasswordInput
+                  size='large'
+                  variant='filled'
+                  autoComplete='new-password'
+                  placeholder={t('Enter password (8-20 characters)')}
+                  prefix={
+                    <Lock
+                      className='text-muted-foreground size-4'
+                      strokeWidth={1.75}
+                      aria-hidden
+                    />
+                  }
+                  className={authFieldClassName}
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
 
-        {/* Email Verification Section */}
+        <FormField
+          control={form.control}
+          name='confirmPassword'
+          render={({ field }) => (
+            <FormItem className='gap-1.5'>
+              <FormLabel className='text-muted-foreground text-sm font-normal'>
+                {t('Confirm password')}
+              </FormLabel>
+              <FormControl>
+                <PasswordInput
+                  size='large'
+                  variant='filled'
+                  autoComplete='new-password'
+                  placeholder={t('Confirm password')}
+                  prefix={
+                    <Lock
+                      className='text-muted-foreground size-4'
+                      strokeWidth={1.75}
+                      aria-hidden
+                    />
+                  }
+                  className={authFieldClassName}
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
         {emailVerificationRequired && (
           <>
-            {/* Email Field */}
             <FormField
               control={form.control}
               name='email'
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
+                <FormItem className='gap-1.5'>
+                  <FormLabel className='text-muted-foreground text-sm font-normal'>
                     {t('Email (required for verification)')}
                   </FormLabel>
                   <FormControl>
                     <Input
-                      placeholder={t('name@example.com')}
+                      size='large'
+                      variant='filled'
                       type='email'
+                      autoComplete='email'
+                      placeholder={t('name@example.com')}
+                      prefix={
+                        <Mail
+                          className='text-muted-foreground size-4'
+                          strokeWidth={1.75}
+                          aria-hidden
+                        />
+                      }
+                      className={authFieldClassName}
                       {...field}
                     />
                   </FormControl>
@@ -314,20 +391,22 @@ export function SignUpForm({
               )}
             />
 
-            {/* Verification Code Field */}
             <div className='flex items-end gap-2'>
               <div className='flex-1'>
                 <Input
+                  size='large'
+                  variant='filled'
                   placeholder={t('Verification code')}
                   value={verificationCode}
                   onChange={(e) => setVerificationCode(e.target.value)}
+                  className={authFieldClassName}
                 />
               </div>
               <Button
                 type='default'
                 htmlType='button'
                 disabled={
-                  isLoading ||
+                  busy ||
                   isSendingCode ||
                   isActive ||
                   !emailValue ||
@@ -335,6 +414,7 @@ export function SignUpForm({
                 }
                 loading={isSendingCode}
                 onClick={handleSendVerificationCode}
+                className={authSecondaryButtonClassName}
               >
                 {verificationCodeAction}
               </Button>
@@ -342,9 +422,8 @@ export function SignUpForm({
           </>
         )}
 
-        {/* Turnstile */}
         {isTurnstileEnabled && (
-          <div className='mt-2'>
+          <div className='mt-1'>
             <Turnstile
               key={turnstileWidgetKey}
               siteKey={turnstileSiteKey}
@@ -357,21 +436,20 @@ export function SignUpForm({
           status={status}
           checked={agreedToLegal}
           onCheckedChange={setAgreedToLegal}
-          className='mt-1'
+          className='mt-0.5'
         />
 
-        {/* Submit Button */}
         <Button
           type='primary'
           htmlType='submit'
-          className='mt-2 justify-center gap-2'
           block
           disabled={
-            isLoading ||
+            busy ||
             (requiresLegalConsent && !agreedToLegal) ||
             !turnstileReady
           }
-          loading={isLoading}
+          loading={busy}
+          className={authSubmitClassName}
         >
           {t('Create account')}
         </Button>
@@ -379,10 +457,10 @@ export function SignUpForm({
         {oauthRegisterEnabled && (
           <OAuthProviders
             status={status}
-            disabled={isLoading || (requiresLegalConsent && !agreedToLegal)}
+            disabled={busy || (requiresLegalConsent && !agreedToLegal)}
             onWeChatLogin={hasWeChatLogin ? handleOpenWeChatDialog : undefined}
             isWeChatLoading={isWeChatSubmitting}
-            className='pt-2'
+            className='pt-1'
           />
         )}
       </form>
@@ -450,6 +528,7 @@ export function SignUpForm({
           </div>
         </Modal>
       )}
+      {captchaModal}
     </Form>
   )
 }

@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { CaptchaProof } from '@/components/captcha'
 import type { AuthBundle } from '@/stores/auth-store'
 
 // ============================================================================
@@ -26,6 +27,7 @@ export interface LoginPayload {
   username: string
   password: string
   turnstile?: string
+  captcha?: CaptchaProof
 }
 
 export interface TwoFAPayload {
@@ -40,16 +42,19 @@ export interface RegisterPayload {
   verification_code?: string
   aff_code?: string
   turnstile?: string
+  captcha?: CaptchaProof
 }
 
 export interface PasswordResetPayload {
   email: string
   turnstile?: string
+  captcha?: CaptchaProof
 }
 
 export interface EmailVerificationPayload {
   email: string
   turnstile?: string
+  captcha?: CaptchaProof
 }
 
 export interface BindEmailPayload {

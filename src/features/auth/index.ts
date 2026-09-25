@@ -32,6 +32,7 @@ export {
   githubOAuthStart,
   wechatLoginByCode,
   telegramLogin,
+  generateCaptcha,
 } from './api'
 
 // ============================================================================
@@ -100,6 +101,7 @@ export {
 // ============================================================================
 
 export { useTurnstile } from './hooks/use-turnstile'
+export { useCaptchaGate } from './hooks/use-captcha-gate'
 export { useOAuthLogin } from './hooks/use-oauth-login'
 export { useAuthRedirect } from './hooks/use-auth-redirect'
 export { useEmailVerification } from './hooks/use-email-verification'

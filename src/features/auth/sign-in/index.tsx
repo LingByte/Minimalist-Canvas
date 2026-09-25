@@ -20,6 +20,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
 import { useStatus } from '@/hooks/use-status'
+import { useSystemConfig } from '@/hooks/use-system-config'
 
 import { AuthLayout } from '../auth-layout'
 import { TermsFooter } from '../components/terms-footer'
@@ -30,28 +31,14 @@ export function SignIn() {
   const [searchParams] = useSearchParams()
   const redirect = searchParams.get('redirect') || ''
   const { status } = useStatus()
+  const { systemName } = useSystemConfig()
 
   return (
     <AuthLayout mode='sign-in'>
-      <div className='w-full space-y-8'>
-        <div className='space-y-2'>
-          <h2 className='text-center text-2xl font-semibold tracking-tight sm:text-left'>
-            {t('Sign in')}
-          </h2>
-          {!status?.self_use_mode_enabled &&
-            status?.register_enabled !== false && (
-              <p className='text-muted-foreground text-left text-sm sm:text-base'>
-                {t("Don't have an account?")}{' '}
-                <Link
-                  to='/sign-up'
-                  className='hover:text-primary font-medium underline underline-offset-4'
-                >
-                  {t('Sign up')}
-                </Link>
-                .
-              </p>
-            )}
-        </div>
+      <div className='w-full space-y-6'>
+        <h1 className='text-center text-2xl font-semibold tracking-tight'>
+          {t('Sign in to {{name}}', { name: systemName || t('Platform') })}
+        </h1>
 
         <UserAuthForm redirectTo={redirect} />
 

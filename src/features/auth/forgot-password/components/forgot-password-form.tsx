@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Button, Input } from 'antd'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Mail } from 'lucide-react'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
@@ -39,7 +39,12 @@ import {
   forgotPasswordFormSchema,
   PASSWORD_RESET_COUNTDOWN,
 } from '@/features/auth/constants'
+import { useCaptchaGate } from '@/features/auth/hooks/use-captcha-gate'
 import { useTurnstile } from '@/features/auth/hooks/use-turnstile'
+import {
+  authFieldClassName,
+  authSubmitClassName,
+} from '@/features/auth/lib/auth-form-styles'
 import { useCountdown } from '@/hooks/use-countdown'
 import { cn } from '@/lib/utils'
 
@@ -57,6 +62,7 @@ export function ForgotPasswordForm({
     setTurnstileToken,
     validateTurnstile,
   } = useTurnstile()
+  const { openGate, captchaModal, formSubmitting } = useCaptchaGate()
   const {
     secondsLeft,
     isActive,
@@ -68,42 +74,71 @@ export function ForgotPasswordForm({
     defaultValues: { email: '' },
   })
   const turnstileReady = !isTurnstileEnabled || Boolean(turnstileToken)
+  const busy = isLoading || formSubmitting
 
   async function onSubmit(data: z.infer<typeof forgotPasswordFormSchema>) {
     if (!validateTurnstile()) return
 
-    setIsLoading(true)
-    try {
-      const res = await sendPasswordResetEmail(data.email, turnstileToken)
-      if (res?.success) {
-        form.reset()
-        startCountdown()
-        toast.success(t('Reset email sent, please check your inbox'))
-      } else {
-        toast.error(res?.message || t('Failed to send reset email'))
-      }
-    } catch {
-      // Errors are handled by global interceptor
-    } finally {
-      setIsLoading(false)
+    const submittedTurnstileToken = turnstileToken
+    if (isTurnstileEnabled) {
+      setTurnstileToken('')
     }
+
+    openGate(async (proof) => {
+      setIsLoading(true)
+      try {
+        const res = await sendPasswordResetEmail(
+          data.email,
+          submittedTurnstileToken,
+          proof
+        )
+        if (res?.success) {
+          form.reset()
+          startCountdown()
+          toast.success(t('Reset email sent, please check your inbox'))
+        } else {
+          toast.error(res?.message || t('Failed to send reset email'))
+        }
+      } catch {
+        // Errors are handled by global interceptor
+      } finally {
+        setIsLoading(false)
+      }
+    }, { formSubmit: true })
   }
 
   return (
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
-        className={cn('grid gap-2', className)}
+        className={cn('grid gap-4', className)}
         {...props}
       >
         <FormField
           control={form.control}
           name='email'
           render={({ field }) => (
-            <FormItem>
-              <FormLabel>Email</FormLabel>
+            <FormItem className='gap-1.5'>
+              <FormLabel className='text-muted-foreground text-sm font-normal'>
+                {t('Email')}
+              </FormLabel>
               <FormControl>
-                <Input placeholder='name@example.com' {...field} />
+                <Input
+                  size='large'
+                  variant='filled'
+                  type='email'
+                  autoComplete='email'
+                  placeholder={t('name@example.com')}
+                  prefix={
+                    <Mail
+                      className='text-muted-foreground size-4'
+                      strokeWidth={1.75}
+                      aria-hidden
+                    />
+                  }
+                  className={authFieldClassName}
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -113,11 +148,12 @@ export function ForgotPasswordForm({
         <Button
           type='primary'
           htmlType='submit'
-          className='mt-2'
-          disabled={isLoading || isActive || !turnstileReady}
-          loading={isLoading}
-          icon={!isLoading && !isActive ? <ArrowRight /> : undefined}
+          block
+          disabled={busy || isActive || !turnstileReady}
+          loading={busy}
+          icon={!busy && !isActive ? <ArrowRight className='size-4' /> : undefined}
           iconPlacement='end'
+          className={authSubmitClassName}
         >
           {isActive
             ? t('Resend ({{seconds}}s)', { seconds: secondsLeft })
@@ -125,7 +161,7 @@ export function ForgotPasswordForm({
         </Button>
 
         {isTurnstileEnabled && (
-          <div className='mt-2'>
+          <div className='mt-1'>
             <Turnstile
               siteKey={turnstileSiteKey}
               onVerify={setTurnstileToken}
@@ -133,6 +169,7 @@ export function ForgotPasswordForm({
           </div>
         )}
       </form>
+      {captchaModal}
     </Form>
   )
 }

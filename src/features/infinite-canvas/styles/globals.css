@@ -659,3 +659,58 @@
 .ant-message.canvas-ant-message-tr .ant-message-notice-wrapper:hover .ant-message-notice {
   opacity: 1 !important;
 }
+
+/* Puzzle captcha (auth gate) — mirrored from src/styles/globals.css */
+@keyframes captcha-slider-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+.captcha-slider-root { width: 100%; }
+.captcha-slider-track {
+  position: relative; height: 46px; overflow: hidden; border-radius: 12px;
+  border: 1px solid rgb(228 228 231);
+  background: linear-gradient(180deg, rgb(250 250 250), rgb(244 244 245));
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.04);
+}
+.dark .captcha-slider-track {
+  border-color: rgb(63 63 70);
+  background: linear-gradient(180deg, rgb(39 39 42), rgb(24 24 27));
+}
+.captcha-slider-track--pass {
+  border-color: rgb(167 243 208);
+  background: linear-gradient(180deg, rgb(236 253 245), rgb(209 250 229));
+}
+.captcha-slider-track--fail {
+  animation: captcha-slider-shake 0.45s ease-in-out;
+  border-color: rgb(252 165 165);
+}
+.captcha-slider-fill {
+  position: absolute; inset-block: 0; left: 0; border-radius: 11px 0 0 11px;
+  background: linear-gradient(90deg, rgb(219 234 254), rgb(191 219 254));
+  pointer-events: none;
+}
+.captcha-slider-track--pass .captcha-slider-fill {
+  border-radius: 11px;
+  background: linear-gradient(90deg, rgb(167 243 208), rgb(110 231 183));
+}
+.captcha-slider-hint {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  padding-inline: 56px 12px; font-size: 13px; font-weight: 500; letter-spacing: 0.01em;
+  color: rgb(113 113 122); pointer-events: none; user-select: none; transition: opacity 0.2s ease;
+}
+.dark .captcha-slider-hint { color: rgb(161 161 170); }
+.captcha-slider-handle {
+  position: absolute; top: 0; left: 0; z-index: 2; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid rgb(228 228 231); border-radius: 11px; background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 4px 12px rgb(0 0 0 / 0.08);
+  cursor: grab; touch-action: none;
+}
+.dark .captcha-slider-handle { border-color: rgb(82 82 91); background: rgb(39 39 42); }
+.captcha-slider-handle--drag {
+  cursor: grabbing;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.08), 0 8px 20px rgb(0 0 0 / 0.12);
+}
+.captcha-slider-handle:disabled { cursor: not-allowed; }

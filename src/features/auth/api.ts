@@ -18,6 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import axios from 'axios'
 
+import type {
+  CaptchaGenerateResult,
+  CaptchaProof,
+  CaptchaType,
+} from '@/components/captcha'
+import { captchaQueryParams } from '@/components/captcha'
 import { api, refreshAuthentication, type RefreshOutcome } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -32,9 +38,27 @@ import type {
   ApiResponse,
 } from './types'
 
+export type { CaptchaProof, CaptchaGenerateResult, CaptchaType }
+
 // ============================================================================
 // Authentication APIs
 // ============================================================================
+
+// ----------------------------------------------------------------------------
+// Captcha
+// ----------------------------------------------------------------------------
+
+export async function generateCaptcha(
+  type: CaptchaType | 'random' = 'random'
+): Promise<ApiResponse<CaptchaGenerateResult>> {
+  const resolved = type || 'random'
+  const res = await api.get('/api/captcha/generate', {
+    params: { type: resolved },
+    skipAuthRefresh: true,
+    skipErrorHandler: true,
+  })
+  return res.data
+}
 
 // ----------------------------------------------------------------------------
 // Login & Logout
@@ -43,11 +67,19 @@ import type {
 // User login with username and password
 export async function login(payload: LoginPayload) {
   const turnstile = payload.turnstile ?? ''
+  const captcha = payload.captcha
   const res = await api.post<LoginResponse>(
     `/api/user/login?turnstile=${turnstile}`,
     {
       username: payload.username,
       password: payload.password,
+      ...(captcha
+        ? {
+            captchaId: captcha.captchaId,
+            captchaType: captcha.captchaType,
+            captchaValue: captcha.captchaValue,
+          }
+        : {}),
     },
     { skipAuthRefresh: true }
   )
@@ -119,10 +151,15 @@ export async function logout(): Promise<ApiResponse> {
 // Send password reset email
 export async function sendPasswordResetEmail(
   email: string,
-  turnstile?: string
+  turnstile?: string,
+  captcha?: CaptchaProof
 ): Promise<ApiResponse> {
   const res = await api.get('/api/reset_password', {
-    params: { email, turnstile },
+    params: {
+      email,
+      turnstile,
+      ...(captcha ? captchaQueryParams(captcha) : {}),
+    },
   })
   return res.data
 }
@@ -187,19 +224,38 @@ export async function telegramLogin(
 
 // User registration
 export async function register(payload: RegisterPayload): Promise<ApiResponse> {
-  const res = await api.post(`/api/user/register`, payload, {
-    params: { turnstile: payload.turnstile ?? '' },
-  })
+  const { captcha, turnstile, ...body } = payload
+  const res = await api.post(
+    `/api/user/register`,
+    {
+      ...body,
+      ...(captcha
+        ? {
+            captchaId: captcha.captchaId,
+            captchaType: captcha.captchaType,
+            captchaValue: captcha.captchaValue,
+          }
+        : {}),
+    },
+    {
+      params: { turnstile: turnstile ?? '' },
+    }
+  )
   return res.data
 }
 
 // Send email verification code
 export async function sendEmailVerification(
   email: string,
-  turnstile?: string
+  turnstile?: string,
+  captcha?: CaptchaProof
 ): Promise<ApiResponse> {
   const res = await api.get('/api/verification', {
-    params: { email, turnstile },
+    params: {
+      email,
+      turnstile,
+      ...(captcha ? captchaQueryParams(captcha) : {}),
+    },
   })
   return res.data
 }

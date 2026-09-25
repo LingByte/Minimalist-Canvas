@@ -105,7 +105,7 @@ export function BrandIdentity({
       <div className='min-w-0 text-left leading-tight'>
         <div
           className={cn(
-            'truncate font-semibold text-[#1f4f86] dark:text-[#dbeafe]',
+            'text-sidebar-foreground truncate font-semibold tracking-[-0.02em]',
             styles.title
           )}
         >
@@ -114,7 +114,7 @@ export function BrandIdentity({
         {showTagline && (
           <div
             className={cn(
-              'mt-1 truncate font-medium text-[#5b86b8] uppercase dark:text-[#93c5fd]/80',
+              'text-muted-foreground mt-1 truncate text-[10px] font-medium tracking-[0.08em] uppercase',
               styles.tagline
             )}
           >

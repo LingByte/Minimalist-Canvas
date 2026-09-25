@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useNavigate } from 'react-router-dom'
 import { Alert, Button, Input, Typography } from 'antd'
-import { CheckIcon, CopyIcon } from 'lucide-react'
+import { CheckIcon, CopyIcon, Mail } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -26,8 +26,13 @@ import { toast } from 'sonner'
 import { useCountdown } from '@/hooks/use-countdown'
 import { api } from '@/lib/api'
 import { copyToClipboard } from '@/lib/copy-to-clipboard'
+import { cn } from '@/lib/utils'
 
 import { AuthLayout } from '../auth-layout'
+import {
+  authFieldClassName,
+  authSubmitClassName,
+} from '../lib/auth-form-styles'
 
 export type ResetPasswordSearchParams = {
   email?: string
@@ -104,12 +109,12 @@ export function ResetPasswordConfirm({
 
   return (
     <AuthLayout>
-      <div className='w-full space-y-8'>
-        <div className='space-y-2'>
-          <h2 className='text-center text-2xl font-semibold tracking-tight sm:text-left'>
+      <div className='w-full space-y-6'>
+        <div className='space-y-2 text-center'>
+          <h1 className='text-2xl font-semibold tracking-tight'>
             {t('Reset password')}
-          </h2>
-          <p className='text-muted-foreground text-left text-sm sm:text-base'>
+          </h1>
+          <p className='text-muted-foreground text-sm'>
             {newPassword
               ? t('auth.resetPasswordConfirm.success')
               : t('auth.resetPasswordConfirm.description')}
@@ -127,30 +132,47 @@ export function ResetPasswordConfirm({
             />
           )}
 
-          <div className='space-y-2'>
-            <Typography.Text>{t('Email')}</Typography.Text>
+          <div className='space-y-1.5'>
+            <Typography.Text className='text-muted-foreground text-sm font-normal'>
+              {t('Email')}
+            </Typography.Text>
             <Input
               id='email'
+              size='large'
+              variant='filled'
               type='email'
               value={email || ''}
               disabled
               placeholder={t('Waiting for email...')}
+              prefix={
+                <Mail
+                  className='text-muted-foreground size-4'
+                  strokeWidth={1.75}
+                  aria-hidden
+                />
+              }
+              className={authFieldClassName}
             />
           </div>
 
           {newPassword && (
-            <div className='space-y-2'>
-              <Typography.Text>{t('New password')}</Typography.Text>
+            <div className='space-y-1.5'>
+              <Typography.Text className='text-muted-foreground text-sm font-normal'>
+                {t('New password')}
+              </Typography.Text>
               <div className='flex gap-2'>
                 <Input
                   id='password'
+                  size='large'
+                  variant='filled'
                   value={newPassword}
                   disabled
-                  className='font-mono'
+                  className={cn(authFieldClassName, 'font-mono')}
                 />
                 <Button
                   type='default'
                   htmlType='button'
+                  className='!h-11 !rounded-xl'
                   icon={
                     copied ? (
                       <CheckIcon className='h-4 w-4' />
@@ -179,6 +201,7 @@ export function ResetPasswordConfirm({
               newPassword ? false : loading || isActive || !isValidResetLink
             }
             loading={loading && !newPassword}
+            className={authSubmitClassName}
           >
             {newPassword
               ? t('auth.resetPasswordConfirm.backToLogin')

@@ -20,7 +20,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { Link } from 'react-router-dom'
 import { Button, Input, Modal, Typography } from 'antd'
 import axios from 'axios'
-import { LogIn, KeyRound } from 'lucide-react'
+import { Lock, LogIn, KeyRound, Mail } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
@@ -42,6 +42,7 @@ import { LegalConsent } from '@/features/auth/components/legal-consent'
 import { OAuthProviders } from '@/features/auth/components/oauth-providers'
 import { loginFormSchema } from '@/features/auth/constants'
 import { useAuthRedirect } from '@/features/auth/hooks/use-auth-redirect'
+import { useCaptchaGate } from '@/features/auth/hooks/use-captcha-gate'
 import { useTurnstile } from '@/features/auth/hooks/use-turnstile'
 import { beginPasskeyLogin, finishPasskeyLogin } from '@/features/auth/passkey'
 import type { AuthFormProps } from '@/features/auth/types'
@@ -58,6 +59,10 @@ import { getServerErrorMessageKey } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 import { SmartImage } from '@/components/smart-image'
+import {
+  authFieldClassName,
+  authSubmitClassName,
+} from '@/features/auth/lib/auth-form-styles'
 
 export function UserAuthForm({
   className,
@@ -92,6 +97,7 @@ export function UserAuthForm({
     setTurnstileToken,
     validateTurnstile,
   } = useTurnstile()
+  const { openGate, captchaModal, formSubmitting } = useCaptchaGate()
   const { handleLoginSuccess, redirectTo2FA } = useAuthRedirect()
   const setPending2FAFlowToken = useAuthStore(
     (state) => state.auth.setPending2FAFlowToken
@@ -165,6 +171,8 @@ export function UserAuthForm({
     )
   }, [status])
 
+  const busy = isLoading || formSubmitting
+
   async function onSubmit(data: z.infer<typeof loginFormSchema>) {
     if (requiresLegalConsent && !agreedToLegal) {
       toast.error(legalConsentErrorMessage)
@@ -179,36 +187,39 @@ export function UserAuthForm({
       setTurnstileWidgetKey((current) => current + 1)
     }
 
-    setIsLoading(true)
-    try {
-      const res = await login({
-        username: data.username,
-        password: data.password,
-        turnstile: submittedTurnstileToken,
-      })
+    openGate(async (proof) => {
+      setIsLoading(true)
+      try {
+        const res = await login({
+          username: data.username,
+          password: data.password,
+          turnstile: submittedTurnstileToken,
+          captcha: proof,
+        })
 
-      if (res.success) {
-        if (res.data && 'require_2fa' in res.data && res.data.require_2fa) {
-          if (!res.data.flow_token) {
-            throw new Error(t('Login flow expired. Please sign in again.'))
+        if (res.success) {
+          if (res.data && 'require_2fa' in res.data && res.data.require_2fa) {
+            if (!res.data.flow_token) {
+              throw new Error(t('Login flow expired. Please sign in again.'))
+            }
+            setPending2FAFlowToken(res.data.flow_token)
+            redirectTo2FA()
+            return
           }
-          setPending2FAFlowToken(res.data.flow_token)
-          redirectTo2FA()
-          return
-        }
 
-        if (!isAuthBundle(res.data)) {
-          throw new Error(t('Login failed'))
+          if (!isAuthBundle(res.data)) {
+            throw new Error(t('Login failed'))
+          }
+          await completeLogin(res.data)
+          toast.success(t('Welcome back!'))
         }
-        await completeLogin(res.data)
-        toast.success(t('Welcome back!'))
+      } catch (error: unknown) {
+        if (axios.isAxiosError(error)) return
+        toast.error(error instanceof Error ? error.message : loginFailedMessage)
+      } finally {
+        setIsLoading(false)
       }
-    } catch (error: unknown) {
-      if (axios.isAxiosError(error)) return
-      toast.error(error instanceof Error ? error.message : loginFailedMessage)
-    } finally {
-      setIsLoading(false)
-    }
+    }, { formSubmit: true })
   }
 
   const handleOpenWeChatDialog = () => {
@@ -328,7 +339,7 @@ export function UserAuthForm({
   const alternativeLoginMethods = (
     <>
       {passkeyLoginEnabled && (
-        <div className='mt-2 space-y-1'>
+        <div className='space-y-1'>
           <Button
             type='default'
             htmlType='button'
@@ -337,7 +348,7 @@ export function UserAuthForm({
             loading={isPasskeyLoading}
             icon={!isPasskeyLoading ? <KeyRound className='h-4 w-4' /> : undefined}
             block
-            className='h-11 justify-center gap-2 rounded-lg'
+            className='!h-11 !justify-center !gap-2 !rounded-xl'
           >
             {t('Sign in with Passkey')}
           </Button>
@@ -349,16 +360,18 @@ export function UserAuthForm({
         </div>
       )}
 
-      {/* OAuth Providers */}
       <OAuthProviders
         status={status}
         redirectTo={redirectTo}
-        disabled={isLoading || (requiresLegalConsent && !agreedToLegal)}
+        disabled={busy || (requiresLegalConsent && !agreedToLegal)}
         onWeChatLogin={hasWeChatLogin ? handleOpenWeChatDialog : undefined}
         isWeChatLoading={isWeChatSubmitting}
       />
     </>
   )
+
+  const canRegister =
+    !status?.self_use_mode_enabled && status?.register_enabled !== false
 
   return (
     <Form {...form}>
@@ -367,20 +380,30 @@ export function UserAuthForm({
         className={cn('grid gap-4', className)}
         {...props}
       >
-        {hasAlternativeLogin && alternativeLoginMethods}
-
         {passwordLoginEnabled && (
           <>
-            {/* Username Field */}
             <FormField
               control={form.control}
               name='username'
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('Username or Email')}</FormLabel>
+                <FormItem className='gap-1.5'>
+                  <FormLabel className='text-muted-foreground text-sm font-normal'>
+                    {t('Username or Email')}
+                  </FormLabel>
                   <FormControl>
                     <Input
+                      size='large'
+                      variant='filled'
+                      autoComplete='username'
                       placeholder={t('Enter your username or email')}
+                      prefix={
+                        <Mail
+                          className='text-muted-foreground size-4'
+                          strokeWidth={1.75}
+                          aria-hidden
+                        />
+                      }
+                      className={authFieldClassName}
                       {...field}
                     />
                   </FormControl>
@@ -389,46 +412,72 @@ export function UserAuthForm({
               )}
             />
 
-            {/* Password Field */}
             <FormField
               control={form.control}
               name='password'
               render={({ field }) => (
-                <FormItem className='relative'>
-                  <FormLabel>{t('Password')}</FormLabel>
+                <FormItem className='gap-1.5'>
+                  <FormLabel className='text-muted-foreground text-sm font-normal'>
+                    {t('Password')}
+                  </FormLabel>
                   <FormControl>
                     <PasswordInput
+                      size='large'
+                      variant='filled'
+                      autoComplete='current-password'
                       placeholder={t('Enter password')}
+                      prefix={
+                        <Lock
+                          className='text-muted-foreground size-4'
+                          strokeWidth={1.75}
+                          aria-hidden
+                        />
+                      }
+                      className={authFieldClassName}
                       {...field}
                     />
                   </FormControl>
                   <FormMessage />
-                  <Link
-                    to='/forgot-password'
-                    className='text-muted-foreground absolute end-0 -top-0.5 z-10 text-sm font-medium hover:opacity-75'
-                  >
-                    {t('Forgot password?')}
-                  </Link>
                 </FormItem>
               )}
             />
 
-            {/* Submit Button */}
+            <div className='flex items-center justify-between gap-3'>
+              <span className='text-muted-foreground text-sm'>
+                {canRegister ? (
+                  <>
+                    {t("Don't have an account?")}{' '}
+                    <Link
+                      to='/sign-up'
+                      className='text-primary font-medium hover:underline'
+                    >
+                      {t('Sign up')}
+                    </Link>
+                  </>
+                ) : null}
+              </span>
+              <Link
+                to='/forgot-password'
+                className='text-muted-foreground shrink-0 text-sm transition-colors hover:text-foreground'
+              >
+                {t('Forgot password?')}
+              </Link>
+            </div>
+
             <Button
               type='primary'
               htmlType='submit'
-              className='mt-2 justify-center gap-2'
               block
-              disabled={isLoading || (requiresLegalConsent && !agreedToLegal)}
-              loading={isLoading}
-              icon={!isLoading ? <LogIn /> : undefined}
+              disabled={busy || (requiresLegalConsent && !agreedToLegal)}
+              loading={busy}
+              icon={!busy ? <LogIn className='size-4' /> : undefined}
+              className={authSubmitClassName}
             >
               {t('Sign in')}
             </Button>
 
-            {/* Turnstile */}
             {isTurnstileEnabled && (
-              <div className='mt-2'>
+              <div className='mt-1'>
                 <Turnstile
                   key={turnstileWidgetKey}
                   siteKey={turnstileSiteKey}
@@ -444,10 +493,10 @@ export function UserAuthForm({
           status={status}
           checked={agreedToLegal}
           onCheckedChange={setAgreedToLegal}
-          className='mt-1'
+          className='mt-0.5'
         />
 
-        {!hasAlternativeLogin && alternativeLoginMethods}
+        {hasAlternativeLogin ? alternativeLoginMethods : null}
       </form>
 
       {hasWeChatLogin && (
@@ -513,6 +562,7 @@ export function UserAuthForm({
           </div>
         </Modal>
       )}
+      {captchaModal}
     </Form>
   )
 }
