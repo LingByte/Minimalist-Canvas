@@ -699,7 +699,7 @@ export function AerisLanding(props: AerisLandingProps) {
                     muted
                     loop
                     playsInline
-                    preload="metadata"
+                    preload="auto"
                 >
                     <source src={HOME_VIDEO_SRC} type="video/mp4" />
                 </video>

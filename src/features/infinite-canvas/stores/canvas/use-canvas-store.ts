@@ -13,6 +13,8 @@ export type CanvasProject = {
     title: string;
     createdAt: string;
     updatedAt: string;
+    /** Last successful cloud backup time (ISO). Local edits do not bump it and it is excluded from sync dirty checks. */
+    cloudSyncedAt?: string;
     nodes: CanvasNodeData[];
     connections: CanvasConnection[];
     chatSessions: CanvasAssistantSession[];
@@ -32,6 +34,10 @@ type CanvasStore = {
     deleteProjects: (ids: string[]) => void;
     replaceProjects: (projects: CanvasProject[]) => void;
     updateProject: (id: string, patch: Partial<Pick<CanvasProject, "nodes" | "connections" | "chatSessions" | "activeChatId" | "backgroundMode" | "showImageInfo" | "viewport">>) => void;
+    /** Record the last successful cloud sync without bumping updatedAt. */
+    markProjectCloudSynced: (id: string, syncedAt: string) => void;
+    /** Insert or replace a project keeping its id — used when pulling a cloud copy. */
+    restoreProject: (project: CanvasProject) => void;
 };
 
 const initialViewport: ViewportTransform = { x: 0, y: 0, k: 1 };
@@ -117,6 +123,15 @@ export const useCanvasStore = create<CanvasStore>()(
                 for (const id of ids) void removeCanvasWorkspace(id).catch(() => undefined);
             },
             replaceProjects: (projects) => set({ projects }),
+            markProjectCloudSynced: (id, syncedAt) =>
+                set((state) => ({
+                    projects: state.projects.map((project) => (project.id === id ? { ...project, cloudSyncedAt: syncedAt } : project)),
+                })),
+            restoreProject: (project) =>
+                set((state) => {
+                    const exists = state.projects.some((item) => item.id === project.id);
+                    return { projects: exists ? state.projects.map((item) => (item.id === project.id ? project : item)) : [project, ...state.projects] };
+                }),
             updateProject: (id, patch) =>
                 set((state) => ({
                     projects: state.projects.map((project) => (project.id === id ? { ...project, ...patch, updatedAt: new Date().toISOString() } : project)),

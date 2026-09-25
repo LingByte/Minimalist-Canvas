@@ -274,12 +274,15 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
       header: t('Status'),
       cell: ({ row }) => {
         const status = row.getValue('status') as string
+        const running =
+          status === TASK_STATUS.IN_PROGRESS || status === TASK_STATUS.QUEUED
         return (
           <StatusBadge
             label={t(taskStatusMapper.getLabel(status, status || 'Submitting'))}
             variant={taskStatusMapper.getVariant(status)}
             size='sm'
             copyable={false}
+            pulse={running}
             className='-ml-1.5'
           />
         )

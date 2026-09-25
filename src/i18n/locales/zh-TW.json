@@ -1,4 +1,4 @@
-{
+﻿{
   "translation": {
     "360": "360",
     "1000": "1000",
@@ -1654,6 +1654,7 @@
     "docs.groups.guides": "指南",
     "docs.groups.reference": "API 參考",
     "docs.menu": "選單",
+    "docs.nav.subtitle": "瀏覽接口與整合指南。",
     "docs.next": "下一頁",
     "docs.noResults": "沒有符合的章節",
     "docs.onThisPage": "本頁目錄",
@@ -3665,6 +3666,7 @@
     "OpenAI, Anthropic, etc.": "OpenAI、Anthropic 等",
     "OpenAI, Anthropic, Google, etc.": "OpenAI、Anthropic、Google 等",
     "OpenAIMax": "OpenAIMax",
+    "Opening wallet page in browser…": "正在瀏覽器中開啟錢包頁面…",
     "OpenRouter": "OpenRouter",
     "opens in an external client. Trigger it from the sidebar or API key actions to launch the configured application.": "在外部用戶端中打開。從側邊欄或 API 金鑰操作中觸發，以啟動設定的套用。",
     "Operate channels": "運維渠道",
@@ -4070,6 +4072,7 @@
     "Pricing mode": "定價模式",
     "Pricing Ratios": "定價比例",
     "Pricing Type": "定價類型",
+    "Primary": "主導航",
     "Primary Model": "主模型",
     "Prioritize reusing the last successful channel based on keys extracted from request context (sticky routing)": "基於請求上下文提取的 Key，優先複用上一次成功的渠道（粘滯選路）",
     "Priority": "優先級",
@@ -4854,6 +4857,7 @@
     "Sign In": "登入",
     "Sign in now": "立即登入",
     "Sign in required": "需要登入",
+    "Sign in to {{name}}": "登入到 {{name}}",
     "Sign in with Passkey": "使用 Passkey 登入",
     "Sign out": "登出",
     "Sign out of this device": "登出目前裝置",
@@ -6021,8 +6025,7 @@
     "Zero retention": "零數據保留",
     "Zhipu": "智譜",
     "Zhipu V4": "智譜 V4",
-    "Zoom": "縮放",
-    "Sign in to {{name}}": "登入到 {{name}}"
+    "Zoom": "縮放"
   },
   "Simplicity is the way. Create the future.": "大道至簡，創作未來。",
   "One studio for frontier image, video, and voice—from idea to finished work.": "前沿影像、影片與語音，同一創作環境，從想法到成片一次完成。",

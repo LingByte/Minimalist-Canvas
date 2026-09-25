@@ -34,12 +34,16 @@ type ResponseToolCall = {
     thoughtSignature?: string;
 };
 
+export type AgentToolCall = ResponseToolCall;
+
 type ResponseInputMessage =
     | AiTextMessage
     | { type: "function_call"; call_id: string; name: string; arguments: string; thoughtSignature?: string }
     | { role: "tool"; tool_call_id: string; content: string };
 
-type ResponseFunctionTool = {
+export type AgentApiMessage = ResponseInputMessage;
+
+export type ResponseFunctionTool = {
     type: "function";
     function: {
         name: string;
@@ -49,7 +53,7 @@ type ResponseFunctionTool = {
     };
 };
 
-type ToolResponseResult = {
+export type ToolResponseResult = {
     content: string;
     toolCalls: ResponseToolCall[];
 };
@@ -554,14 +558,45 @@ async function requestStreamingResponse(config: AiConfig, body: Record<string, u
     return { ...result, content: state.text || result.content };
 }
 
-type ChatCompletionsStreamState = { buffer: string; text: string; error?: string };
+type ChatCompletionsStreamState = { buffer: string; text: string; error?: string; toolCalls: Map<number, ResponseToolCall> };
 
-function toChatCompletionsMessages(messages: ResponseInputMessage[]): AiTextMessage[] {
-    return messages.flatMap((message): AiTextMessage[] => {
-        if ("type" in message) return [];
-        if (message.role === "tool") return [];
-        return [{ role: message.role, content: message.content }];
-    });
+type ChatCompletionMessage =
+    | { role: "system" | "user" | "assistant"; content: ResponseMessageContent }
+    | { role: "assistant"; content: null; tool_calls: ResponseToolCall[] }
+    | { role: "tool"; tool_call_id: string; content: string };
+
+/**
+ * Convert internal messages to OpenAI chat/completions format.
+ * Consecutive function_call items merge into one assistant tool_calls message
+ * (OpenAI requires all parallel calls grouped before their tool results).
+ */
+function toChatCompletionsMessages(messages: ResponseInputMessage[]): ChatCompletionMessage[] {
+    const result: ChatCompletionMessage[] = [];
+    let pendingCalls: ResponseToolCall[] = [];
+    const flushCalls = () => {
+        if (!pendingCalls.length) return;
+        result.push({ role: "assistant", content: null, tool_calls: pendingCalls });
+        pendingCalls = [];
+    };
+    for (const message of messages) {
+        if ("type" in message) {
+            pendingCalls.push({
+                id: message.call_id,
+                type: "function",
+                function: { name: message.name, arguments: message.arguments },
+            });
+            continue;
+        }
+        if (message.role === "tool") {
+            flushCalls();
+            result.push({ role: "tool", tool_call_id: message.tool_call_id, content: message.content });
+            continue;
+        }
+        flushCalls();
+        result.push({ role: message.role, content: message.content });
+    }
+    flushCalls();
+    return result;
 }
 
 function consumeChatCompletionsStreamBlock(block: string, state: ChatCompletionsStreamState, onDelta?: (text: string) => void) {
@@ -591,9 +626,29 @@ function consumeChatCompletionsStreamBlock(block: string, state: ChatCompletions
         const piece =
             (delta && typeof delta.content === "string" ? delta.content : "") ||
             (message && typeof message.content === "string" ? message.content : "");
-        if (!piece) continue;
-        state.text += piece;
-        onDelta?.(state.text);
+        if (piece) {
+            state.text += piece;
+            onDelta?.(state.text);
+        }
+        // Streaming tool_calls: delta.tool_calls[] chunks indexed by `index`,
+        // first chunk carries id/name, later chunks append to function.arguments.
+        const toolCalls = (delta && Array.isArray(delta.tool_calls) ? delta.tool_calls : undefined)
+            || (message && Array.isArray(message.tool_calls) ? message.tool_calls : undefined)
+            || [];
+        for (const raw of toolCalls) {
+            if (!isRecord(raw)) continue;
+            const index = typeof raw.index === "number" ? raw.index : 0;
+            const fn = isRecord(raw.function) ? raw.function : {};
+            const existing = state.toolCalls.get(index) || {
+                id: typeof raw.id === "string" ? raw.id : `call_${index}`,
+                type: "function" as const,
+                function: { name: "", arguments: "" },
+            };
+            if (typeof raw.id === "string" && raw.id) existing.id = raw.id;
+            if (typeof fn.name === "string" && fn.name) existing.function.name += fn.name;
+            if (typeof fn.arguments === "string") existing.function.arguments += fn.arguments;
+            state.toolCalls.set(index, existing);
+        }
     }
 }
 
@@ -618,6 +673,8 @@ async function requestStreamingChatCompletions(
     messages: ResponseInputMessage[],
     onDelta?: (text: string) => void,
     options?: RequestOptions,
+    tools?: ResponseFunctionTool[],
+    toolChoice?: ToolChoice,
 ): Promise<ToolResponseResult> {
     const response = await fetch(aiApiUrl(config, "/chat/completions"), {
         method: "POST",
@@ -626,6 +683,7 @@ async function requestStreamingChatCompletions(
             model: config.model,
             messages: toChatCompletionsMessages(messages),
             stream: true,
+            ...(tools?.length ? { tools, tool_choice: toolChoice ?? "auto" } : {}),
         }),
         signal: options?.signal,
     });
@@ -638,12 +696,21 @@ async function requestStreamingChatCompletions(
         const first = isRecord(choices[0]) ? choices[0] : undefined;
         const message = first && isRecord(first.message) ? first.message : undefined;
         const content = message && typeof message.content === "string" ? message.content : "";
-        return { content, toolCalls: [] };
+        const toolCalls = message && Array.isArray(message.tool_calls)
+            ? message.tool_calls
+                  .filter((call): call is Record<string, unknown> & { function: { name: string; arguments: string } } => isRecord(call) && isRecord(call.function))
+                  .map((call, index) => ({
+                      id: typeof call.id === "string" && call.id ? call.id : `call_${index}`,
+                      type: "function" as const,
+                      function: { name: call.function.name || "", arguments: typeof call.function.arguments === "string" ? call.function.arguments : "{}" },
+                  }))
+            : [];
+        return { content, toolCalls };
     }
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    const state: ChatCompletionsStreamState = { buffer: "", text: "" };
+    const state: ChatCompletionsStreamState = { buffer: "", text: "", toolCalls: new Map() };
     for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -652,7 +719,7 @@ async function requestStreamingChatCompletions(
     }
     consumeChatCompletionsStreamText(state, decoder.decode(), onDelta, true);
     if (state.error) throw new Error(state.error);
-    return { content: state.text, toolCalls: [] };
+    return { content: state.text, toolCalls: [...state.toolCalls.values()].filter((call) => call.function.name) };
 }
 
 function enrichApiErrorMessage(message: string) {
@@ -1158,6 +1225,56 @@ export async function requestImageQuestion(config: AiConfig, messages: AiTextMes
         const answer = (await requestStreamingChatCompletions(requestConfig, withSystemMessage(requestConfig, messages), onDelta, options)).content || apiText("noContent");
         if (answer === apiText("noContent")) onDelta(answer);
         return answer;
+    } catch (error) {
+        throw new Error(enrichApiErrorMessage(readAxiosError(error, apiText("requestFailed"))));
+    }
+}
+
+/**
+ * Agent chat turn with tool support.
+ * messages may include function_call / tool-result entries produced by previous rounds.
+ * Returns final text plus any tool calls the model requested.
+ */
+export async function requestAgentChatCompletion(
+    config: AiConfig,
+    messages: ResponseInputMessage[],
+    tools: ResponseFunctionTool[],
+    onDelta: (text: string) => void,
+    options?: RequestOptions,
+): Promise<ToolResponseResult> {
+    const requestConfig = resolveModelRequestConfig(config, config.model || config.textModel);
+    const script = resolveModelScript(config, config.model || config.textModel);
+    const runnableScript = script && !/\/v1\/responses\b/.test(script) ? script : "";
+    if (runnableScript) {
+        // Model-plugin scripts do not support tools; degrade to a plain text turn.
+        const textOnly = messages.flatMap((message): AiTextMessage[] => ("type" in message || message.role === "tool" ? [] : [message]));
+        const answer = await runModelPlugin<string>({
+            capability: "text",
+            script: runnableScript,
+            config: requestConfig,
+            messages: withSystemMessage(requestConfig, textOnly),
+            signal: options?.signal,
+            onDelta,
+        });
+        return { content: String(answer ?? ""), toolCalls: [] };
+    }
+    try {
+        if (requestConfig.apiFormat === "gemini") {
+            return await requestGeminiStreamingResponse(
+                requestConfig,
+                toGeminiBody(requestConfig, messages, toGeminiToolOptions(tools, "auto")),
+                onDelta,
+                options,
+            );
+        }
+        return await requestStreamingChatCompletions(
+            requestConfig,
+            withSystemMessage(requestConfig, messages),
+            onDelta,
+            options,
+            tools,
+            "auto",
+        );
     } catch (error) {
         throw new Error(enrichApiErrorMessage(readAxiosError(error, apiText("requestFailed"))));
     }

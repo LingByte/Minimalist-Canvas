@@ -16,20 +16,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Avatar, Button, Dropdown } from 'antd'
+import { Button, Dropdown } from 'antd'
 import type { MenuProps } from 'antd'
-import { User, KeyRound, ListTodo, LogOut, ScrollText } from 'lucide-react'
-import { useMemo } from 'react'
+import { User, KeyRound, ListTodo, LogOut, ScrollText, Wallet } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
 import { SignOutDialog } from '@/components/sign-out-dialog'
+import { UserAvatar } from '@/components/user-avatar'
 import useDialogState from '@/hooks/use-dialog'
 import { useUserDisplay } from '@/hooks/use-user-display'
-import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
+import { getSelf } from '@/lib/api'
+import { formatQuota } from '@/lib/format'
 import { useAuthStore } from '@/stores/auth-store'
-
-const avatarFallbackClassName = 'font-semibold text-white'
 
 export function ProfileDropdown() {
   const { t } = useTranslation()
@@ -38,11 +38,20 @@ export function ProfileDropdown() {
   const user = useAuthStore((state) => state.auth.user)
   const { displayName, roleLabel } = useUserDisplay(user)
   const avatarName = user?.username || displayName
-  const avatarFallback = getUserAvatarFallback(avatarName)
-  const avatarFallbackStyle = useMemo(
-    () => getUserAvatarStyle(avatarName),
-    [avatarName]
-  )
+  const avatarUrl = user?.avatar_url ?? null
+  const [quota, setQuota] = useState<number | undefined>(user?.quota)
+  const balance = formatQuota(quota ?? user?.quota ?? 0)
+
+  // Refresh the balance each time the dropdown opens.
+  const refreshQuota = () => {
+    getSelf()
+      .then((res) => {
+        if (res?.success && res.data?.quota !== undefined) {
+          setQuota(res.data.quota as number)
+        }
+      })
+      .catch(() => {})
+  }
 
   const items: MenuProps['items'] = useMemo(() => {
     const menu: MenuProps['items'] = [
@@ -50,13 +59,7 @@ export function ProfileDropdown() {
         key: 'header',
         label: (
           <div className='flex items-center gap-2 py-1'>
-            <Avatar
-              size={32}
-              style={avatarFallbackStyle}
-              className={avatarFallbackClassName}
-            >
-              {avatarFallback}
-            </Avatar>
+            <UserAvatar size={32} src={avatarUrl} name={avatarName} />
             <div className='flex flex-1 flex-col gap-0.5 overflow-hidden'>
               <p className='text-foreground truncate text-sm font-medium'>
                 {displayName}
@@ -74,12 +77,29 @@ export function ProfileDropdown() {
                   </>
                 )}
               </div>
+              <div className='flex items-center gap-1 text-xs'>
+                <Wallet className='size-3' />
+                <span className='font-medium tabular-nums'>{balance}</span>
+              </div>
             </div>
           </div>
         ),
         disabled: true,
       },
       { type: 'divider' },
+      {
+        key: 'wallet',
+        icon: <Wallet className='size-4' />,
+        label: (
+          <span className='flex items-center justify-between gap-4'>
+            <span>{t('Wallet')}</span>
+            <span className='text-muted-foreground text-xs font-medium tabular-nums'>
+              {balance}
+            </span>
+          </span>
+        ),
+        onClick: () => navigate('/profile'),
+      },
       {
         key: 'profile',
         icon: <User className='size-4' />,
@@ -119,8 +139,9 @@ export function ProfileDropdown() {
 
     return menu
   }, [
-    avatarFallback,
-    avatarFallbackStyle,
+    avatarName,
+    avatarUrl,
+    balance,
     displayName,
     navigate,
     roleLabel,
@@ -135,26 +156,25 @@ export function ProfileDropdown() {
 
   return (
     <>
-      <Dropdown menu={{ items }} trigger={['click']} placement='bottomRight'>
+      <Dropdown
+        menu={{ items }}
+        trigger={['click']}
+        placement='bottomRight'
+        onOpenChange={(open) => {
+          if (open) refreshQuota()
+        }}
+      >
         <Button
           type='text'
           className='relative inline-flex size-6 shrink-0 items-center justify-center overflow-visible p-0'
           style={{ width: 24, height: 24, minWidth: 24 }}
         >
-          <Avatar
+          <UserAvatar
             size={24}
-            style={{
-              ...avatarFallbackStyle,
-              flexShrink: 0,
-              width: 24,
-              height: 24,
-              minWidth: 24,
-              lineHeight: '24px',
-            }}
-            className={`${avatarFallbackClassName} shrink-0 text-[11px]`}
-          >
-            {avatarFallback}
-          </Avatar>
+            src={avatarUrl}
+            name={avatarName}
+            className='text-[11px]'
+          />
         </Button>
       </Dropdown>
 

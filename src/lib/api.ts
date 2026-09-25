@@ -45,6 +45,31 @@ export async function getSelf() {
   return res.data
 }
 
+/**
+ * Upload avatar image (multipart). Frontend should compress oversize files first.
+ */
+export async function uploadUserAvatar(
+  file: File
+): Promise<{ success: boolean; message?: string; data?: { avatar_url: string } }> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await api.post('/api/user/self/avatar', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return res.data
+}
+
+/**
+ * Remove current avatar
+ */
+export async function deleteUserAvatar(): Promise<{
+  success: boolean
+  message?: string
+}> {
+  const res = await api.delete('/api/user/self/avatar')
+  return res.data
+}
+
 export async function getUserModels(): Promise<{
   success: boolean
   message?: string

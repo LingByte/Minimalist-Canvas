@@ -1,8 +1,10 @@
 import { useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { App, Button } from "antd";
-import { Download, FileUp, Plus, Trash2, X } from "lucide-react";
+import { CheckCircle2, Cloud, Download, FileUp, Loader2, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
+
+import { toIntlLocale } from "@/i18n/languages";
 
 import { readZip } from "@canvas/lib/zip";
 import { setMediaBlob } from "@canvas/services/file-storage";
@@ -12,12 +14,13 @@ import { CanvasEmptyPreview } from "@canvas/components/canvas/canvas-project-pre
 import { CanvasProjectCard } from "@canvas/components/canvas/canvas-project-card";
 import type { CanvasExportFile } from "@canvas/types/canvas-export";
 import { useCanvasStore } from "@canvas/stores/canvas/use-canvas-store";
+import { useCanvasCloudStore } from "@canvas/stores/canvas/use-canvas-cloud-store";
 import { useCanvasUiStore } from "@canvas/stores/canvas/use-canvas-ui-store";
 import { exportCanvasProjects } from "@canvas/lib/canvas/canvas-export";
 
 export default function CanvasPage() {
     const { message } = App.useApp();
-    const { t } = useTranslation();
+    const { i18n, t } = useTranslation();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const inputRef = useRef<HTMLInputElement>(null);
@@ -29,6 +32,11 @@ export default function CanvasPage() {
     const selectedIds = useCanvasUiStore((state) => state.selectedProjectIds);
     const setDeleteIds = useCanvasUiStore((state) => state.setDeleteProjectIds);
     const clearSelected = useCanvasUiStore((state) => state.clearSelectedProjectIds);
+    const cloudSummaries = useCanvasCloudStore((state) => state.summaries);
+    const cloudLoading = useCanvasCloudStore((state) => state.loading);
+    const cloudPullingId = useCanvasCloudStore((state) => state.pullingId);
+    const refreshCloud = useCanvasCloudStore((state) => state.refresh);
+    const pullCloud = useCanvasCloudStore((state) => state.pull);
 
     const mode = searchParams.get("mode");
     const agentMode = mode === "new" || mode === "recent" || mode === "choose";
@@ -69,11 +77,23 @@ export default function CanvasPage() {
         enterProject(mode === "new" ? createProject(t("canvas.defaultTitle", { count: projects.length + 1 })) : projects[0]?.id || createProject(t("canvas.defaultTitle", { count: projects.length + 1 })));
     }, [createProject, hydrated, mode, projects, t]);
 
+    useEffect(() => {
+        void refreshCloud();
+    }, [refreshCloud]);
+
     if (hydrated && (mode === "new" || mode === "recent")) {
         return <main className="flex h-full items-center justify-center bg-background text-sm text-stone-500">{t("canvas.opening")}</main>;
     }
 
     const selectedProjects = projects.filter((project) => selectedIds.includes(project.id));
+    const localById = new Map(projects.map((project) => [project.id, project]));
+    const formatCloudDate = (ts: number) =>
+        new Date(ts * 1000).toLocaleString(toIntlLocale(i18n.resolvedLanguage), {
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+        });
 
     return (
         <main className="relative h-full overflow-auto text-stone-950 dark:text-stone-100">
@@ -148,6 +168,10 @@ export default function CanvasPage() {
                 ) : null}
 
                 <section className="mt-6">
+                    <div className="mb-3 flex items-center gap-2">
+                        <h2 className="text-sm font-semibold tracking-tight text-stone-700 dark:text-stone-200">{t("canvas.localSection")}</h2>
+                        <span className="text-xs text-stone-400">{projects.length}</span>
+                    </div>
                     {!hydrated ? (
                         <div className="flex min-h-[200px] items-center justify-center text-sm text-stone-500">{t("canvas.loading")}</div>
                     ) : projects.length ? (
@@ -165,6 +189,79 @@ export default function CanvasPage() {
                                 {t("canvas.create")}
                             </Button>
                         </div>
+                    )}
+                </section>
+
+                <section className="mt-10">
+                    <div className="mb-3 flex items-center gap-2">
+                        <Cloud className="size-4 text-stone-400" />
+                        <h2 className="text-sm font-semibold tracking-tight text-stone-700 dark:text-stone-200">{t("canvas.cloudSection")}</h2>
+                        <span className="text-xs text-stone-400">{cloudSummaries.length}</span>
+                        <Button
+                            type="text"
+                            size="small"
+                            className="ml-auto !text-stone-500"
+                            loading={cloudLoading}
+                            icon={<RefreshCw className="size-3.5" />}
+                            onClick={() => void refreshCloud()}
+                        >
+                            {t("canvas.cloudRefresh")}
+                        </Button>
+                    </div>
+                    {cloudLoading && !cloudSummaries.length ? (
+                        <div className="flex min-h-[100px] items-center justify-center text-sm text-stone-500">
+                            <Loader2 className="mr-2 size-4 animate-spin" />
+                            {t("canvas.cloudLoading")}
+                        </div>
+                    ) : cloudSummaries.length ? (
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                            {cloudSummaries.map((summary) => {
+                                const local = localById.get(summary.client_id);
+                                return (
+                                    <article key={summary.client_id} className="flex flex-col gap-2.5 rounded-xl border border-stone-200/80 bg-white/55 px-3 py-2.5 shadow-sm backdrop-blur-sm transition duration-200 hover:shadow-md dark:border-stone-800 dark:bg-stone-900/55">
+                                        <div className="flex items-start gap-2.5">
+                                            <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-sky-500/10 text-sky-500 dark:text-sky-400">
+                                                <Cloud className="size-4" />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <h3 className="truncate text-sm font-semibold tracking-tight text-stone-950 dark:text-stone-50" title={summary.title}>
+                                                    {summary.title || t("canvas.project.untitled")}
+                                                </h3>
+                                                <p className="truncate font-mono text-[10px] text-stone-400">#{summary.client_id.slice(-6)}</p>
+                                            </div>
+                                        </div>
+                                        <div className="mt-auto flex items-center justify-between gap-2">
+                                            <p className="truncate text-[11px] text-stone-500" title={formatCloudDate(summary.updated_at)}>
+                                                {t("canvas.project.updated", { date: formatCloudDate(summary.updated_at) })}
+                                            </p>
+                                            {local ? (
+                                                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                                                    <CheckCircle2 className="size-3" />
+                                                    {t("canvas.cloudSynced")}
+                                                </span>
+                                            ) : (
+                                                <Button
+                                                    size="small"
+                                                    type="text"
+                                                    loading={cloudPullingId === summary.client_id}
+                                                    icon={<Download className="size-3.5" />}
+                                                    onClick={() =>
+                                                        void pullCloud(summary.client_id).then((project) => {
+                                                            if (project) message.success(t("canvas.pulled", { name: project.title }));
+                                                            else message.error(t("canvas.pullFailed"));
+                                                        })
+                                                    }
+                                                >
+                                                    {t("canvas.pullToLocal")}
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </article>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <p className="py-6 text-center text-sm text-stone-400">{t("canvas.cloudEmpty")}</p>
                     )}
                 </section>
             </div>

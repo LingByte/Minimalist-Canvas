@@ -12,6 +12,7 @@ import { createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo
 import { defaultConfig, useConfigStore, useEffectiveConfig } from "@canvas/stores/use-config-store";
 import { collectImageStorageKeys, getImageBlob, uploadImage } from "@canvas/services/image-storage";
 import { collectMediaStorageKeys, getMediaBlob, uploadMediaFile } from "@canvas/services/file-storage";
+import { readClipboardImage, readClipboardText } from "@canvas/services/clipboard";
 import { onCloudMediaUrl } from "@canvas/services/cloud-upload-progress";
 import { canvasWorkspaceDir, isTauri, syncWorkspaceMedia, writeCanvasWorkspace } from "@canvas/services/fs-store";
 import { saveBlobAs } from "@canvas/lib/save-file";
@@ -1516,27 +1517,25 @@ function InfiniteCanvasPage() {
     );
 
     const pasteSystemClipboard = useCallback(async () => {
-        if (!navigator.clipboard) return;
-
-        const items = await navigator.clipboard.read();
-        const imageItem = items.find((item) => item.types.some((type) => type.startsWith("image/")));
-        if (imageItem) {
-            const imageType = imageItem.types.find((type) => type.startsWith("image/"));
-            if (!imageType) return;
-            const blob = await imageItem.getType(imageType);
-            const file = new File([blob], "clipboard-image.png", { type: imageType });
-            try {
-                await createImageFileNode(file, getCanvasCenter());
-                message.success(t("canvas.projectPage.clipboardImageAdded"));
-            } catch (error) {
-                console.error(error);
-                message.error(error instanceof Error && error.message ? error.message : t("canvas.projectPage.uploadFailed"));
+        try {
+            const file = await readClipboardImage();
+            if (file) {
+                try {
+                    await createImageFileNode(file, getCanvasCenter());
+                    message.success(t("canvas.projectPage.clipboardImageAdded"));
+                } catch (error) {
+                    console.error(error);
+                    message.error(error instanceof Error && error.message ? error.message : t("canvas.projectPage.uploadFailed"));
+                }
+                return;
             }
-            return;
-        }
 
-        const text = await navigator.clipboard.readText();
-        if (createTextNodeFromClipboard(text)) message.success(t("canvas.projectPage.clipboardTextAdded"));
+            const text = await readClipboardText();
+            if (createTextNodeFromClipboard(text)) message.success(t("canvas.projectPage.clipboardTextAdded"));
+        } catch (error) {
+            console.error("[canvas] paste from clipboard failed", error);
+            message.error(t("canvas.projectPage.clipboardReadFailed"));
+        }
     }, [createImageFileNode, createTextNodeFromClipboard, getCanvasCenter, message, t]);
 
     useEffect(() => {
@@ -1737,22 +1736,14 @@ function InfiniteCanvasPage() {
     const downloadNodeImage = useCallback((node: CanvasNodeData) => {
         if ((node.type !== CanvasNodeType.Image && node.type !== CanvasNodeType.Video && node.type !== CanvasNodeType.Audio) || !node.metadata?.content) return;
         const url = node.metadata.content;
-        if (url.startsWith("data:") || url.startsWith("blob:")) {
-            void saveBlobAs(url, `canvas-${node.type}-${node.id}.${node.type === CanvasNodeType.Video ? "mp4" : node.type === CanvasNodeType.Audio ? audioExtension(node.metadata.mimeType) : imageExtension(url)}`);
-            return;
-        }
-        window.open(url, "_blank", "noopener,noreferrer");
+        void saveBlobAs(url, `canvas-${node.type}-${node.id}.${node.type === CanvasNodeType.Video ? "mp4" : node.type === CanvasNodeType.Audio ? audioExtension(node.metadata.mimeType) : imageExtension(url)}`);
     }, []);
 
     const downloadBatchImage = useCallback((node: CanvasNodeData, imageId: string) => {
         const image = node.metadata?.images?.find((item) => item.id === imageId);
         if (!image?.content) return;
         const url = image.content;
-        if (url.startsWith("data:") || url.startsWith("blob:")) {
-            void saveBlobAs(url, `canvas-image-${node.id}-${image.id}.${imageExtension(url)}`);
-            return;
-        }
-        window.open(url, "_blank", "noopener,noreferrer");
+        void saveBlobAs(url, `canvas-image-${node.id}-${image.id}.${imageExtension(url)}`);
     }, []);
 
     const saveNodeAsset = useCallback(
@@ -3968,6 +3959,7 @@ function InfiniteCanvasPage() {
                     onUndo={undoCanvas}
                     onRedo={redoCanvas}
                     onUpload={() => handleUploadRequest()}
+                    onPaste={() => void pasteSystemClipboard()}
                     onDelete={() => deleteNodes(new Set(selectedNodeIds))}
                     onClear={() => setClearConfirmOpen(true)}
                     onCanvasToolChange={setCanvasTool}

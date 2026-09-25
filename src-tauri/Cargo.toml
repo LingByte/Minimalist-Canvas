@@ -1,6 +1,6 @@
 [package]
 name = "minimalist-canvas"
-version = "0.1.4"
+version = "0.1.5"
 description = "Minimalist Canvas - Infinite canvas desktop app"
 authors = ["LingByte"]
 edition = "2021"
@@ -24,6 +24,7 @@ tauri-plugin-fs = "2.5.2"
 axum = "0.8"
 tokio = { version = "1", features = ["macros", "net", "time", "sync"] }
 tauri-plugin-process = "2.3.1"
+tauri-plugin-clipboard-manager = "2"
 
 [profile.release]
 panic = "abort"

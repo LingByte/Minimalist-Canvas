@@ -1,4 +1,4 @@
-{
+﻿{
   "translation": {
     "360": "360",
     "1000": "1000",
@@ -1654,6 +1654,7 @@
     "docs.groups.guides": "Guides",
     "docs.groups.reference": "API reference",
     "docs.menu": "Menu",
+    "docs.nav.subtitle": "Browse endpoints and integration guides.",
     "docs.next": "Next",
     "docs.noResults": "No matching sections",
     "docs.onThisPage": "On this page",
@@ -3665,6 +3666,7 @@
     "OpenAI, Anthropic, etc.": "OpenAI, Anthropic, etc.",
     "OpenAI, Anthropic, Google, etc.": "OpenAI, Anthropic, Google, etc.",
     "OpenAIMax": "OpenAIMax",
+    "Opening wallet page in browser…": "Opening wallet page in browser…",
     "OpenRouter": "OpenRouter",
     "opens in an external client. Trigger it from the sidebar or API key actions to launch the configured application.": "opens in an external client. Trigger it from the sidebar or API key actions to launch the configured application.",
     "Operate channels": "Operate channels",
@@ -4072,6 +4074,7 @@
     "Pricing mode": "Pricing mode",
     "Pricing Ratios": "Pricing Ratios",
     "Pricing Type": "Pricing Type",
+    "Primary": "Primary",
     "Primary Model": "Primary Model",
     "Prioritize reusing the last successful channel based on keys extracted from request context (sticky routing)": "Prioritize reusing the last successful channel based on keys extracted from request context (sticky routing)",
     "Priority": "Priority",
@@ -4856,6 +4859,7 @@
     "Sign In": "Sign In",
     "Sign in now": "Sign in now",
     "Sign in required": "Sign in required",
+    "Sign in to {{name}}": "Sign in to {{name}}",
     "Sign in with Passkey": "Sign in with Passkey",
     "Sign out": "Sign out",
     "Sign out of this device": "Sign out of this device",
@@ -6023,8 +6027,7 @@
     "Zero retention": "Zero retention",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom",
-    "Sign in to {{name}}": "Sign in to {{name}}"
+    "Zoom": "Zoom"
   },
   "Simplicity is the way. Create the future.": "Simplicity is the way. Create the future.",
   "One studio for frontier image, video, and voice—from idea to finished work.": "One studio for frontier image, video, and voice—from idea to finished work.",

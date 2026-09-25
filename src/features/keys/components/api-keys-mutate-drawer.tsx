@@ -351,7 +351,7 @@ export function ApiKeysMutateDrawer({
       onClose={handleClose}
       placement='right'
       size={620}
-      destroyOnClose
+      destroyOnHidden
       title={isUpdate ? t('Update API Key') : t('Create API Key')}
       extra={
         <span className='text-muted-foreground text-sm'>

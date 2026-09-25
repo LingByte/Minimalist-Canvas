@@ -56,23 +56,22 @@ export type CanvasProjectSaveStatus = {
   saving: boolean
 }
 
+/** Stable-referenced snapshots so useSyncExternalStore does not re-render infinitely. */
+const statusCache = new Map<string, CanvasProjectSaveStatus>()
+
 export function getCanvasProjectSaveStatus(projectId?: string): CanvasProjectSaveStatus {
-  if (projectId) {
-    const saving = inFlightPutIds.has(projectId)
-    const dirty =
-      saving ||
-      dirtyProjectIds.has(projectId) ||
-      dirtyCoalesceTimers.has(projectId) ||
-      throttleTimers.has(projectId)
-    return { dirty, saving }
-  }
-  const saving = inFlightPutIds.size > 0
+  const key = projectId || '__all__'
+  const saving = projectId ? inFlightPutIds.has(projectId) : inFlightPutIds.size > 0
   const dirty =
     saving ||
-    dirtyProjectIds.size > 0 ||
-    dirtyCoalesceTimers.size > 0 ||
-    throttleTimers.size > 0
-  return { dirty, saving }
+    (projectId ? dirtyProjectIds.has(projectId) : dirtyProjectIds.size > 0) ||
+    (projectId ? dirtyCoalesceTimers.has(projectId) : dirtyCoalesceTimers.size > 0) ||
+    (projectId ? throttleTimers.has(projectId) : throttleTimers.size > 0)
+  const prev = statusCache.get(key)
+  if (prev && prev.dirty === dirty && prev.saving === saving) return prev
+  const next = { dirty, saving }
+  statusCache.set(key, next)
+  return next
 }
 
 export function subscribeCanvasProjectSaveStatus(listener: () => void): () => void {
@@ -144,8 +143,13 @@ async function pushProject(projectId: string) {
   inFlightPutIds.add(projectId)
   notifySaveStatus()
   try {
-    await putUserCanvasProjectByClientId(projectId, sanitized)
+    const dto = await putUserCanvasProjectByClientId(projectId, sanitized)
+    if (!dto) return
     dirtyProjectIds.delete(projectId)
+    const syncedAt = dto.updated_at
+      ? new Date(dto.updated_at * 1000).toISOString()
+      : new Date().toISOString()
+    useCanvasStore.getState().markProjectCloudSynced(projectId, syncedAt)
   } finally {
     inFlightPutIds.delete(projectId)
     notifySaveStatus()
@@ -327,6 +331,38 @@ function waitCanvasStoreHydrated(): Promise<void> {
       resolve()
     })
   })
+}
+
+/**
+ * Fetch one cloud project and restore it locally, keeping the cloud client_id
+ * so future syncs stay aligned. Suppresses the resulting echo-push.
+ */
+export async function pullCanvasProjectFromCloud(
+  clientId: string
+): Promise<CanvasProject | null> {
+  ensureCanvasProjectBackupSubscription()
+  const dto = await getUserCanvasProjectByClientId(clientId)
+  if (!dto) return null
+  const remote = normalizeRemoteProject(dto.project, clientId, dto.title)
+  if (!remote) return null
+  remote.cloudSyncedAt = dto.updated_at
+    ? new Date(dto.updated_at * 1000).toISOString()
+    : new Date().toISOString()
+  // A different local canvas may already use this title — disambiguate the pulled copy.
+  const localTitles = new Set(
+    useCanvasStore
+      .getState()
+      .projects.filter((item) => item.id !== clientId)
+      .map((item) => item.title)
+  )
+  if (localTitles.has(remote.title)) {
+    let n = 2
+    while (localTitles.has(`${remote.title} (${n})`)) n++
+    remote.title = `${remote.title} (${n})`
+  }
+  skipPushUntil = Date.now() + 2500
+  useCanvasStore.getState().restoreProject(remote)
+  return remote
 }
 
 /**

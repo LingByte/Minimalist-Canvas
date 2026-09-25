@@ -26,6 +26,7 @@ import { toast } from 'sonner'
 
 import { PublicLayout } from '@/components/layout'
 import { copyToClipboard } from '@/lib/copy-to-clipboard'
+import { saveBlobAs } from '@canvas/lib/save-file'
 import { cn } from '@/lib/utils'
 
 import { DocsApiDebugDrawer } from './components/docs-api-debug-drawer'
@@ -107,16 +108,11 @@ function DocsPageInner(props: DocsPageProps) {
     window.setTimeout(() => setCopied(false), 1600)
   }
 
-  const handleDownloadMarkdown = () => {
+  const handleDownloadMarkdown = async () => {
     const blob = new Blob([prepared.rawMarkdown], {
       type: 'text/markdown;charset=utf-8',
     })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${props.section}.md`
-    a.click()
-    URL.revokeObjectURL(url)
+    await saveBlobAs(blob, `${props.section}.md`)
     toast.success(t('docs.downloaded'))
   }
 

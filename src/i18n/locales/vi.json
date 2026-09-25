@@ -1,4 +1,4 @@
-{
+﻿{
   "translation": {
     "360": "360",
     "1000": "1000",
@@ -1654,6 +1654,7 @@
     "docs.groups.guides": "Hướng dẫn",
     "docs.groups.reference": "Tham chiếu API",
     "docs.menu": "Menu",
+    "docs.nav.subtitle": "Xem các endpoint và hướng dẫn tích hợp.",
     "docs.next": "Tiếp",
     "docs.noResults": "Không có phần phù hợp",
     "docs.onThisPage": "Trên trang này",
@@ -3665,6 +3666,7 @@
     "OpenAI, Anthropic, etc.": "OpenAI, Anthropic, v.v.",
     "OpenAI, Anthropic, Google, etc.": "OpenAI, Anthropic, Google, v.v.",
     "OpenAIMax": "OpenAIMax",
+    "Opening wallet page in browser…": "Đang mở trang ví trong trình duyệt…",
     "OpenRouter": "OpenRouter",
     "opens in an external client. Trigger it from the sidebar or API key actions to launch the configured application.": "mở trong một ứng dụng bên ngoài. Kích hoạt nó từ thanh bên hoặc các hành động khóa API để khởi chạy ứng dụng đã cấu hình.",
     "Operate channels": "Vận hành kênh",
@@ -4070,6 +4072,7 @@
     "Pricing mode": "Chế độ định giá",
     "Pricing Ratios": "Tỷ lệ định giá",
     "Pricing Type": "Price type",
+    "Primary": "Điều hướng chính",
     "Primary Model": "Mô hình chính",
     "Prioritize reusing the last successful channel based on keys extracted from request context (sticky routing)": "Ưu tiên sử dụng lại kênh thành công gần nhất dựa trên các khóa trích xuất từ ngữ cảnh yêu cầu (định tuyến dính)",
     "Priority": "Ưu tiên",
@@ -4854,6 +4857,7 @@
     "Sign In": "Đăng nhập",
     "Sign in now": "Đăng nhập ngay",
     "Sign in required": "Cần đăng nhập",
+    "Sign in to {{name}}": "Đăng nhập vào {{name}}",
     "Sign in with Passkey": "Đăng nhập bằng Passkey",
     "Sign out": "Đăng xuất",
     "Sign out of this device": "Đăng xuất khỏi thiết bị này",
@@ -6021,8 +6025,7 @@
     "Zero retention": "Không lưu dữ liệu",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom",
-    "Sign in to {{name}}": "Đăng nhập vào {{name}}"
+    "Zoom": "Zoom"
   },
   "Simplicity is the way. Create the future.": "Đại đạo chí giản. Sáng tạo tương lai.",
   "One studio for frontier image, video, and voice—from idea to finished work.": "Một studio cho hình ảnh, video và giọng nói tiên tiến—từ ý tưởng đến thành phẩm.",

@@ -65,7 +65,7 @@ export function CanvasZoomControls({ scale, onScaleChange, onReset, isMiniMapOpe
                 onClose={() => setShortcutsOpen(false)}
                 placement="right"
                 size={380}
-                destroyOnClose
+                destroyOnHidden
             >
                 <div className="space-y-3 text-sm">
                     <Shortcut label={`Ctrl / Space + ${t("canvas.shortcut.drag")}`} value={t("canvas.shortcut.toggleTool")} />

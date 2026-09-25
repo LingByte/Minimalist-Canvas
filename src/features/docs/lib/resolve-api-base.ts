@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 /** Production fallback when the current origin cannot be resolved. */
-export const DEFAULT_DOCS_API_ORIGIN = 'https://ai.lingecho.com'
+export const DEFAULT_DOCS_API_ORIGIN = 'https://simplefuture.zone'
 
 function withV1(origin: string): string {
   const normalized = origin.trim().replace(/\/+$/, '')
@@ -29,26 +29,26 @@ function withV1(origin: string): string {
 /**
  * Resolve the OpenAI-compatible API base URL for docs / code samples.
  * Prefer the current site origin so examples match where the user is browsing;
- * fall back to the production host when origin is unavailable.
+ * fall back to the production host when origin is unavailable or localhost
+ * (dev builds should show the real API endpoint, not the dev server).
  */
 export function resolveApiBase(): string {
-  if (typeof window !== 'undefined') {
-    const origin = window.location.origin?.trim()
-    if (origin && origin !== 'null') {
-      return withV1(origin)
-    }
-  }
-
-  return withV1(DEFAULT_DOCS_API_ORIGIN)
+  const origin = resolveApiOrigin()
+  return withV1(origin)
 }
 
 /** Site origin without `/v1` (for clients that append paths themselves). */
 export function resolveApiOrigin(): string {
   if (typeof window !== 'undefined') {
     const origin = window.location.origin?.trim()
-    if (origin && origin !== 'null') {
+    if (origin && origin !== 'null' && !isLocalDev(origin)) {
       return origin.replace(/\/+$/, '')
     }
   }
   return DEFAULT_DOCS_API_ORIGIN
+}
+
+/** localhost / 127.0.0.1 origins are dev builds, not the real API host. */
+function isLocalDev(origin: string): boolean {
+  return /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/i.test(origin)
 }

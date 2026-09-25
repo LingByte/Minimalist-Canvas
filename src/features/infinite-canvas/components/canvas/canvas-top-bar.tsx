@@ -159,7 +159,7 @@ export function CanvasTopBar({
                 onClose={() => setShortcutsOpen(false)}
                 placement="right"
                 size={420}
-                destroyOnClose
+                destroyOnHidden
             >
                 <div className="space-y-2 text-sm">
                     <Shortcut keys={["Ctrl / Space", t("canvas.shortcut.drag")]} value={t("canvas.shortcut.toggleTool")} />

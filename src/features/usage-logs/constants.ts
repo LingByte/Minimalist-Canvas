@@ -306,12 +306,12 @@ export const TASK_ACTION_MAPPINGS: Record<string, StatusMapping> = {
  * Task status mappings
  */
 export const TASK_STATUS_MAPPINGS: Record<string, StatusMapping> = {
-  [TASK_STATUS.SUCCESS]: { label: 'Success', variant: 'green' },
+  [TASK_STATUS.SUCCESS]: { label: 'Success', variant: 'success' },
   [TASK_STATUS.NOT_START]: { label: 'Not Started', variant: 'neutral' },
-  [TASK_STATUS.SUBMITTED]: { label: 'Queued', variant: 'yellow' },
-  [TASK_STATUS.IN_PROGRESS]: { label: 'In Progress', variant: 'blue' },
-  [TASK_STATUS.FAILURE]: { label: 'Failed', variant: 'red' },
-  [TASK_STATUS.QUEUED]: { label: 'Queued', variant: 'orange' },
+  [TASK_STATUS.SUBMITTED]: { label: 'Queued', variant: 'light-blue' },
+  [TASK_STATUS.IN_PROGRESS]: { label: 'In Progress', variant: 'info' },
+  [TASK_STATUS.FAILURE]: { label: 'Failed', variant: 'danger' },
+  [TASK_STATUS.QUEUED]: { label: 'Queued', variant: 'warning' },
   [TASK_STATUS.UNKNOWN]: { label: 'Unknown', variant: 'neutral' },
 }
 

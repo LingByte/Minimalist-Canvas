@@ -1,6 +1,7 @@
-import { Check, Download, Pencil, Trash2, X } from "lucide-react";
+import { Check, CloudUpload, Download, Pencil, Trash2, X } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button, Input } from "antd";
+import { useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 
 import { toIntlLocale } from "@/i18n/languages";
@@ -10,6 +11,7 @@ import { cn } from "@canvas/lib/utils";
 import { useCanvasStore, type CanvasProject } from "@canvas/stores/canvas/use-canvas-store";
 import { useCanvasUiStore } from "@canvas/stores/canvas/use-canvas-ui-store";
 import { exportCanvasProjects } from "@canvas/lib/canvas/canvas-export";
+import { getCanvasProjectSaveStatus, saveCanvasProjectNow, subscribeCanvasProjectSaveStatus } from "@canvas/services/user-canvas-project-sync";
 
 export function CanvasProjectCard({ project }: { project: CanvasProject }) {
     const { i18n, t } = useTranslation();
@@ -31,6 +33,20 @@ export function CanvasProjectCard({ project }: { project: CanvasProject }) {
         renameProject(project.id, editingTitle);
         stopEditing();
     };
+    const saveStatus = useSyncExternalStore(subscribeCanvasProjectSaveStatus, () => getCanvasProjectSaveStatus(project.id));
+    const [syncing, setSyncing] = useState(false);
+    const syncToCloud = () => {
+        if (syncing) return;
+        setSyncing(true);
+        void saveCanvasProjectNow(project.id).finally(() => setSyncing(false));
+    };
+    const formatDate = (value: string) =>
+        new Date(value).toLocaleString(toIntlLocale(i18n.resolvedLanguage), {
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+        });
 
     return (
         <article
@@ -95,16 +111,18 @@ export function CanvasProjectCard({ project }: { project: CanvasProject }) {
                 </div>
 
                 <div className="mt-auto flex items-center justify-between gap-2">
-                    <p className="truncate text-[11px] text-stone-500">
-                        {t("canvas.project.updated", {
-                            date: new Date(project.updatedAt).toLocaleString(toIntlLocale(i18n.resolvedLanguage), {
-                                month: "2-digit",
-                                day: "2-digit",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                            }),
-                        })}
-                    </p>
+                    <div className="min-w-0">
+                        <p className="truncate text-[11px] text-stone-500">
+                            {t("canvas.project.updated", { date: formatDate(project.updatedAt) })}
+                        </p>
+                        <p className={cn("mt-0.5 truncate text-[11px]", saveStatus.dirty ? "text-amber-600 dark:text-amber-400" : "text-stone-400 dark:text-stone-500")}>
+                            {saveStatus.dirty
+                                ? t("canvas.project.unsyncedChanges")
+                                : project.cloudSyncedAt
+                                  ? t("canvas.project.synced", { date: formatDate(project.cloudSyncedAt) })
+                                  : t("canvas.project.notSynced")}
+                        </p>
+                    </div>
                     <div
                         className={cn(
                             "flex shrink-0 items-center gap-0 transition",
@@ -119,6 +137,7 @@ export function CanvasProjectCard({ project }: { project: CanvasProject }) {
                             </>
                         ) : (
                             <>
+                                <Button type="text" size="small" shape="circle" loading={syncing || saveStatus.saving} icon={<CloudUpload className="size-3.5" />} onClick={syncToCloud} aria-label={t("canvas.project.sync")} />
                                 <Button type="text" size="small" shape="circle" icon={<Download className="size-3.5" />} onClick={() => void exportCanvasProjects([project], project.title || t("canvas.title"))} aria-label={t("canvas.project.export")} />
                                 <Button type="text" size="small" shape="circle" icon={<Pencil className="size-3.5" />} onClick={() => startEditing(project.id, project.title)} aria-label={t("canvas.project.rename")} />
                                 <Button type="text" size="small" shape="circle" icon={<Trash2 className="size-3.5" />} onClick={() => setDeleteIds([project.id])} aria-label={t("canvas.project.delete")} />

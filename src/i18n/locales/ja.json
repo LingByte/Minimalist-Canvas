@@ -1,4 +1,4 @@
-{
+﻿{
   "translation": {
     "360": "360",
     "1000": "1000",
@@ -1654,6 +1654,7 @@
     "docs.groups.guides": "ガイド",
     "docs.groups.reference": "API リファレンス",
     "docs.menu": "メニュー",
+    "docs.nav.subtitle": "エンドポイントと統合ガイドを参照します。",
     "docs.next": "次へ",
     "docs.noResults": "一致するセクションがありません",
     "docs.onThisPage": "このページの内容",
@@ -3665,6 +3666,7 @@
     "OpenAI, Anthropic, etc.": "OpenAI、Anthropicなど",
     "OpenAI, Anthropic, Google, etc.": "OpenAI、Anthropic、Googleなど",
     "OpenAIMax": "OpenAIMax",
+    "Opening wallet page in browser…": "ブラウザでウォレットページを開いています…",
     "OpenRouter": "OpenRouter",
     "opens in an external client. Trigger it from the sidebar or API key actions to launch the configured application.": "外部クライアントで開きます。サイドバーまたはAPIキーアクションからトリガーして、設定されたアプリケーションを起動します。",
     "Operate channels": "チャネルを運用",
@@ -4070,6 +4072,7 @@
     "Pricing mode": "価格モード",
     "Pricing Ratios": "価格比率",
     "Pricing Type": "価格タイプ",
+    "Primary": "プライマリ",
     "Primary Model": "プライマリモデル",
     "Prioritize reusing the last successful channel based on keys extracted from request context (sticky routing)": "リクエストコンテキストから抽出したキーに基づいて、前回成功したチャネルを優先的に再利用します（スティッキールーティング）",
     "Priority": "優先度",
@@ -4854,6 +4857,7 @@
     "Sign In": "ログイン",
     "Sign in now": "今すぐログイン",
     "Sign in required": "ログインが必要です",
+    "Sign in to {{name}}": "{{name}} にログイン",
     "Sign in with Passkey": "Passkeyでログイン",
     "Sign out": "ログアウト",
     "Sign out of this device": "このデバイスからサインアウト",
@@ -6021,8 +6025,7 @@
     "Zero retention": "データ保持なし",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V 4",
-    "Zoom": "ズーム",
-    "Sign in to {{name}}": "{{name}} にログイン"
+    "Zoom": "ズーム"
   },
   "Simplicity is the way. Create the future.": "大道は至簡。創作の未来へ。",
   "One studio for frontier image, video, and voice—from idea to finished work.": "最先端の画像・動画・音声を一つの創作環境に。アイデアから完成まで一気に。",

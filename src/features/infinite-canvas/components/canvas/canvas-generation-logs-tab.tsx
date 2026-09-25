@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import { App, Checkbox, Empty, Input, Modal, Popconfirm, Spin, Tag } from "antd";
-import { saveAs } from "file-saver";
+import { saveBlobAs } from "@canvas/lib/save-file";
 import { Download, Image as ImageIcon, Loader2, Plus, Search, Trash2, Video } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toIntlLocale } from "@/i18n/languages";
@@ -84,12 +84,9 @@ function mediaExtension(file: GenerationAssetFile, kind: GenerationAssetKind) {
 async function downloadMediaFile(file: GenerationAssetFile, filename: string) {
     const url = file.url?.trim();
     if (!url) throw new Error("missing url");
-    if (url.startsWith("data:") || url.startsWith("blob:")) {
-        saveAs(url, filename);
-        return;
-    }
-    // Open the CDN URL directly in a new tab.
-    window.open(url, "_blank", "noopener,noreferrer");
+    // Desktop app saves via the native save dialog (Tauri http fetch bypasses CORS);
+    // web build falls back to a browser download inside saveBlobAs.
+    await saveBlobAs(url, filename);
 }
 
 export const CanvasGenerationLogsTab = memo(function CanvasGenerationLogsTab({ onInsert, theme }: Props) {

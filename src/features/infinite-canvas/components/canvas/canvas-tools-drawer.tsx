@@ -302,7 +302,7 @@ export function CanvasToolsDrawer() {
                 onClose={closeDrawer}
                 placement="right"
                 size={440}
-                destroyOnClose={false}
+                destroyOnHidden={false}
                 styles={{ body: { paddingTop: 12 } }}
             >
                 {tool === "home" ? (

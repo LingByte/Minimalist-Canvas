@@ -1,25 +1,30 @@
-import { useEffect, useMemo, useState } from "react";
-import { Avatar, Button, Skeleton } from "antd";
+import { useEffect, useRef, useState } from "react";
+import { Button, Dropdown, Skeleton } from "antd";
+import type { MenuProps } from "antd";
 import { useTranslation } from "react-i18next";
 import {
     CalendarDays,
     ChevronRight,
     ExternalLink,
+    ImagePlus,
     KeyRound,
     ListTodo,
     ScrollText,
     LogOut,
     Mail,
     ShieldCheck,
+    Trash2,
     Wallet,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 import { SignOutDialog } from "@/components/sign-out-dialog";
+import { UserAvatar } from "@/components/user-avatar";
 import useDialogState from "@/hooks/use-dialog";
 import { useUserDisplay } from "@/hooks/use-user-display";
-import { getSelf } from "@/lib/api";
-import { getUserAvatarFallback, getUserAvatarStyle } from "@/lib/avatar";
+import { deleteUserAvatar, getSelf, uploadUserAvatar } from "@/lib/api";
+import { prepareAvatarUpload } from "@/lib/image-compress";
 import { formatCompactNumber, formatQuota } from "@/lib/format";
 import { openSitePage } from "@/lib/open-external";
 import { getRoleLabel } from "@/lib/roles";
@@ -35,14 +40,93 @@ export default function ProfilePage() {
     const { t } = useTranslation();
     const navigate = useNavigate();
     const authUser = useAuthStore((state) => state.auth.user);
+    const setAuthUser = useAuthStore((state) => state.auth.setUser);
     const [profile, setProfile] = useState<SelfProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [signOutOpen, setSignOutOpen] = useDialogState();
     const { displayName, roleLabel } = useUserDisplay(profile || authUser || null);
+    const avatarInputRef = useRef<HTMLInputElement>(null);
+    const [avatarBusy, setAvatarBusy] = useState(false);
+    const [openingWallet, setOpeningWallet] = useState(false);
 
     const avatarName = profile?.username || displayName;
-    const avatarFallback = getUserAvatarFallback(avatarName);
-    const avatarStyle = useMemo(() => getUserAvatarStyle(avatarName), [avatarName]);
+    const avatarUrl = profile?.avatar_url ?? authUser?.avatar_url ?? null;
+
+    const syncAvatar = (url: string | null) => {
+        setProfile((prev) => (prev ? { ...prev, avatar_url: url ?? undefined } : prev));
+        if (authUser) {
+            setAuthUser({ ...authUser, avatar_url: url ?? undefined });
+        }
+    };
+
+    const handleAvatarFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file) return;
+
+        setAvatarBusy(true);
+        try {
+            const prepared = await prepareAvatarUpload(file);
+            const response = await uploadUserAvatar(prepared);
+            if (!response.success || !response.data?.avatar_url) {
+                throw new Error(response.message || t("Failed to upload avatar"));
+            }
+            syncAvatar(response.data.avatar_url);
+            toast.success(t("Avatar updated"));
+        } catch (error) {
+            const message =
+                error instanceof Error ? error.message : t("Failed to upload avatar");
+            if (message === "INVALID_IMAGE_TYPE") {
+                toast.error(t("Please select an image file"));
+            } else if (message === "AVATAR_TOO_LARGE") {
+                toast.error(t("Avatar must be 2MB or smaller after compression"));
+            } else {
+                toast.error(message);
+            }
+        } finally {
+            setAvatarBusy(false);
+        }
+    };
+
+    const handleAvatarRemove = async () => {
+        setAvatarBusy(true);
+        try {
+            const response = await deleteUserAvatar();
+            if (!response.success) {
+                throw new Error(response.message || t("Failed to remove avatar"));
+            }
+            syncAvatar(null);
+            toast.success(t("Avatar removed"));
+        } catch (error) {
+            toast.error(
+                error instanceof Error ? error.message : t("Failed to remove avatar")
+            );
+        } finally {
+            setAvatarBusy(false);
+        }
+    };
+
+    const avatarMenuItems: MenuProps["items"] = [
+        {
+            key: "upload",
+            icon: <ImagePlus className="size-4" />,
+            label: t("Upload photo"),
+            onClick: () => avatarInputRef.current?.click(),
+        },
+        ...(avatarUrl
+            ? [
+                  {
+                      key: "remove",
+                      icon: <Trash2 className="size-4" />,
+                      label: t("Remove photo"),
+                      danger: true,
+                      onClick: () => {
+                          void handleAvatarRemove();
+                      },
+                  },
+              ]
+            : []),
+    ];
 
     useEffect(() => {
         setLoading(true);
@@ -118,13 +202,12 @@ export default function ProfilePage() {
                             </>
                         ) : (
                             <>
-                                <Avatar
+                                <UserAvatar
                                     size={72}
-                                    style={avatarStyle}
-                                    className="shrink-0 text-2xl font-semibold text-white"
-                                >
-                                    {avatarFallback}
-                                </Avatar>
+                                    src={avatarUrl}
+                                    name={avatarName}
+                                    className="shrink-0 text-2xl"
+                                />
                                 <div className="min-w-0 flex-1">
                                     <div className="flex flex-wrap items-center gap-2">
                                         <h1 className="truncate text-xl font-semibold tracking-tight">
@@ -159,6 +242,18 @@ export default function ProfilePage() {
                                             </span>
                                         ) : null}
                                     </div>
+                                    <div className="mt-2">
+                                        <Dropdown menu={{ items: avatarMenuItems }} trigger={["click"]}>
+                                            <Button
+                                                type="link"
+                                                size="small"
+                                                loading={avatarBusy}
+                                                className="!h-auto !px-0 text-sm"
+                                            >
+                                                {t("Change avatar")}
+                                            </Button>
+                                        </Dropdown>
+                                    </div>
                                 </div>
                             </>
                         )}
@@ -192,8 +287,18 @@ export default function ProfilePage() {
                         <Button
                             size="small"
                             type="primary"
-                            icon={<ExternalLink className="size-3.5" />}
-                            onClick={() => void openSitePage("/wallet")}
+                            loading={openingWallet}
+                            icon={openingWallet ? undefined : <ExternalLink className="size-3.5" />}
+                            onClick={() => {
+                                setOpeningWallet(true);
+                                const toastId = toast.loading(t("Opening wallet page in browser…"));
+                                void openSitePage("/wallet")
+                                    .catch(() => undefined)
+                                    .finally(() => {
+                                        toast.dismiss(toastId);
+                                        setOpeningWallet(false);
+                                    });
+                            }}
                         >
                             {t("Top up")}
                         </Button>
@@ -255,6 +360,15 @@ export default function ProfilePage() {
                 </section>
             </div>
             <SignOutDialog open={!!signOutOpen} onOpenChange={setSignOutOpen} />
+            <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="hidden"
+                onChange={(e) => {
+                    void handleAvatarFileChange(e);
+                }}
+            />
         </main>
     );
 }

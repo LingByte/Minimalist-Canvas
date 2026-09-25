@@ -60,7 +60,7 @@ export function ApiKeysDeleteDialog() {
       okType='danger'
       confirmLoading={isDeleting}
       onOk={handleDelete}
-      destroyOnClose
+      destroyOnHidden
     >
       <p>
         {t('This will permanently delete API key')}{' '}

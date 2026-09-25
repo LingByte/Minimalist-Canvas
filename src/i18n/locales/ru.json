@@ -1,4 +1,4 @@
-{
+﻿{
   "translation": {
     "360": "360",
     "1000": "1000",
@@ -1654,6 +1654,7 @@
     "docs.groups.guides": "Руководства",
     "docs.groups.reference": "Справочник API",
     "docs.menu": "Меню",
+    "docs.nav.subtitle": "Обзор эндпоинтов и руководств по интеграции.",
     "docs.next": "Далее",
     "docs.noResults": "Нет совпадающих разделов",
     "docs.onThisPage": "На этой странице",
@@ -3665,6 +3666,7 @@
     "OpenAI, Anthropic, etc.": "OpenAI, Anthropic и т.д.",
     "OpenAI, Anthropic, Google, etc.": "OpenAI, Anthropic, Google и т.д.",
     "OpenAIMax": "OpenAIMax",
+    "Opening wallet page in browser…": "Открытие страницы кошелька в браузере…",
     "OpenRouter": "OpenRouter",
     "opens in an external client. Trigger it from the sidebar or API key actions to launch the configured application.": "открывается во внешнем клиенте. Запустите его из боковой панели или действий с ключом API, чтобы запустить настроенное приложение.",
     "Operate channels": "Обслуживание каналов",
@@ -4070,6 +4072,7 @@
     "Pricing mode": "Режим ценообразования",
     "Pricing Ratios": "Коэффициенты ценообразования",
     "Pricing Type": "Тип ценообразования",
+    "Primary": "Основная навигация",
     "Primary Model": "Основная модель",
     "Prioritize reusing the last successful channel based on keys extracted from request context (sticky routing)": "Приоритет повторного использования последнего успешного канала на основе ключей из контекста запроса (липкая маршрутизация)",
     "Priority": "Приоритет",
@@ -4854,6 +4857,7 @@
     "Sign In": "Войти",
     "Sign in now": "Войти сейчас",
     "Sign in required": "Требуется вход",
+    "Sign in to {{name}}": "Вход в {{name}}",
     "Sign in with Passkey": "Войти с Passkey",
     "Sign out": "Выйти",
     "Sign out of this device": "Выйти на этом устройстве",
@@ -6021,8 +6025,7 @@
     "Zero retention": "Без хранения данных",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom",
-    "Sign in to {{name}}": "Вход в {{name}}"
+    "Zoom": "Zoom"
   },
   "Simplicity is the way. Create the future.": "Простота — путь. Создавайте будущее.",
   "One studio for frontier image, video, and voice—from idea to finished work.": "Одна студия для передовых изображения, видео и голоса — от идеи до готовой работы.",

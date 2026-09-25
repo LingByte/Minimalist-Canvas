@@ -8,6 +8,7 @@ import type { CanvasTheme } from "@canvas/lib/canvas-theme";
 import { cn } from "@canvas/lib/utils";
 import { resolveMediaUrl } from "@canvas/services/file-storage";
 import { resolveImageUrl } from "@canvas/services/image-storage";
+import { saveBlobAs } from "@canvas/lib/save-file";
 import {
     listLocalGenerationLogs,
     type LocalGenerationLogEntry,
@@ -137,8 +138,7 @@ export const CanvasLocalGenerationLogsTab = memo(function CanvasLocalGenerationL
             message.warning(t("canvas.sidePanel.cannotDownloadLog"));
             return;
         }
-        window.open(url, "_blank", "noopener,noreferrer");
-        message.info(t("canvas.sidePanel.logDownloadHint"));
+        void saveBlobAs(url, `generation-log-${entry.id}.${entry.kind === "video" ? "mp4" : "png"}`);
     };
 
     return (

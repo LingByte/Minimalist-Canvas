@@ -1,4 +1,4 @@
-{
+﻿{
   "translation": {
     "360": "360",
     "1000": "1000",
@@ -1654,6 +1654,7 @@
     "docs.groups.guides": "Guides",
     "docs.groups.reference": "Référence API",
     "docs.menu": "Menu",
+    "docs.nav.subtitle": "Parcourir les endpoints et guides d'intégration.",
     "docs.next": "Suivant",
     "docs.noResults": "Aucune section correspondante",
     "docs.onThisPage": "Sur cette page",
@@ -3665,6 +3666,7 @@
     "OpenAI, Anthropic, etc.": "OpenAI, Anthropic, etc.",
     "OpenAI, Anthropic, Google, etc.": "OpenAI, Anthropic, Google, etc.",
     "OpenAIMax": "OpenAIMax",
+    "Opening wallet page in browser…": "Ouverture de la page portefeuille dans le navigateur…",
     "OpenRouter": "OpenRouter",
     "opens in an external client. Trigger it from the sidebar or API key actions to launch the configured application.": "s'ouvre dans un client externe. Déclenchez-le depuis la barre latérale ou les actions de clé API pour lancer l'application configurée.",
     "Operate channels": "Exploiter les canaux",
@@ -4070,6 +4072,7 @@
     "Pricing mode": "Mode de tarification",
     "Pricing Ratios": "Ratios de tarification",
     "Pricing Type": "Type de tarification",
+    "Primary": "Navigation principale",
     "Primary Model": "Modèle principal",
     "Prioritize reusing the last successful channel based on keys extracted from request context (sticky routing)": "Priorise la réutilisation du dernier canal ayant réussi, basé sur les clés extraites du contexte de la requête (routage persistant)",
     "Priority": "Priorité",
@@ -4854,6 +4857,7 @@
     "Sign In": "Se connecter",
     "Sign in now": "Se connecter maintenant",
     "Sign in required": "Connexion requise",
+    "Sign in to {{name}}": "Connexion à {{name}}",
     "Sign in with Passkey": "Se connecter avec Passkey",
     "Sign out": "Se déconnecter",
     "Sign out of this device": "Se déconnecter de cet appareil",
@@ -6021,8 +6025,7 @@
     "Zero retention": "Aucune rétention",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom",
-    "Sign in to {{name}}": "Connexion à {{name}}"
+    "Zoom": "Zoom"
   },
   "Simplicity is the way. Create the future.": "La simplicité mène. Créez l’avenir.",
   "One studio for frontier image, video, and voice—from idea to finished work.": "Un studio pour l’image, la vidéo et la voix de pointe—de l’idée à l’œuvre finie.",

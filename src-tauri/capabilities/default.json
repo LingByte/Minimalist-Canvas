@@ -9,6 +9,17 @@
     "core:default",
     "core:webview:allow-internal-toggle-devtools",
     "shell:allow-open",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "mcp-stdio",
+          "cmd": ".*",
+          "args": true,
+          "sidecar": false
+        }
+      ]
+    },
     "dialog:allow-open",
     "dialog:allow-save",
     "opener:allow-reveal-item-in-dir",
@@ -18,6 +29,17 @@
       "allow": [
         {
           "path": "**"
+        }
+      ]
+    },
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "https://canvas.lingecho.com/*"
+        },
+        {
+          "url": "https://simplefuture.zone/*"
         }
       ]
     },
@@ -73,6 +95,10 @@
       ]
     },
     "updater:default",
-    "process:default"
+    "process:default",
+    "clipboard-manager:allow-read-image",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
+    "clipboard-manager:allow-write-image"
   ]
 }
