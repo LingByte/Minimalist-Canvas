@@ -569,6 +569,7 @@ export function BuiltinAgentPanel() {
                                   : t("agent.connect.configureAiFirst")
                         }
                         theme={theme}
+                        hint={t("agent.composer.tokenHint")}
                         models={composerModels}
                         model={textModel || composerModels[0]?.model}
                         onModelChange={changeModel}

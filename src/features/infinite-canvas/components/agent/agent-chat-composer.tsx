@@ -32,6 +32,7 @@ export function AgentChatComposer({
     onModelChange,
     onReasoningEffortChange,
     left,
+    hint,
 }: {
     prompt: string;
     attachments?: AgentChatAttachment[];
@@ -54,6 +55,7 @@ export function AgentChatComposer({
     onModelChange?: (model: string) => void;
     onReasoningEffortChange?: (effort: AgentReasoningEffort) => void;
     left?: ReactNode;
+    hint?: ReactNode;
 }) {
     const { t } = useTranslation();
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -109,6 +111,11 @@ export function AgentChatComposer({
                         )}
                     </div>
                 </div>
+                {hint ? (
+                    <div className="mt-2 px-1 text-[11px] leading-4" style={{ color: theme.node.muted }}>
+                        {hint}
+                    </div>
+                ) : null}
             </div>
         </div>
     );

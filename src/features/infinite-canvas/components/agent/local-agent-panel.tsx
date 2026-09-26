@@ -1440,6 +1440,7 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
                                     ? t("agent.panel.initFailed")
                                     : t("agent.panel.placeholder")}
                         theme={theme}
+                        hint={t("agent.composer.tokenHint")}
                         onPromptChange={(prompt) => setAgentState({ prompt })}
                         onSubmit={sendPrompt}
                         onStop={stopTurn}

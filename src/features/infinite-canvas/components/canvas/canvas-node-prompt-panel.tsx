@@ -33,7 +33,7 @@ type CanvasNodePromptPanelProps = {
 
 export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfigChange, onGenerate, mentionReferences = [], onConnectResource, onImageSettingsOpenChange, modeOverride }: CanvasNodePromptPanelProps) {
     const { t } = useTranslation();
-    const { message } = App.useApp();
+    const { message, modal } = App.useApp();
     const globalConfig = useEffectiveConfig();
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
@@ -161,7 +161,15 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
                                     style={{ color: theme.node.text }}
                                     icon={optimizing ? <LoaderCircle className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
                                     disabled={optimizeDisabled}
-                                    onClick={() => void optimize()}
+                                    onClick={() =>
+                                        modal.confirm({
+                                            title: t("canvas.promptPanel.optimizeTitle"),
+                                            content: t("canvas.promptPanel.optimizeConfirm"),
+                                            okText: t("common.confirm"),
+                                            cancelText: t("common.cancel"),
+                                            onOk: () => void optimize(),
+                                        })
+                                    }
                                     aria-label={optimizeTip}
                                 />
                             </span>
