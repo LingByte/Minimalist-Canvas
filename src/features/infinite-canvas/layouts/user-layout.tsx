@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 
 import { AppTopNav } from "@canvas/components/layout/app-top-nav";
@@ -8,6 +8,7 @@ import { navigationTools, navigationToolActive } from "@canvas/constant/navigati
 import { useMcpBridge } from "@canvas/hooks/use-mcp-bridge";
 import { useGatewayBridge } from "@canvas/integration/use-gateway-bridge";
 import { useGatewayModelsBridge } from "@canvas/integration/use-gateway-models-bridge";
+import { scheduleAutoUpdateCheck } from "@canvas/services/app-updater";
 import { useAgentStore } from "@canvas/stores/use-agent-store";
 import { AppShellFloatingActions } from "@/components/layout/components/app-shell-floating-actions";
 import { DesktopSiteSidebar } from "@/components/layout/components/desktop-site-sidebar";
@@ -68,6 +69,9 @@ export default function UserLayout({ children }: { children: ReactNode }) {
     useMcpBridge();
     useGatewayBridge();
     useGatewayModelsBridge();
+    useEffect(() => {
+        scheduleAutoUpdateCheck();
+    }, []);
     const { pathname } = useLocation();
 
     const isLanding = isLandingPath(pathname);
