@@ -38,6 +38,7 @@ const APP_SHELL_PREFIXES = [
     "/profile",
     "/keys",
     "/usage-logs",
+    "/generation-logs",
 ] as const;
 
 function isAppShellPath(pathname: string) {
