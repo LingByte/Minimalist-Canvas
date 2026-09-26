@@ -33,6 +33,7 @@ type CanvasNodeProps = {
     showPanel: boolean;
     showImageInfo: boolean;
     mentionReferences?: CanvasResourceReference[];
+    onConnectResource?: (reference: CanvasResourceReference) => void;
     pluginHost?: CanvasPluginHost;
     registryVersion?: number;
     renderPanel?: (node: CanvasNodeData) => ReactNode;
@@ -76,6 +77,7 @@ type NodeContentRendererProps = {
     onContentChange: (nodeId: string, content: string) => void;
     onStopEditing: () => void;
     mentionReferences: CanvasResourceReference[];
+    onConnectResource?: (reference: CanvasResourceReference) => void;
     onRetry?: (node: CanvasNodeData) => void;
     onCheckVideoStatus?: (node: CanvasNodeData) => void;
     onGenerateImage?: (node: CanvasNodeData) => void;
@@ -102,6 +104,7 @@ export const CanvasNode = React.memo(function CanvasNode({
     showPanel,
     showImageInfo,
     mentionReferences = [],
+    onConnectResource,
     pluginHost,
     renderPanel,
     renderNodeContent,
@@ -406,6 +409,7 @@ export const CanvasNode = React.memo(function CanvasNode({
                         renderNodeContent={renderNodeContent}
                         pluginContext={pluginContext}
                         mentionReferences={mentionReferences}
+                        onConnectResource={onConnectResource}
                         onContentChange={onContentChange}
                         onStopEditing={() => setIsEditingContent(false)}
                         onRetry={onRetry}
@@ -566,7 +570,7 @@ function MissingPluginContent({ theme, type }: Pick<NodeContentRendererProps, "t
     );
 }
 
-function TextContent({ node, theme, isEditingContent, textareaRef, mentionReferences, onContentChange, onStopEditing, onGenerateImage }: NodeContentRendererProps) {
+function TextContent({ node, theme, isEditingContent, textareaRef, mentionReferences, onConnectResource, onContentChange, onStopEditing, onGenerateImage }: NodeContentRendererProps) {
     const { t } = useTranslation();
     const fontSize = node.metadata?.fontSize || 14;
     const textStyle = { fontSize: `${fontSize}px`, lineHeight: `${Math.round(fontSize * 1.65)}px`, color: theme.node.text, boxSizing: "border-box" } as React.CSSProperties;
@@ -596,6 +600,7 @@ function TextContent({ node, theme, isEditingContent, textareaRef, mentionRefere
                     style={textStyle}
                     value={node.metadata?.content || ""}
                     references={mentionReferences}
+                    onConnectResource={onConnectResource}
                     highlightLabels={false}
                     onChange={(value) => onContentChange(node.id, value)}
                     onBlur={onStopEditing}

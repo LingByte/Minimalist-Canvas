@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import { ArrowUp, LoaderCircle, Maximize2 } from "lucide-react";
-import { Button, Modal, Tooltip } from "antd";
+import { useEffect, useRef, useState } from "react";
+import { ArrowUp, LoaderCircle, Maximize2, Sparkles } from "lucide-react";
+import { App, Button, Modal, Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
 
 import { ModelPicker } from "@canvas/components/model-picker";
@@ -11,6 +11,7 @@ import { CanvasImageSettingsPopover } from "./canvas-image-settings-popover";
 import { CanvasPromptLibrary } from "./canvas-prompt-library";
 import { CanvasAudioSettingsPopover, type CanvasAudioSettingKey } from "./canvas-audio-settings-popover";
 import { CanvasPromptChipInput } from "./canvas-prompt-chip-input";
+import { optimizeCanvasPrompt, type OptimizablePromptMode } from "@canvas/services/prompt-optimizer";
 import { CanvasVideoSettingsPopover } from "./canvas-video-settings-popover";
 import { CanvasTextSettingsPopover } from "./canvas-text-settings-popover";
 import { CanvasNodeType, type CanvasGenerationMode, type CanvasNodeData } from "@canvas/types/canvas";
@@ -25,12 +26,14 @@ type CanvasNodePromptPanelProps = {
     onConfigChange: (nodeId: string, patch: Partial<CanvasNodeData["metadata"]>) => void;
     onGenerate: (nodeId: string, mode: CanvasNodeGenerationMode, prompt: string) => void;
     mentionReferences?: CanvasResourceReference[];
+    onConnectResource?: (reference: CanvasResourceReference) => void;
     onImageSettingsOpenChange?: (open: boolean) => void;
     modeOverride?: CanvasNodeGenerationMode; // Plugin nodes set their generation type through useBuiltinPanel.mode.
 };
 
-export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfigChange, onGenerate, mentionReferences = [], onImageSettingsOpenChange, modeOverride }: CanvasNodePromptPanelProps) {
+export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfigChange, onGenerate, mentionReferences = [], onConnectResource, onImageSettingsOpenChange, modeOverride }: CanvasNodePromptPanelProps) {
     const { t } = useTranslation();
+    const { message } = App.useApp();
     const globalConfig = useEffectiveConfig();
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
@@ -41,6 +44,11 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
     const isEditingExistingContent = hasTextContent || hasImageContent;
     const [prompt, setPrompt] = useState(node.metadata?.composerContent ?? node.metadata?.prompt ?? "");
     const [expanded, setExpanded] = useState(false);
+    const [optimizing, setOptimizing] = useState(false);
+    const [optimizePreview, setOptimizePreview] = useState<{ draft: string; text: string; done: boolean } | null>(null);
+    const optimizeAbortRef = useRef<AbortController | null>(null);
+
+    useEffect(() => () => optimizeAbortRef.current?.abort(), []);
 
     // Restore prompts only when switching nodes; preserve the current input after generation on the same node.
     useEffect(() => {
@@ -64,6 +72,61 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
         setExpanded(true);
     };
 
+    const optimizable = mode === "image" || mode === "video" || mode === "audio";
+
+    const optimize = async () => {
+        const draft = prompt.trim();
+        if (!draft || optimizing) return;
+        const controller = new AbortController();
+        optimizeAbortRef.current = controller;
+        setOptimizing(true);
+        setOptimizePreview({ draft, text: "", done: false });
+        try {
+            const optimized = await optimizeCanvasPrompt(
+                globalConfig,
+                {
+                    mode: mode as OptimizablePromptMode,
+                    draft,
+                    seconds: mode === "video" ? Number(config.videoSeconds) || undefined : undefined,
+                    references: mentionReferences,
+                },
+                (text) => setOptimizePreview((current) => (current ? { ...current, text } : current)),
+                { signal: controller.signal },
+            );
+            if (!optimized) throw new Error(t("canvas.promptPanel.optimizeFailed"));
+            setOptimizePreview((current) => (current ? { ...current, text: optimized, done: true } : current));
+        } catch (error) {
+            if (!controller.signal.aborted) message.error(error instanceof Error ? error.message : t("canvas.promptPanel.optimizeFailed"));
+            setOptimizePreview(null);
+        } finally {
+            optimizeAbortRef.current = null;
+            setOptimizing(false);
+        }
+    };
+
+    const closeOptimizePreview = () => {
+        optimizeAbortRef.current?.abort();
+        optimizeAbortRef.current = null;
+        setOptimizePreview(null);
+        setOptimizing(false);
+    };
+
+    const applyOptimized = () => {
+        const text = optimizePreview?.text.trim();
+        if (!text) return;
+        updatePrompt(text);
+        setOptimizePreview(null);
+    };
+
+    const optimizeDisabled = optimizing || isRunning || !prompt.trim();
+    const optimizeTip = optimizing
+        ? t("canvas.promptPanel.optimizing")
+        : isRunning
+            ? t("canvas.promptPanel.optimizeWhileRunning")
+            : !prompt.trim()
+                ? t("canvas.promptPanel.optimizeNeedsPrompt")
+                : t("canvas.promptPanel.optimizePrompt");
+
     return (
         <div
             data-canvas-no-zoom
@@ -77,6 +140,7 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
                 value={prompt}
                 references={mentionReferences}
                 onChange={updatePrompt}
+                onConnectResource={onConnectResource}
                 className="thin-scrollbar h-40 w-full cursor-text resize-none rounded-xl px-3 py-2 text-sm leading-5 outline-none"
                 style={{ background: "transparent", color: theme.node.text }}
                 placeholder={t(`canvas.promptPanel.${mode === "image" && hasImageContent ? "editImage" : mode === "text" && hasTextContent ? "editText" : mode}`)}
@@ -88,6 +152,21 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
                         <Button type="text" className="!h-8 !w-8 !min-w-8 shrink-0 !rounded-full !bg-transparent !p-0" style={{ color: theme.node.text }} icon={<Maximize2 className="size-3.5" />} onClick={openExpandedEditor} aria-label={t("canvas.promptPanel.expandEditor")} />
                     </Tooltip>
                     <CanvasPromptLibrary onSelect={updatePrompt} />
+                    {optimizable ? (
+                        <Tooltip title={optimizeTip}>
+                            <span>
+                                <Button
+                                    type="text"
+                                    className="!h-8 !w-8 !min-w-8 shrink-0 !rounded-full !bg-transparent !p-0"
+                                    style={{ color: theme.node.text }}
+                                    icon={optimizing ? <LoaderCircle className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+                                    disabled={optimizeDisabled}
+                                    onClick={() => void optimize()}
+                                    aria-label={optimizeTip}
+                                />
+                            </span>
+                        </Tooltip>
+                    ) : null}
                     {mode === "image" ? (
                         <>
                             <ModelPicker config={config} value={config.model} onChange={(model) => onConfigChange(node.id, { model })} capability="image" onMissingConfig={() => openConfigDialog(true)} className="max-w-[190px]" />
@@ -135,10 +214,45 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
                         value={prompt}
                         references={mentionReferences}
                         onChange={updatePrompt}
+                        onConnectResource={onConnectResource}
                         className="thin-scrollbar h-[52dvh] min-h-80 w-full cursor-text overflow-y-auto rounded-xl border p-4 text-[15px] leading-6 outline-none"
                         style={{ background: "transparent", borderColor: theme.toolbar.border, color: theme.node.text }}
                         placeholder={t(`canvas.promptPanel.${mode === "image" && hasImageContent ? "editImage" : mode === "text" && hasTextContent ? "editText" : mode}`)}
                     />
+                </div>
+            </Modal>
+            <Modal
+                title={t("canvas.promptPanel.optimizeTitle")}
+                open={Boolean(optimizePreview)}
+                centered
+                width={860}
+                footer={[
+                    <Button key="cancel" onClick={closeOptimizePreview}>
+                        {t("common.cancel")}
+                    </Button>,
+                    <Button key="apply" type="primary" disabled={!optimizePreview?.done || !optimizePreview.text.trim()} onClick={applyOptimized}>
+                        {t("canvas.promptPanel.optimizeApply")}
+                    </Button>,
+                ]}
+                onCancel={closeOptimizePreview}
+                destroyOnHidden
+            >
+                <div className="flex gap-3 pt-2">
+                    <div className="min-w-0 flex-1">
+                        <div className="pb-1 text-xs font-medium uppercase tracking-wide opacity-60">{t("canvas.promptPanel.optimizeOriginal")}</div>
+                        <div className="thin-scrollbar max-h-[55dvh] overflow-y-auto whitespace-pre-wrap break-words rounded-xl border p-3 text-sm leading-6 opacity-70" style={{ borderColor: theme.toolbar.border }}>
+                            {optimizePreview?.draft}
+                        </div>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 pb-1 text-xs font-medium uppercase tracking-wide opacity-60">
+                            {t("canvas.promptPanel.optimizeResult")}
+                            {!optimizePreview?.done ? <LoaderCircle className="size-3.5 animate-spin" /> : null}
+                        </div>
+                        <div className="thin-scrollbar max-h-[55dvh] overflow-y-auto whitespace-pre-wrap break-words rounded-xl border p-3 text-sm leading-6" style={{ borderColor: theme.toolbar.border }}>
+                            {optimizePreview?.text || "…"}
+                        </div>
+                    </div>
                 </div>
             </Modal>
         </div>

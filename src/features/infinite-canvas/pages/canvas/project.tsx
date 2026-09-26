@@ -674,6 +674,20 @@ function InfiniteCanvasPage() {
         [message, t],
     );
 
+    // @-mentioning an unconnected canvas resource auto-wires it into the node
+    // whose composer picked it, the same as dragging a handle connection.
+    const connectResourceNode = useCallback(
+        (toNodeId: string, reference: CanvasResourceReference) => {
+            const connection = normalizeConnection(reference.nodeId, toNodeId, nodesRef.current, "source");
+            if (!connection) return;
+            const { fromNodeId, toNodeId: targetId } = connection;
+            const exists = connectionsRef.current.some((conn) => conn.fromNodeId === fromNodeId && conn.toNodeId === targetId);
+            if (exists) return;
+            setConnections((prev) => [...prev, { id: nanoid(), fromNodeId, toNodeId: targetId }]);
+        },
+        [],
+    );
+
     const createConnectedNode = useCallback(
         (type: CanvasNodeType.Image | CanvasNodeType.Text | CanvasNodeType.Config | CanvasNodeType.Video | CanvasNodeType.Audio, pending: PendingConnectionCreate) => {
             const metadata = type === CanvasNodeType.Config ? { model: effectiveConfig.imageModel || effectiveConfig.model, size: effectiveConfig.size, count: getGenerationCount(effectiveConfig.canvasImageCount || effectiveConfig.count) } : undefined;
@@ -3731,6 +3745,7 @@ function InfiniteCanvasPage() {
                     node={panelNode}
                     isRunning={runningNodeId === panelNode.id}
                     mentionReferences={mentionReferencesByNodeId.get(panelNode.id) || EMPTY_REFERENCES}
+                    onConnectResource={(reference) => connectResourceNode(panelNode.id, reference)}
                     onPromptChange={handleNodePromptChange}
                     onConfigChange={handleConfigNodeChange}
                     onGenerate={handleGenerateNode}
@@ -3741,7 +3756,7 @@ function InfiniteCanvasPage() {
                     }}
                 />
             ),
-        [configInputsById, handleConfigNodeChange, handleGenerateNode, handleNodePromptChange, mentionReferencesByNodeId, renderPluginPanel, runningNodeId],
+        [configInputsById, connectResourceNode, handleConfigNodeChange, handleGenerateNode, handleNodePromptChange, mentionReferencesByNodeId, renderPluginPanel, runningNodeId],
     );
 
     const renderNodeContentPanel = useCallback(
@@ -3860,6 +3875,7 @@ function InfiniteCanvasPage() {
                             batchExpanded={expandedImageNodeIds.has(node.id)}
                             showImageInfo={showImageInfo}
                             mentionReferences={mentionReferencesByNodeId.get(node.id) || EMPTY_REFERENCES}
+                            onConnectResource={(reference) => connectResourceNode(node.id, reference)}
                             pluginHost={pluginHost}
                             registryVersion={nodeRegistryVersion}
                             renderPanel={renderNodePanel}

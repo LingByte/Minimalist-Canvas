@@ -19,7 +19,32 @@ export type CanvasResourceReference = {
 };
 
 export function buildNodeMentionReferences(node: CanvasNodeData, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
-    return labelResourceNodes(getMentionResourceNodes(node.id, nodes, connections), true);
+    const connectedNodes = getMentionResourceNodes(node.id, nodes, connections);
+    const connected = labelResourceNodes(connectedNodes, true);
+    const connectedIds = new Set(connectedNodes.map((item) => item.id));
+    const counts: Record<CanvasResourceKind, number> = { image: 0, video: 0, audio: 0, text: 0 };
+    connected.forEach((reference) => counts[reference.kind]++);
+    // Unconnected resource nodes are selectable too — picking one auto-connects
+    // it, so its label is the slot it will occupy once appended to the inputs.
+    const unconnected = nodes.flatMap((candidate): CanvasResourceReference[] => {
+        if (candidate.id === node.id || connectedIds.has(candidate.id) || !isResourceNode(candidate)) return [];
+        const kind = resourceKind(candidate);
+        if (!kind) return [];
+        const resource = getNodeDefinition(candidate.type)?.resource?.(candidate);
+        return [
+            {
+                id: candidate.id,
+                nodeId: candidate.id,
+                kind,
+                label: labelForKind(kind, counts[kind]),
+                title: candidate.title || labelForKind(kind, counts[kind]),
+                previewUrl: candidate.metadata?.content || resource?.url,
+                text: resourceText(candidate),
+                active: false,
+            },
+        ];
+    });
+    return [...connected, ...unconnected];
 }
 
 export function buildCanvasResourceReferences(nodes: CanvasNodeData[]) {

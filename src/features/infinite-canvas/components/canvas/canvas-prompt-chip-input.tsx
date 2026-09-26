@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent, MouseEvent, PointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { Image } from "antd";
-import { FileText, Image as ImageIcon, Music2, Video } from "lucide-react";
+import { FileText, Image as ImageIcon, Link2, Music2, Video } from "lucide-react";
 
 import i18n from "@canvas/i18n";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
@@ -15,6 +15,8 @@ type Props = {
     value: string;
     references: CanvasResourceReference[];
     onChange: (value: string) => void;
+    /** Picking an unconnected resource triggers this before the chip is inserted. */
+    onConnectResource?: (reference: CanvasResourceReference) => void;
     className?: string;
     style?: CSSProperties;
     placeholder?: string;
@@ -31,7 +33,7 @@ type Token =
 
 // Prompt-panel contentEditable input: @ references embed thumbnail chips instead of plain label text.
 // Serialization converts chips back to reference labels so the generated value matches the former textarea semantics.
-export function CanvasPromptChipInput({ value, references, onChange, className, style, placeholder }: Props) {
+export function CanvasPromptChipInput({ value, references, onChange, onConnectResource, className, style, placeholder }: Props) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const editorRef = useRef<HTMLDivElement>(null);
     const composingRef = useRef(false);
@@ -51,9 +53,9 @@ export function CanvasPromptChipInput({ value, references, onChange, className, 
     const candidates = useMemo(() => {
         if (!mention) return [];
         const query = mention.query.trim().toLowerCase();
-        if (!query) return activeReferences;
-        return activeReferences.filter((item) => `${item.label} ${item.title} ${item.kind} ${item.text || ""}`.toLowerCase().includes(query));
-    }, [mention, activeReferences]);
+        if (!query) return references;
+        return references.filter((item) => `${item.label} ${item.title} ${item.kind} ${item.text || ""}`.toLowerCase().includes(query));
+    }, [mention, references]);
 
     // Rebuild the DOM from value when unfocused, or when a focused value is an external change rather than an emitted echo.
     useEffect(() => {
@@ -88,7 +90,7 @@ export function CanvasPromptChipInput({ value, references, onChange, className, 
     const syncMention = () => {
         const text = textBeforeCaret();
         const match = /@([^\s@]*)$/.exec(text);
-        if (!match || !activeReferences.length) {
+        if (!match || !references.length) {
             closeMention();
             return;
         }
@@ -104,6 +106,7 @@ export function CanvasPromptChipInput({ value, references, onChange, className, 
     const insertReference = (reference: CanvasResourceReference) => {
         const editor = editorRef.current;
         if (!editor) return;
+        if (!reference.active) onConnectResource?.(reference);
         removeActiveMention();
         const chip = createReferenceChip(reference, theme, setImagePreview);
         const space = document.createTextNode(" ");
@@ -217,6 +220,43 @@ function MentionMenu({ rect, references, activeIndex, theme, onSelect }: { rect:
     const showAbove = anchor.bottom + gap + maxMenuHeight > window.innerHeight && anchor.top - gap - maxMenuHeight >= 0;
     const top = showAbove ? anchor.top - gap - maxMenuHeight : anchor.bottom + gap;
 
+    const connected = references.filter((item) => item.active);
+    const unconnected = references.filter((item) => !item.active);
+
+    const renderRow = (reference: CanvasResourceReference) => {
+        const index = references.indexOf(reference);
+        return (
+            <button
+                key={reference.id}
+                ref={index === activeIndex ? activeItemRef : undefined}
+                type="button"
+                className="flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition"
+                style={{ background: index === activeIndex ? theme.toolbar.activeBg : "transparent", color: index === activeIndex ? theme.toolbar.activeText : theme.node.text }}
+                onPointerDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    selectReference(reference);
+                }}
+                onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    selectReference(reference);
+                }}
+            >
+                <ReferencePreview reference={reference} />
+                <span className="min-w-0 flex-1">
+                    <span className="block font-medium">{reference.label}</span>
+                    <span className="block truncate opacity-65">{reference.text || reference.title}</span>
+                </span>
+                {!reference.active ? <Link2 className="size-3.5 shrink-0 opacity-50" /> : null}
+            </button>
+        );
+    };
+
+    const sectionHeader = (text: string) => (
+        <div className="px-2 pb-0.5 pt-1.5 text-[10px] font-medium uppercase tracking-wide opacity-50">{text}</div>
+    );
+
     return createPortal(
         <div
             data-canvas-resource-mention-menu="true"
@@ -226,31 +266,18 @@ function MentionMenu({ rect, references, activeIndex, theme, onSelect }: { rect:
             onMouseDown={stopCanvasInteraction}
             onClick={(event) => event.stopPropagation()}
         >
-            {references.map((reference, index) => (
-                <button
-                    key={reference.id}
-                    ref={index === activeIndex ? activeItemRef : undefined}
-                    type="button"
-                    className="flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition"
-                    style={{ background: index === activeIndex ? theme.toolbar.activeBg : "transparent", color: index === activeIndex ? theme.toolbar.activeText : theme.node.text }}
-                    onPointerDown={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        selectReference(reference);
-                    }}
-                    onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        selectReference(reference);
-                    }}
-                >
-                    <ReferencePreview reference={reference} />
-                    <span className="min-w-0 flex-1">
-                        <span className="block font-medium">{reference.label}</span>
-                        <span className="block truncate opacity-65">{reference.text || reference.title}</span>
-                    </span>
-                </button>
-            ))}
+            {connected.length ? (
+                <>
+                    {sectionHeader(i18n.t("canvas.composer.mentions.connected"))}
+                    {connected.map(renderRow)}
+                </>
+            ) : null}
+            {unconnected.length ? (
+                <>
+                    {sectionHeader(i18n.t("canvas.composer.mentions.canvasResources"))}
+                    {unconnected.map(renderRow)}
+                </>
+            ) : null}
         </div>,
         document.body,
     );
