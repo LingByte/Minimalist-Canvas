@@ -6,6 +6,7 @@ import AssetsPage from "@canvas/pages/assets";
 import CanvasPage from "@canvas/pages/canvas";
 import CanvasProjectPage from "@canvas/pages/canvas/project";
 import ConfigPage from "@canvas/pages/config";
+import GenerationLogsPage from "@canvas/pages/generation-logs";
 import HomePage from "@canvas/pages/home";
 import ImagePage from "@canvas/pages/image";
 import NotFound from "@canvas/pages/not-found";
@@ -60,6 +61,7 @@ const canvasRoutes: RouteObject[] = [
             { path: "prompts", element: <PromptsPage /> },
             { path: "canvas", element: <CanvasPage /> },
             { path: "canvas/:id", element: <CanvasProjectPage /> },
+            { path: "generation-logs", element: <GenerationLogsPage /> },
             { path: "config", element: <ConfigPage /> },
             { path: "profile", element: <ProfilePage /> },
             { path: "keys", element: <ApiKeys /> },
