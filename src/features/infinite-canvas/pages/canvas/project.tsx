@@ -49,6 +49,8 @@ import { CanvasNodePromptPanel, type CanvasNodeGenerationMode } from "@canvas/co
 import { CanvasToolbar } from "@canvas/components/canvas/canvas-toolbar";
 import { AssetPickerModal, type InsertAssetPayload } from "@canvas/components/canvas/asset-picker-modal";
 import { CanvasSidePanel } from "@canvas/components/canvas/canvas-side-panel";
+import { CanvasStoryboardImportModal } from "@canvas/components/canvas/canvas-storyboard-import-modal";
+import { buildStoryboardImport, parseStoryboard } from "@canvas/lib/canvas/storyboard-import";
 import { CanvasZoomControls } from "@canvas/components/canvas/canvas-zoom-controls";
 import { CanvasToolsDrawer } from "@canvas/components/canvas/canvas-tools-drawer";
 import { useAgentStore } from "@canvas/stores/use-agent-store";
@@ -352,6 +354,7 @@ function InfiniteCanvasPage() {
     const [showImageInfo, setShowImageInfo] = useState(false);
     const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
     const [assetPickerOpen, setAssetPickerOpen] = useState(false);
+    const [storyboardImportOpen, setStoryboardImportOpen] = useState(false);
     const [projectLoaded, setProjectLoaded] = useState(false);
     const [toolbarNodeId, setToolbarNodeId] = useState<string | null>(null);
     const [nodeImageSettingsOpen, setNodeImageSettingsOpen] = useState(false);
@@ -686,6 +689,25 @@ function InfiniteCanvasPage() {
             setConnections((prev) => [...prev, { id: nanoid(), fromNodeId, toNodeId: targetId }]);
         },
         [],
+    );
+
+    // Batch storyboard import: one video node per shot, arranged in a grid at
+    // the canvas center, with referenced assets auto-connected.
+    const importStoryboard = useCallback(
+        (text: string) => {
+            const parsed = parseStoryboard(text);
+            if (!parsed.shots.length) {
+                message.warning(t("canvas.storyboard.noShots"));
+                return;
+            }
+            const result = buildStoryboardImport(parsed, getCanvasCenter(), nodesRef.current, () => nanoid());
+            setNodes((prev) => [...prev, ...result.nodes]);
+            if (result.connections.length) setConnections((prev) => [...prev, ...result.connections]);
+            setSelectedNodeIds(new Set(result.nodes.map((node) => node.id)));
+            setSelectedConnectionId(null);
+            message.success(t("canvas.storyboard.imported", { count: result.nodes.length, assets: result.connectedAssetIds.length }));
+        },
+        [getCanvasCenter, message, t],
     );
 
     const createConnectedNode = useCallback(
@@ -3968,6 +3990,7 @@ function InfiniteCanvasPage() {
                     onAddImage={() => createNode(CanvasNodeType.Image)}
                     onAddVideo={() => createNode(CanvasNodeType.Video)}
                     onAddAudio={() => createNode(CanvasNodeType.Audio)}
+                    onImportStoryboard={() => setStoryboardImportOpen(true)}
                     onAddText={() => createNode(CanvasNodeType.Text)}
                     onAddConfig={() => createNode(CanvasNodeType.Config)}
                     onAddGroup={() => createNode(CanvasNodeType.Group)}
@@ -3987,6 +4010,8 @@ function InfiniteCanvasPage() {
 
                 <CanvasZoomControls scale={viewport.k} onScaleChange={setZoomScale} onReset={resetViewport} isMiniMapOpen={isMiniMapOpen} onToggleMiniMap={() => setIsMiniMapOpen((value) => !value)} />
                 <CanvasToolsDrawer />
+
+                <CanvasStoryboardImportModal open={storyboardImportOpen} onClose={() => setStoryboardImportOpen(false)} onImport={importStoryboard} />
 
                 {contextMenu ? (
                     <CanvasNodeContextMenu
