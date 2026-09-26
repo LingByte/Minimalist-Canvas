@@ -1,4 +1,5 @@
 import { api } from '@/lib/api'
+import { SITE_BASE_URL } from '@/lib/open-external'
 import i18n from '@canvas/i18n'
 import { beginCloudUpload } from '@canvas/services/cloud-upload-progress'
 
@@ -570,7 +571,11 @@ function contentTypeFromFilename(filename: string): string {
 function absoluteAccessUrl(url: string) {
   if (/^https?:\/\//i.test(url)) return url
   if (typeof window === 'undefined') return url
-  return new URL(url, window.location.origin).toString()
+  // Desktop (tauri://): relative storage paths live on the backend site, not
+  // the webview origin — resolving there yields unloadable tauri:// URLs.
+  const isDesktop = '__TAURI_INTERNALS__' in window
+  const origin = isDesktop ? SITE_BASE_URL : window.location.origin
+  return new URL(url, origin).toString()
 }
 
 /** Public http(s) that workers / other devices can fetch (not localhost / private LAN). */

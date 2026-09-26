@@ -3,6 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Desktop webview origin (tauri.localhost) is rejected by our CDN hotlink
+         rules — strip Referer from subresource requests (img/video/audio). -->
+    <meta name="referrer" content="no-referrer" />
     <title>Minimalist Canvas</title>
     <link rel="preload" href="/public.mp4" as="video" type="video/mp4" />
   </head>

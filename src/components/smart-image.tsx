@@ -11,6 +11,7 @@ type SmartImageProps = {
     title?: string;
     loading?: "lazy" | "eager";
     draggable?: boolean;
+    referrerPolicy?: React.ImgHTMLAttributes<HTMLImageElement>["referrerPolicy"];
     fallbackClassName?: string;
     fallbackIconClassName?: string;
     onClick?: MouseEventHandler<HTMLElement>;
@@ -30,6 +31,9 @@ export function SmartImage({
     title,
     loading = "lazy",
     draggable,
+    // Desktop webview sends a tauri.localhost Referer — our CDN hotlink rules
+    // reject it, so media must request anonymously.
+    referrerPolicy = "no-referrer",
     fallbackClassName,
     fallbackIconClassName,
     onClick,
@@ -66,6 +70,7 @@ export function SmartImage({
             title={title}
             loading={loading}
             draggable={draggable}
+            referrerPolicy={referrerPolicy}
             onClick={onClick}
             onDragStart={onDragStart}
             onError={() => setError(true)}

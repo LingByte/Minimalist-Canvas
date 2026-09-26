@@ -73,5 +73,8 @@ export function isEphemeralUpstreamMediaUrl(url?: string | null): boolean {
 
 /** Prefer local blob / remirrored CDN over this URL for long-term playback. */
 export function isUnstableMediaUrl(url?: string | null): boolean {
+    // Schemes <img>/<video> can't render (tauri://, asset:, ...) are unstable by
+    // definition — let callers fall back to local blobs / remirror instead.
+    if (url && !/^(https?|blob|data):/i.test(url)) return true;
     return isSignedUrlExpired(url) || isEphemeralUpstreamMediaUrl(url);
 }
