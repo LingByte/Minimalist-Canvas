@@ -1,8 +1,8 @@
 /** Fixed backend site for this desktop build — auth, prompts, assets APIs. */
-export const SITE_BASE_URL = "https://canvas.lingecho.com";
+export const SITE_BASE_URL = "https://simplefuture.zone";
 
 /** Origin accepted by the backend's auth allowlist (its configured server_address). */
-export const SITE_ORIGIN = "https://canvas.lingecho.com";
+export const SITE_ORIGIN = "https://simplefuture.zone";
 
 function isDesktop() {
     return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;

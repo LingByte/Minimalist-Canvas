@@ -10,7 +10,7 @@ Publishes:
 | `Minimalist-Canvas-Windows-x64.exe` | Website `/download` + GitHub latest |
 | `latest.json` + `.sig` | In-app auto-update |
 
-Website download page (`canvas.lingecho.com/download`) already resolves
+Website download page (`simplefuture.zone/download`) already resolves
 `https://github.com/LingByte/Minimalist-Canvas/releases/latest/...` — no web URL change needed when asset names stay the same.
 
 ## Prerequisites (one-time)
