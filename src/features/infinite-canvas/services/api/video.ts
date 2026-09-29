@@ -400,7 +400,11 @@ async function createOpenAIVideoTask(config: AiConfig, model: string, prompt: st
 
 /** Promote canvas image refs to publicly reachable cloud URLs before submit. */
 async function resolveImageReferences(references: ReferenceImage[]): Promise<string[]> {
-    return Promise.all(references.map((image) => ensurePublicImageUrl(image)));
+    const imagesOnly = references.filter((image) => {
+        const source = image.url || image.dataUrl || "";
+        return !/\.(mp4|webm|mov|m4v|mkv)(\?|#|$)/i.test(source) && !/^data:video\//i.test(source) && !/^video\//i.test(image.type || "");
+    });
+    return Promise.all(imagesOnly.map((image) => ensurePublicImageUrl(image)));
 }
 
 type FileReference = { url?: string; storageKey?: string; name?: string; type?: string };

@@ -200,6 +200,10 @@ function generationLabel(type: NodeGenerationInput["type"], index: number) {
 function readReferenceImage(node: CanvasNodeData): ReferenceImage | null {
     if (node.type !== CanvasNodeType.Image || !node.metadata?.content) return null;
     const content = node.metadata.content;
+    // Guard against mis-typed nodes whose content is actually video/audio.
+    if (/\.(mp4|webm|mov|m4v|mkv|mp3|wav|m4a|aac|ogg|flac)(\?|#|$)/i.test(content) || /^data:(video|audio)\//i.test(content)) {
+        return null;
+    }
     return {
         id: node.id,
         name: `${node.title || node.id}.png`,
@@ -211,17 +215,23 @@ function readReferenceImage(node: CanvasNodeData): ReferenceImage | null {
 }
 
 function readReferenceVideo(node: CanvasNodeData): ReferenceVideo | null {
-    if (node.type !== CanvasNodeType.Video || !node.metadata?.content) return null;
+    const content = node.metadata?.content;
+    if (!content) return null;
+    const looksLikeVideo =
+        node.type === CanvasNodeType.Video ||
+        (node.type === CanvasNodeType.Image &&
+            (/\.(mp4|webm|mov|m4v|mkv)(\?|#|$)/i.test(content) || /^data:video\//i.test(content) || /^video\//i.test(node.metadata?.mimeType || "")));
+    if (!looksLikeVideo) return null;
     return {
         id: node.id,
         name: `${node.title || node.id}.mp4`,
-        type: node.metadata.mimeType || "video/mp4",
-        url: node.metadata.content,
-        storageKey: node.metadata.storageKey,
-        bytes: node.metadata.bytes,
-        width: node.metadata.naturalWidth,
-        height: node.metadata.naturalHeight,
-        durationMs: node.metadata.durationMs,
+        type: node.metadata?.mimeType || "video/mp4",
+        url: content,
+        storageKey: node.metadata?.storageKey,
+        bytes: node.metadata?.bytes,
+        width: node.metadata?.naturalWidth,
+        height: node.metadata?.naturalHeight,
+        durationMs: node.metadata?.durationMs,
     };
 }
 

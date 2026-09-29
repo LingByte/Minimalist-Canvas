@@ -47,6 +47,46 @@ export function generationReferenceUrls(context: {
     ]);
 }
 
+/** Re-split a flat ignore/reference URL list (e.g. node.metadata.references) by media kind. */
+export function splitGenerationReferenceUrls(urls: string[]) {
+    const images: string[] = [];
+    const videos: string[] = [];
+    const audios: string[] = [];
+    for (const raw of urls) {
+        const value = raw?.trim();
+        if (!value) continue;
+        if (isLikelyVideoReferenceUrl(value)) videos.push(value);
+        else if (isLikelyAudioReferenceUrl(value)) audios.push(value);
+        else if (isLikelyImageReferenceUrl(value) || /^https?:\/\//i.test(value)) images.push(value);
+    }
+    return {
+        images: dedupeReferenceUrls(images),
+        videos: dedupeReferenceUrls(videos),
+        audios: dedupeReferenceUrls(audios),
+    };
+}
+
+export function isLikelyVideoReferenceUrl(value: string) {
+    const lower = value.trim().toLowerCase();
+    if (lower.startsWith("data:video/")) return true;
+    if (/\.(mp4|webm|mov|m4v|mkv)(\?|#|$)/i.test(lower)) return true;
+    return false;
+}
+
+export function isLikelyAudioReferenceUrl(value: string) {
+    const lower = value.trim().toLowerCase();
+    if (lower.startsWith("data:audio/")) return true;
+    if (/\.(mp3|wav|m4a|aac|ogg|flac|opus)(\?|#|$)/i.test(lower)) return true;
+    return false;
+}
+
+function isLikelyImageReferenceUrl(value: string) {
+    const lower = value.trim().toLowerCase();
+    if (lower.startsWith("data:image/")) return true;
+    if (/\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(lower)) return true;
+    return false;
+}
+
 function dedupeReferenceUrls(candidates: Array<string | undefined>) {
     const urls: string[] = [];
     const seen = new Set<string>();

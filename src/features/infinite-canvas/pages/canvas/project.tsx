@@ -70,6 +70,7 @@ import {
     buildGenerationConfig,
     findRetrySourceNode,
     generationReferenceUrls,
+    splitGenerationReferenceUrls,
     getGenerationCount,
     getInputSummary,
     hydrateAssistantImages,
@@ -3324,9 +3325,13 @@ function InfiniteCanvasPage() {
                 return false;
             }
             const ignoreResultUrls = (node.metadata?.references || []).filter((url): url is string => Boolean(url));
-            // Resume path only has a flat reference URL list; keep under images as best-effort.
+            // metadata.references is a flat ignore list (images+videos+audios). Split by URL
+            // kind so resume sync does not dump .mp4 into config.images.
+            const splitRefs = splitGenerationReferenceUrls(ignoreResultUrls);
             const videoAssetConfig = canvasVideoAssetConfigFromAi(generationConfig, {
-                images: ignoreResultUrls,
+                images: splitRefs.images,
+                videos: splitRefs.videos,
+                audios: splitRefs.audios,
                 taskProvider: node.metadata?.videoTaskProvider,
             });
             const task: VideoGenerationTask = {
