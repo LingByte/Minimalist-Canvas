@@ -39,9 +39,24 @@ export function LegalConsent({
   const { t } = useTranslation()
   const hasUserAgreement = Boolean(status?.user_agreement_enabled)
   const hasPrivacyPolicy = Boolean(status?.privacy_policy_enabled)
+  const hasAcceptableUse = Boolean(status?.acceptable_use_enabled)
 
-  if (!hasUserAgreement && !hasPrivacyPolicy) {
+  if (!hasUserAgreement && !hasPrivacyPolicy && !hasAcceptableUse) {
     return null
+  }
+
+  const links: { href: string; label: string }[] = []
+  if (hasUserAgreement) {
+    links.push({ href: '/user-agreement', label: t('User Agreement') })
+  }
+  if (hasPrivacyPolicy) {
+    links.push({ href: '/privacy-policy', label: t('Privacy Policy') })
+  }
+  if (hasAcceptableUse) {
+    links.push({
+      href: '/acceptable-use',
+      label: t('Acceptable Use Policy'),
+    })
   }
 
   return (
@@ -64,27 +79,22 @@ export function LegalConsent({
       >
         <label htmlFor='legal-consent' className='cursor-pointer'>
           {t('I have read and agree to the')}{' '}
-          {hasUserAgreement && (
-            <a
-              href='/user-agreement'
-              target='_blank'
-              rel='noopener noreferrer'
-              className='text-primary hover:underline'
-            >
-              {t('User Agreement')}
-            </a>
-          )}
-          {hasUserAgreement && hasPrivacyPolicy && ' and the '}
-          {hasPrivacyPolicy && (
-            <a
-              href='/privacy-policy'
-              target='_blank'
-              rel='noopener noreferrer'
-              className='text-primary hover:underline'
-            >
-              {t('Privacy Policy')}
-            </a>
-          )}
+          {links.map((link, index) => (
+            <span key={link.href}>
+              {index > 0 &&
+                (index === links.length - 1
+                  ? ` ${t('and')} `
+                  : ', ')}
+              <a
+                href={link.href}
+                target='_blank'
+                rel='noopener noreferrer'
+                className='text-primary hover:underline'
+              >
+                {link.label}
+              </a>
+            </span>
+          ))}
           .
         </label>
       </Typography.Text>

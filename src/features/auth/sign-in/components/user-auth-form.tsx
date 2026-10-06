@@ -44,6 +44,7 @@ import { loginFormSchema } from '@/features/auth/constants'
 import { useAuthRedirect } from '@/features/auth/hooks/use-auth-redirect'
 import { useCaptchaGate } from '@/features/auth/hooks/use-captcha-gate'
 import { useTurnstile } from '@/features/auth/hooks/use-turnstile'
+import { ensureLegalConsent } from '@/features/auth/lib/ensure-legal-consent'
 import { beginPasskeyLogin, finishPasskeyLogin } from '@/features/auth/passkey'
 import type { AuthFormProps } from '@/features/auth/types'
 import { useStatus } from '@/hooks/use-status'
@@ -79,7 +80,6 @@ export function UserAuthForm({
   const [isWeChatDialogOpen, setIsWeChatDialogOpen] = useState(false)
   const [isWeChatSubmitting, setIsWeChatSubmitting] = useState(false)
   const [turnstileWidgetKey, setTurnstileWidgetKey] = useState(0)
-  const legalConsentErrorMessage = t('Please agree to the legal terms first')
   const loginFailedMessage = t('Login failed')
 
   const { status } = useStatus()
@@ -118,11 +118,17 @@ export function UserAuthForm({
 
   const hasUserAgreement = Boolean(status?.user_agreement_enabled)
   const hasPrivacyPolicy = Boolean(status?.privacy_policy_enabled)
-  const requiresLegalConsent = hasUserAgreement || hasPrivacyPolicy
-  const passkeyButtonDisabled =
-    isPasskeyLoading ||
-    !passkeySupported ||
-    (requiresLegalConsent && !agreedToLegal)
+  const hasAcceptableUse = Boolean(status?.acceptable_use_enabled)
+  const requiresLegalConsent =
+    hasUserAgreement || hasPrivacyPolicy || hasAcceptableUse
+  const confirmLegalConsent = () =>
+    ensureLegalConsent({
+      requires: requiresLegalConsent,
+      agreed: agreedToLegal,
+      setAgreed: setAgreedToLegal,
+      t,
+    })
+  const passkeyButtonDisabled = isPasskeyLoading || !passkeySupported
   const hasWeChatLogin = Boolean(status?.wechat_login)
   const hasOAuthLogin = Boolean(
     status?.github_oauth ||
@@ -174,10 +180,7 @@ export function UserAuthForm({
   const busy = isLoading || formSubmitting
 
   async function onSubmit(data: z.infer<typeof loginFormSchema>) {
-    if (requiresLegalConsent && !agreedToLegal) {
-      toast.error(legalConsentErrorMessage)
-      return
-    }
+    if (!(await confirmLegalConsent())) return
 
     if (!validateTurnstile()) return
 
@@ -222,11 +225,8 @@ export function UserAuthForm({
     }, { formSubmit: true })
   }
 
-  const handleOpenWeChatDialog = () => {
-    if (requiresLegalConsent && !agreedToLegal) {
-      toast.error(legalConsentErrorMessage)
-      return
-    }
+  const handleOpenWeChatDialog = async () => {
+    if (!(await confirmLegalConsent())) return
 
     setIsWeChatDialogOpen(true)
   }
@@ -265,10 +265,7 @@ export function UserAuthForm({
   }
 
   async function handlePasskeyLogin() {
-    if (requiresLegalConsent && !agreedToLegal) {
-      toast.error(legalConsentErrorMessage)
-      return
-    }
+    if (!(await confirmLegalConsent())) return
 
     if (!passkeySupported) {
       toast.error(t('Passkey is not supported on this device'))
@@ -363,7 +360,8 @@ export function UserAuthForm({
       <OAuthProviders
         status={status}
         redirectTo={redirectTo}
-        disabled={busy || (requiresLegalConsent && !agreedToLegal)}
+        disabled={busy}
+        onBeforeLogin={confirmLegalConsent}
         onWeChatLogin={hasWeChatLogin ? handleOpenWeChatDialog : undefined}
         isWeChatLoading={isWeChatSubmitting}
       />
@@ -468,7 +466,7 @@ export function UserAuthForm({
               type='primary'
               htmlType='submit'
               block
-              disabled={busy || (requiresLegalConsent && !agreedToLegal)}
+              disabled={busy}
               loading={busy}
               icon={!busy ? <LogIn className='size-4' /> : undefined}
               className={authSubmitClassName}
@@ -522,8 +520,7 @@ export function UserAuthForm({
                 onClick={handleWeChatLogin}
                 disabled={
                   isWeChatSubmitting ||
-                  !wechatCode.trim() ||
-                  (requiresLegalConsent && !agreedToLegal)
+                  !wechatCode.trim()
                 }
                 loading={isWeChatSubmitting}
               >

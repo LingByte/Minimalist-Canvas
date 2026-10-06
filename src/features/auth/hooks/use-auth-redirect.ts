@@ -48,7 +48,7 @@ export function useAuthRedirect() {
     }
 
     const targetPath =
-      sanitizeAuthRedirect(redirectTo, window.location.origin) ?? '/'
+      sanitizeAuthRedirect(redirectTo, window.location.origin) ?? '/home'
     navigate(targetPath, { replace: true })
   }
 
