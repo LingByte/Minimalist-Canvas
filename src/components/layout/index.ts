@@ -1,4 +1,5 @@
 export { PublicHeader } from "./components/public-header"
 export { PublicLayout } from "./components/public-layout"
+export { Main } from "./components/main"
 export { SectionPageLayout } from "./components/section-page-layout"
 export { SiteHeader } from "./components/site-header"
