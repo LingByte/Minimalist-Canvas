@@ -28,7 +28,7 @@ import {
   getDynamicDisplayGroupRatio,
   getDynamicPricingSummary,
 } from '../lib/dynamic-price'
-import { isTokenBasedModel } from '../lib/model-helpers'
+import { isPerSecondModel, isTokenBasedModel } from '../lib/model-helpers'
 import { formatPrice, formatRequestPrice } from '../lib/price'
 import type { PricingModel, TokenUnit } from '../types'
 
@@ -184,7 +184,11 @@ export function SelectionModelList(props: SelectionModelListProps) {
                   {price}
                 </span>
                 <span className='text-muted-foreground block text-[10px] tracking-wide uppercase'>
-                  {isTokenBasedModel(model) ? t('Input') : t('Per request')}
+                  {isTokenBasedModel(model)
+                    ? t('Input')
+                    : isPerSecondModel(model)
+                      ? t('Per second')
+                      : t('Per request')}
                 </span>
               </span>
             </button>

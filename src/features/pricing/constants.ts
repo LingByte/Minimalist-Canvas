@@ -124,6 +124,8 @@ export const QUOTA_TYPE_VALUES = {
   REQUEST: 1,
 } as const
 
+export const PRICE_UNIT_SECOND = "second"
+
 /** Token unit divisors */
 export const TOKEN_UNIT_DIVISORS = {
   M: 1,

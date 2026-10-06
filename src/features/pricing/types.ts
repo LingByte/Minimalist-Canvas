@@ -40,6 +40,9 @@ export type PricingModel = {
   model_ratio: number
   completion_ratio: number
   model_price?: number
+  /** "second" when model_price is charged per second of generated output */
+  price_unit?: string
+  resolution_price_ratios?: Record<string, number>
   cache_ratio?: number | null
   create_cache_ratio?: number | null
   image_ratio?: number | null

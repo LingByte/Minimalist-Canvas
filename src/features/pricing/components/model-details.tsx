@@ -58,7 +58,12 @@ import {
   isDynamicPricingModel,
 } from '../lib/dynamic-price'
 import { parseTags } from '../lib/filters'
-import { getAvailableGroups, isTokenBasedModel } from '../lib/model-helpers'
+import {
+  getAvailableGroups,
+  getResolutionPriceTiers,
+  isPerSecondModel,
+  isTokenBasedModel,
+} from '../lib/model-helpers'
 import { formatFixedPrice, formatGroupPrice } from '../lib/price'
 import type {
   ModelCapability,
@@ -692,6 +697,47 @@ function PriceSection(props: {
     )
   }
 
+  if (isPerSecondModel(props.model)) {
+    const tiers = getResolutionPriceTiers(props.model)
+    const rows =
+      tiers.length > 0 ? tiers : [{ resolution: t('Per second'), ratio: 1 }]
+    return (
+      <section>
+        <SectionTitle>{t('Base Price')}</SectionTitle>
+        <div className='space-y-1.5'>
+          {rows.map((row) => (
+            <div
+              key={row.resolution}
+              className='flex items-baseline justify-between'
+            >
+              <span className='text-muted-foreground text-sm'>
+                {row.resolution}
+              </span>
+              <span className='text-foreground font-mono text-sm font-semibold tabular-nums'>
+                {formatFixedPrice(
+                  props.model,
+                  row.resolution,
+                  props.showRechargePrice,
+                  props.priceRate,
+                  props.usdExchangeRate,
+                  { [row.resolution]: row.ratio }
+                )}
+                <span className='text-muted-foreground/40 ml-1 text-xs font-normal'>
+                  / {t('second')}
+                </span>
+              </span>
+            </div>
+          ))}
+        </div>
+        <p className='text-muted-foreground mt-2 text-xs'>
+          {t(
+            'Charged as the per-second price × video duration; higher resolutions cost more per second.'
+          )}
+        </p>
+      </section>
+    )
+  }
+
   if (!isTokenBased) {
     return (
       <section>
@@ -858,6 +904,7 @@ function GroupPricingSection(props: {
   )
 
   const isTokenBased = isTokenBasedModel(props.model)
+  const isPerSecond = isPerSecondModel(props.model)
   const tokenUnitLabel = props.tokenUnit === 'K' ? '1K' : '1M'
 
   const extraPriceTypes = useMemo(() => {
@@ -1087,7 +1134,10 @@ function GroupPricingSection(props: {
                   header: t('Price'),
                   className: `${thClass} text-right`,
                   cellClassName: 'py-2.5 text-right font-mono',
-                  cell: renderFixedGroupPrice,
+                  cell: (group: string) =>
+                    isPerSecond
+                      ? `${renderFixedGroupPrice(group)} / ${t('second')}`
+                      : renderFixedGroupPrice(group),
                 },
               ]),
         ]}
@@ -1096,6 +1146,13 @@ function GroupPricingSection(props: {
         {isTokenBased && (
           <p className='text-muted-foreground/40 mt-1.5 px-4 text-[10px] sm:px-0'>
             {t('Prices shown per')} {tokenUnitLabel} tokens
+          </p>
+        )}
+        {isPerSecond && (
+          <p className='text-muted-foreground/40 mt-1.5 px-4 text-[10px] sm:px-0'>
+            {t(
+              'Per-second prices at the lowest resolution; higher resolutions are multiplied accordingly.'
+            )}
           </p>
         )}
       </div>

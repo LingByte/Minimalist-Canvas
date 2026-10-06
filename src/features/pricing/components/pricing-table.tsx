@@ -29,7 +29,11 @@ import {
   getDynamicPricingSummary,
 } from '../lib/dynamic-price'
 import { parseTags } from '../lib/filters'
-import { isTokenBasedModel } from '../lib/model-helpers'
+import {
+  getBasePriceResolution,
+  isPerSecondModel,
+  isTokenBasedModel,
+} from '../lib/model-helpers'
 import {
   formatPrice,
   formatRequestPrice,
@@ -189,6 +193,8 @@ export function PricingTable(props: PricingTableProps) {
             )
           }
 
+          const baseResolution = getBasePriceResolution(model)
+
           return (
             <div>
               <Typography.Text style={{ fontFamily: 'monospace' }}>
@@ -204,7 +210,8 @@ export function PricingTable(props: PricingTableProps) {
               </Typography.Text>
               <div>
                 <Typography.Text type='secondary' style={{ fontSize: 10 }}>
-                  / {t('request')}
+                  / {isPerSecondModel(model) ? t('second') : t('request')}
+                  {baseResolution && ` · ${baseResolution}`}
                 </Typography.Text>
               </div>
             </div>

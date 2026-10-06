@@ -20,7 +20,7 @@ import { Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 
 import { isDynamicPricingModel } from '../lib/dynamic-price'
-import { isTokenBasedModel } from '../lib/model-helpers'
+import { isPerSecondModel, isTokenBasedModel } from '../lib/model-helpers'
 import type { PricingModel } from '../types'
 
 interface ModelBillingModeBadgeProps {
@@ -39,6 +39,9 @@ export function ModelBillingModeBadge(props: ModelBillingModeBadgeProps) {
   } else if (isTokenBasedModel(props.model)) {
     label = t('Token-based')
     color = 'blue'
+  } else if (isPerSecondModel(props.model)) {
+    label = t('Per Second')
+    color = 'magenta'
   }
 
   return (

@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { EXCLUDED_GROUPS, FILTER_ALL, QUOTA_TYPE_VALUES } from '../constants'
+import { EXCLUDED_GROUPS, FILTER_ALL, PRICE_UNIT_SECOND, QUOTA_TYPE_VALUES } from '../constants'
 import type { PricingModel } from '../types'
 
 // ----------------------------------------------------------------------------
@@ -107,3 +107,25 @@ export function replaceModelInPath(path: string, modelName: string): string {
 export function isTokenBasedModel(model: PricingModel): boolean {
   return model.quota_type === QUOTA_TYPE_VALUES.TOKEN
 }
+
+export function isPerSecondModel(model: PricingModel): boolean {
+  return model.quota_type === QUOTA_TYPE_VALUES.REQUEST && model.price_unit === PRICE_UNIT_SECOND
+}
+
+export function getResolutionPriceTiers(
+  model: PricingModel
+): Array<{ resolution: string; ratio: number }> {
+  return Object.entries(model.resolution_price_ratios ?? {})
+    .map(([resolution, ratio]) => ({ resolution, ratio }))
+    .sort((a, b) => a.ratio - b.ratio)
+}
+
+/**
+ * Resolution that the summary per-second price applies to, when tiers differ
+ */
+export function getBasePriceResolution(model: PricingModel): string | undefined {
+  if (!isPerSecondModel(model)) return undefined
+  const tiers = getResolutionPriceTiers(model)
+  return tiers.length > 1 ? tiers[0].resolution : undefined
+}
+

@@ -180,7 +180,7 @@ export function Pricing() {
       <header className='flex shrink-0 flex-wrap items-center gap-2'>
         <div className='mr-1 flex min-w-0 items-baseline gap-2'>
           <h1 className='truncate text-base font-semibold tracking-tight sm:text-lg [font-family:var(--font-serif)]'>
-            {t('Model Selection')}
+            {t('Model Square')}
           </h1>
           <span className='text-muted-foreground hidden font-mono text-[11px] tabular-nums sm:inline'>
             {catalogCount.toLocaleString()}{' '}
