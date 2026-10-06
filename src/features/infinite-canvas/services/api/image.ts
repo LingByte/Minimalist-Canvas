@@ -109,7 +109,7 @@ type GeminiPayload = {
     promptFeedback?: { blockReason?: string };
 };
 type GeminiStreamState = { buffer: string; text: string; toolCalls: ResponseToolCall[]; error?: string };
-type RequestOptions = { signal?: AbortSignal };
+type RequestOptions = { signal?: AbortSignal; generationClientId?: string; generationSource?: "canvas" | "workbench"; generationAttemptId?: string };
 
 const QUALITY_BASE: Record<string, number> = {
     low: 1024,

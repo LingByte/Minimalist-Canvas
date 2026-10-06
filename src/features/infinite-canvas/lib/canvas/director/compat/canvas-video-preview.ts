@@ -1,0 +1,1 @@
+export const CANVAS_VIDEO_PREVIEW_VERSION = 1;

@@ -12,6 +12,7 @@ export type UploadedImage = {
     height: number;
     bytes: number;
     mimeType: string;
+    pendingRemoteUpload?: boolean;
 };
 
 const store = blobStore("image_files");
@@ -26,7 +27,13 @@ export type UploadImageOptions = {
     signal?: AbortSignal;
 };
 
-export async function uploadImage(input: string | Blob, options?: UploadImageOptions): Promise<UploadedImage> {
+export async function uploadImage(
+    input: string | Blob,
+    options?: UploadImageOptions | ((uploadedBytes: number, totalBytes: number) => void),
+    _scope?: unknown,
+): Promise<UploadedImage> {
+    const resolvedOptions: UploadImageOptions | undefined =
+        typeof options === "function" ? { onProgress: options } : options;
     // Mirrored / public HTTPS urls: keep the URL as-is. Browser fetch would hit CORS
     // on third-party CDNs; <img> + naturalWidth still works without CORS.
     if (typeof input === "string" && /^https?:\/\//i.test(input)) {
@@ -58,8 +65,8 @@ export async function uploadImage(input: string | Blob, options?: UploadImageOpt
         filename: input instanceof File ? input.name : undefined,
         contentType: mimeType,
         purpose: "canvas",
-        onProgress: options?.onProgress,
-        signal: options?.signal,
+        onProgress: resolvedOptions?.onProgress,
+        signal: resolvedOptions?.signal,
         onSuccess: (uploaded) => publishCloudMediaUrl(storageKey, uploaded.accessUrl),
     })
         .then((uploaded) => {
@@ -67,15 +74,15 @@ export async function uploadImage(input: string | Blob, options?: UploadImageOpt
             return uploaded;
         })
         .catch((error) => {
-            if (isAbortError(error) || options?.signal?.aborted) throw error;
+            if (isAbortError(error) || resolvedOptions?.signal?.aborted) throw error;
             return null;
         });
 
     // Local file is already usable. Cloud upload continues in the background.
-    if (options?.background) return local;
+    if (resolvedOptions?.background) return local;
 
     const uploaded = await cloud;
-    if (options?.signal?.aborted) {
+    if (resolvedOptions?.signal?.aborted) {
         const error = new Error("Upload canceled");
         error.name = "AbortError";
         throw error;
@@ -102,7 +109,7 @@ async function cacheRemoteImageLocally(storageKey: string, url: string) {
     }
 }
 
-export async function resolveImageUrl(storageKey?: string, fallback = "") {
+export async function resolveImageUrl(storageKey?: string, fallback = "", _options?: { cacheMiss?: boolean }) {
     if (!storageKey) return fallback;
     const cached = objectUrls.get(storageKey);
     if (cached) return cached;

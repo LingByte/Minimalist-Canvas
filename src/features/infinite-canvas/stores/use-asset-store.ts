@@ -6,11 +6,17 @@ import { localForageStorage } from "@canvas/lib/localforage-storage";
 import { cleanupUnusedImages, resolveImageUrl, uploadImage } from "@canvas/services/image-storage";
 import { cleanupUnusedMedia, resolveMediaUrl } from "@canvas/services/file-storage";
 
-export type AssetKind = "text" | "image" | "video";
+export type AssetKind = "text" | "image" | "video" | "model";
 export type TextAsset = AssetBase<"text"> & { data: { content: string } };
 export type ImageAsset = AssetBase<"image"> & { data: { dataUrl: string; storageKey?: string; width: number; height: number; bytes: number; mimeType: string } };
 export type VideoAsset = AssetBase<"video"> & { data: { url: string; storageKey?: string; width: number; height: number; bytes: number; mimeType: string } };
-export type Asset = TextAsset | ImageAsset | VideoAsset;
+export type ModelAsset = AssetBase<"model"> & { data: { url: string; storageKey?: string; mimeType: string; bytes?: number; fileName?: string } };
+export type Asset = TextAsset | ImageAsset | VideoAsset | ModelAsset;
+export type NewAsset = Omit<Asset, "id" | "createdAt" | "updatedAt">;
+
+export function peekAssetStoreDraft(_scope: string, _assetId: string) {
+    return undefined;
+}
 
 type AssetBase<T extends AssetKind> = {
     id: string;

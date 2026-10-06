@@ -29,6 +29,8 @@ export type UserCanvasProjectSummary = {
   id: number
   client_id: string
   title: string
+  /** Object-storage object key when the project body is stored in OSS. */
+  content_key?: string
   created_at: number
   updated_at: number
 }
@@ -37,6 +39,8 @@ export type UserCanvasProjectDTO = {
   id: number
   client_id: string
   title: string
+  /** Object-storage object key when the project body is stored in OSS. */
+  content_key?: string
   project: CanvasProject
   created_at: number
   updated_at: number
@@ -90,14 +94,67 @@ export async function putUserCanvasProjectByClientId(
 export async function deleteUserCanvasProjectsByClientIds(
   clientIds: string[]
 ): Promise<number> {
-  try {
-    const res = await api.post<ApiEnvelope<{ deleted?: number }>>(
-      '/api/user-canvas-projects/batch-delete-by-client-id',
-      { client_ids: clientIds },
-      { skipErrorHandler: true }
-    )
-    return Number(res.data?.data?.deleted || 0)
-  } catch {
-    return 0
+  const ids = clientIds.map((id) => id.trim()).filter(Boolean)
+  if (ids.length === 0) return 0
+  const res = await api.post<ApiEnvelope<{ deleted?: number }>>(
+    '/api/user-canvas-projects/batch-delete-by-client-id',
+    { client_ids: ids },
+    { skipErrorHandler: true }
+  )
+  if (!res.data?.success) {
+    throw new Error(res.data?.message || 'Failed to delete canvas projects')
   }
+  return Number(res.data?.data?.deleted || 0)
+}
+
+export type UserCanvasProjectVersionSummary = {
+  id: number
+  client_id: string
+  title: string
+  project_size: number
+  created_at: number
+  is_current?: boolean
+}
+
+export async function listUserCanvasProjectVersions(
+  clientId: string
+): Promise<UserCanvasProjectVersionSummary[]> {
+  const res = await api.get<
+    ApiEnvelope<{ items?: UserCanvasProjectVersionSummary[]; total?: number }>
+  >(`/api/user-canvas-projects/by-client-id/${encodeURIComponent(clientId)}/versions`, {
+    skipErrorHandler: true,
+  })
+  if (!res.data?.success) {
+    throw new Error(res.data?.message || 'Failed to load version history')
+  }
+  return res.data.data?.items || []
+}
+
+export async function getUserCanvasProjectVersion(
+  clientId: string,
+  versionId: number
+): Promise<UserCanvasProjectDTO> {
+  const res = await api.get<ApiEnvelope<UserCanvasProjectDTO>>(
+    `/api/user-canvas-projects/by-client-id/${encodeURIComponent(clientId)}/versions/${versionId}`,
+    { skipErrorHandler: true }
+  )
+  if (!res.data?.success || !res.data.data) {
+    throw new Error(res.data?.message || 'Failed to load version')
+  }
+  return res.data.data
+}
+
+export async function restoreUserCanvasProjectVersion(
+  clientId: string,
+  versionId: number
+): Promise<UserCanvasProjectDTO> {
+  const res = await api.post<ApiEnvelope<UserCanvasProjectDTO>>(
+    `/api/user-canvas-projects/by-client-id/${encodeURIComponent(clientId)}/versions/${versionId}/restore`,
+    {},
+    { skipErrorHandler: true }
+  )
+  if (!res.data?.success || !res.data.data) {
+    throw new Error(res.data?.message || 'Failed to restore version')
+  }
+  return res.data.data
 }

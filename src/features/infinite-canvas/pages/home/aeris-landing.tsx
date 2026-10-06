@@ -638,6 +638,10 @@ export function AerisLanding(props: AerisLandingProps) {
     }, []);
 
     useEffect(() => {
+        const win = window as Window & {
+            requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+            cancelIdleCallback?: (id: number) => void;
+        };
         let cancelled = false;
         let idleId = 0;
         let timeoutId = 0;
@@ -647,20 +651,20 @@ export function AerisLanding(props: AerisLandingProps) {
         };
 
         const schedule = () => {
-            if (typeof window !== "undefined" && "requestIdleCallback" in window) {
-                idleId = window.requestIdleCallback(enable, { timeout: 900 });
+            if (typeof win.requestIdleCallback === "function") {
+                idleId = win.requestIdleCallback(enable, { timeout: 900 });
             } else {
-                timeoutId = window.setTimeout(enable, TILE_FIELD_DELAY_MS);
+                timeoutId = win.setTimeout(enable, TILE_FIELD_DELAY_MS);
             }
         };
 
-        timeoutId = window.setTimeout(schedule, TILE_FIELD_DELAY_MS);
+        timeoutId = win.setTimeout(schedule, TILE_FIELD_DELAY_MS);
 
         return () => {
             cancelled = true;
-            window.clearTimeout(timeoutId);
-            if (idleId && "cancelIdleCallback" in window) {
-                window.cancelIdleCallback(idleId);
+            win.clearTimeout(timeoutId);
+            if (idleId && typeof win.cancelIdleCallback === "function") {
+                win.cancelIdleCallback(idleId);
             }
         };
     }, []);

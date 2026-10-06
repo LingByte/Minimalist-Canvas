@@ -261,3 +261,11 @@ function isExcludedAssetUrl(url: string | undefined, excludeUrls?: string[]) {
   const key = normalizeAssetUrlKey(url);
   return excludeUrls.some((candidate) => candidate && normalizeAssetUrlKey(candidate) === key);
 }
+
+/** Gateway returns this when canvas polls a missing/expired video task id. */
+export function isTaskNotExistError(message?: string) {
+  const msg = message?.trim() || "";
+  if (!msg) return false;
+  const lower = msg.toLowerCase();
+  return lower.includes("task_not_exist") || lower.includes("task_origin_not_exist");
+}

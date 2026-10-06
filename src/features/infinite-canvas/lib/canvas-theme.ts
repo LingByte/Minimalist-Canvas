@@ -29,6 +29,10 @@ export const canvasThemes = {
             activeBg: "#e7e5df",
             activeText: "#292524",
         },
+        accent: {
+            primary: "#1c1917",
+            onPrimary: "#fafaf9",
+        },
     },
     dark: {
         canvas: {
@@ -56,6 +60,10 @@ export const canvasThemes = {
             itemHover: "#292524",
             activeBg: "#3a3631",
             activeText: "#f5f5f4",
+        },
+        accent: {
+            primary: "#fafaf9",
+            onPrimary: "#181715",
         },
     },
 } as const;

@@ -1,15 +1,15 @@
 import imageCompression from "browser-image-compression";
-import { ArrowLeft, Download, FileImage, ImageIcon, Loader2, Trash2, Wrench } from "lucide-react";
-import { useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { ArrowLeft, Brush, ChevronRight, Download, FileImage, ImageIcon, Loader2, ScanFace, Trash2, Wand2 } from "lucide-react";
+import { useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { App, Button, Drawer, InputNumber, Slider, Tooltip, Typography } from "antd";
 import { useTranslation } from "react-i18next";
 
+import { CanvasNodeFaceMeshDialog } from "@canvas/components/canvas/canvas-node-face-mesh-dialog";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { cn } from "@canvas/lib/utils";
-import { SmartImage } from "@/components/smart-image";
 
-type ToolId = "home" | "image-compress" | "to-png";
+type ToolId = "home" | "image-compress" | "to-png" | "face-mesh";
 
 type MediaItem = {
     id: string;
@@ -116,6 +116,24 @@ function loadHtmlImage(url: string) {
     });
 }
 
+async function fileToDataUrl(file: File) {
+    return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("read failed"));
+        reader.readAsDataURL(file);
+    });
+}
+
+async function dataUrlToPngFile(dataUrl: string, name: string) {
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
+    return new File([blob], `${baseName(name)}-mesh.png`, {
+        type: "image/png",
+        lastModified: Date.now(),
+    });
+}
+
 function revokeItems(items: MediaItem[]) {
     for (const item of items) {
         URL.revokeObjectURL(item.previewUrl);
@@ -123,39 +141,42 @@ function revokeItems(items: MediaItem[]) {
     }
 }
 
-export function CanvasToolsDrawer() {
+export function CanvasToolsDrawer({
+    open,
+    onOpenChange,
+}: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+}) {
     const { t } = useTranslation();
     const { message } = App.useApp();
     const colorTheme = useThemeStore((state) => state.theme);
     const theme = canvasThemes[colorTheme];
-    const [open, setOpen] = useState(false);
     const [tool, setTool] = useState<ToolId>("home");
     const [compressItems, setCompressItems] = useState<MediaItem[]>([]);
     const [pngItems, setPngItems] = useState<MediaItem[]>([]);
+    const [meshItems, setMeshItems] = useState<MediaItem[]>([]);
     const [quality, setQuality] = useState(0.8);
     const [maxWidthOrHeight, setMaxWidthOrHeight] = useState(1920);
     const [maxSizeMB, setMaxSizeMB] = useState(2);
     const [batchBusy, setBatchBusy] = useState(false);
+    const [paintItem, setPaintItem] = useState<MediaItem | null>(null);
+    const [paintDataUrl, setPaintDataUrl] = useState("");
     const compressInputRef = useRef<HTMLInputElement>(null);
     const pngInputRef = useRef<HTMLInputElement>(null);
-
-    const dockStyle = {
-        background: theme.toolbar.panel,
-        borderColor: theme.toolbar.border,
-        color: theme.toolbar.item,
-        boxShadow: colorTheme === "dark" ? "0 18px 45px rgba(0,0,0,.32)" : "0 16px 40px rgba(28,25,23,.12)",
-    };
-    const activeStyle = { background: theme.toolbar.activeBg, color: theme.toolbar.activeText };
+    const meshInputRef = useRef<HTMLInputElement>(null);
 
     const activeTitle =
         tool === "image-compress"
             ? t("canvas.tools.compress.title")
             : tool === "to-png"
               ? t("canvas.tools.toPng.title")
-              : t("canvas.tools.title");
+              : tool === "face-mesh"
+                ? t("canvas.tools.faceMesh.title")
+                : t("canvas.tools.title");
 
     const closeDrawer = () => {
-        setOpen(false);
+        onOpenChange(false);
         setTool("home");
     };
 
@@ -240,6 +261,41 @@ export function CanvasToolsDrawer() {
         }
     };
 
+    const openFaceMeshPaint = async (item: MediaItem) => {
+        try {
+            const dataUrl = await fileToDataUrl(item.source);
+            setPaintItem(item);
+            setPaintDataUrl(dataUrl);
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : String(error));
+        }
+    };
+
+    const confirmFaceMeshPaint = async (resultDataUrl: string) => {
+        if (!paintItem) return;
+        try {
+            const result = await dataUrlToPngFile(resultDataUrl, paintItem.name);
+            setMeshItems((current) =>
+                current.map((item) => {
+                    if (item.id !== paintItem.id) return item;
+                    if (item.resultPreviewUrl) URL.revokeObjectURL(item.resultPreviewUrl);
+                    return {
+                        ...item,
+                        result,
+                        resultPreviewUrl: URL.createObjectURL(result),
+                        error: undefined,
+                        busy: false,
+                    };
+                }),
+            );
+            setPaintItem(null);
+            setPaintDataUrl("");
+            message.success(t("canvas.tools.faceMesh.done", { count: 1 }));
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : String(error));
+        }
+    };
+
     const runBatch = async (
         items: MediaItem[],
         setter: typeof setCompressItems,
@@ -260,67 +316,94 @@ export function CanvasToolsDrawer() {
         if (ok) message.success(t(doneKey, { count: ok }));
     };
 
-    const downloadOne = (item: MediaItem, asPng: boolean) => {
+    const downloadOne = (item: MediaItem, mode: "compress" | "png" | "mesh") => {
         if (!item.result) return;
-        const filename = asPng
-            ? `${baseName(item.name)}.png`
-            : compressedFilename(item.name, item.result.type || item.source.type);
+        const filename =
+            mode === "png"
+                ? `${baseName(item.name)}.png`
+                : mode === "mesh"
+                  ? `${baseName(item.name)}-mesh.png`
+                  : compressedFilename(item.name, item.result.type || item.source.type);
         downloadBlob(item.result, filename);
     };
 
     return (
-        <div
-            className="absolute bottom-5 right-5 z-50"
-            onMouseDown={(event) => event.stopPropagation()}
-            onPointerDown={(event) => event.stopPropagation()}
-        >
-            <Tooltip title={t("canvas.tools.open")} placement="left">
-                <button
-                    type="button"
-                    data-tour="canvas-tools-fab"
-                    className="flex h-14 w-14 items-center justify-center rounded-full border shadow-lg backdrop-blur transition hover:scale-[1.03]"
-                    style={open ? { ...dockStyle, ...activeStyle } : dockStyle}
-                    onClick={() => setOpen(true)}
-                    aria-label={t("canvas.tools.open")}
-                >
-                    <Wrench className="size-5" />
-                </button>
-            </Tooltip>
-
+        <>
             <Drawer
-                title={
-                    tool === "home" ? (
-                        t("canvas.tools.title")
-                    ) : (
-                        <button type="button" className="inline-flex items-center gap-2 text-left font-medium" onClick={() => setTool("home")}>
-                            <ArrowLeft className="size-4 opacity-70" />
-                            {activeTitle}
-                        </button>
-                    )
-                }
+                title={null}
                 open={open}
                 onClose={closeDrawer}
                 placement="right"
-                size={440}
-                destroyOnHidden={false}
-                styles={{ body: { paddingTop: 12 } }}
+                size={400}
+                destroyOnClose={false}
+                styles={{
+                    header: { display: "none" },
+                    body: {
+                        padding: 0,
+                        background: colorTheme === "dark" ? "#1a1f2a" : "#f4f7fc",
+                        color: theme.node.text,
+                    },
+                    wrapper: { boxShadow: colorTheme === "dark" ? "0 0 48px rgba(0,0,0,.45)" : "0 0 48px rgba(15,23,42,.12)" },
+                }}
             >
+                <div className="flex h-full flex-col">
+                    <div
+                        className="flex shrink-0 items-center gap-2 border-b px-4 py-3.5"
+                        style={{ borderColor: theme.toolbar.border, background: theme.toolbar.panel }}
+                    >
+                        {tool !== "home" ? (
+                            <button
+                                type="button"
+                                className="grid size-8 place-items-center rounded-lg transition hover:bg-black/5 dark:hover:bg-white/10"
+                                style={{ color: theme.node.muted }}
+                                onClick={() => setTool("home")}
+                                aria-label={t("canvas.tools.title")}
+                            >
+                                <ArrowLeft className="size-4" />
+                            </button>
+                        ) : (
+                            <span
+                                className="grid size-8 place-items-center rounded-lg"
+                                style={{ background: theme.toolbar.activeBg, color: theme.toolbar.activeText }}
+                            >
+                                <Wand2 className="size-4" />
+                            </span>
+                        )}
+                        <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-semibold" style={{ color: theme.node.text }}>
+                                {activeTitle}
+                            </div>
+                            {tool === "home" ? (
+                                <div className="mt-0.5 truncate text-xs" style={{ color: theme.node.muted }}>
+                                    {t("canvas.tools.subtitle")}
+                                </div>
+                            ) : null}
+                        </div>
+                    </div>
+
+                    <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-4">
                 {tool === "home" ? (
-                    <div className="grid gap-3">
-                        <p className="m-0 text-sm opacity-60">{t("canvas.tools.subtitle")}</p>
+                    <div className="grid gap-1.5">
                         <ToolCard
                             theme={theme}
-                            icon={<ImageIcon className="size-5" />}
+                            icon={<ImageIcon className="size-4" />}
                             title={t("canvas.tools.compress.title")}
                             description={t("canvas.tools.compress.description")}
                             onClick={() => setTool("image-compress")}
                         />
                         <ToolCard
                             theme={theme}
-                            icon={<FileImage className="size-5" />}
+                            icon={<FileImage className="size-4" />}
                             title={t("canvas.tools.toPng.title")}
                             description={t("canvas.tools.toPng.description")}
                             onClick={() => setTool("to-png")}
+                        />
+                        <ToolCard
+                            theme={theme}
+                            icon={<ScanFace className="size-4" />}
+                            title={t("canvas.tools.faceMesh.title")}
+                            description={t("canvas.tools.faceMesh.description")}
+                            onClick={() => setTool("face-mesh")}
                         />
                     </div>
                 ) : null}
@@ -332,10 +415,10 @@ export function CanvasToolsDrawer() {
                         batchBusy={batchBusy}
                         inputRef={compressInputRef}
                         settings={
-                            <div className="grid gap-3 rounded-xl border p-3" style={{ borderColor: theme.toolbar.border }}>
-                                <label className="block text-xs font-medium opacity-60">
+                            <div className="grid gap-3 rounded-xl border p-3.5" style={{ borderColor: theme.toolbar.border, background: theme.toolbar.panel }}>
+                                <label className="block text-xs font-medium" style={{ color: theme.node.muted }}>
                                     {t("canvas.tools.compress.quality")}
-                                    <span className="ml-2 tabular-nums opacity-80">{Math.round(quality * 100)}%</span>
+                                    <span className="ml-2 tabular-nums" style={{ color: theme.node.text }}>{Math.round(quality * 100)}%</span>
                                 </label>
                                 <Slider
                                     min={10}
@@ -346,7 +429,7 @@ export function CanvasToolsDrawer() {
                                     tooltip={{ formatter: (value) => `${value}%` }}
                                 />
                                 <div className="grid grid-cols-2 gap-3">
-                                    <label className="block text-xs font-medium opacity-60">
+                                    <label className="block text-xs font-medium" style={{ color: theme.node.muted }}>
                                         {t("canvas.tools.compress.maxEdge")}
                                         <InputNumber
                                             className="mt-1.5 !w-full"
@@ -357,7 +440,7 @@ export function CanvasToolsDrawer() {
                                             onChange={(value) => setMaxWidthOrHeight(Number(value) || 1920)}
                                         />
                                     </label>
-                                    <label className="block text-xs font-medium opacity-60">
+                                    <label className="block text-xs font-medium" style={{ color: theme.node.muted }}>
                                         {t("canvas.tools.compress.maxSizeMb")}
                                         <InputNumber
                                             className="mt-1.5 !w-full"
@@ -369,7 +452,7 @@ export function CanvasToolsDrawer() {
                                         />
                                     </label>
                                 </div>
-                                <Typography.Paragraph className="!mb-0 !text-xs opacity-50">{t("canvas.tools.compress.hint")}</Typography.Paragraph>
+                                <Typography.Paragraph className="!mb-0 !text-xs" style={{ color: theme.node.faint }}>{t("canvas.tools.compress.hint")}</Typography.Paragraph>
                             </div>
                         }
                         addLabel={t("canvas.tools.compress.addImages")}
@@ -381,10 +464,10 @@ export function CanvasToolsDrawer() {
                         downloadLabel={t("canvas.tools.compress.download")}
                         onAdd={() => compressInputRef.current?.click()}
                         onRun={() => void runBatch(compressItems, setCompressItems, compressOne, "canvas.tools.compress.done")}
-                        onDownloadAll={() => compressItems.forEach((item) => downloadOne(item, false))}
+                        onDownloadAll={() => compressItems.forEach((item) => downloadOne(item, "compress"))}
                         onClear={() => clearList(compressItems, setCompressItems)}
                         onRemove={(id) => removeItem(id, compressItems, setCompressItems)}
-                        onDownload={(item) => downloadOne(item, false)}
+                        onDownload={(item) => downloadOne(item, "compress")}
                         onFiles={(files) => addFiles(files, setCompressItems)}
                         sizeDeltaMode="shrink"
                     />
@@ -397,7 +480,7 @@ export function CanvasToolsDrawer() {
                         batchBusy={batchBusy}
                         inputRef={pngInputRef}
                         settings={
-                            <Typography.Paragraph className="!mb-0 rounded-xl border p-3 !text-xs opacity-60" style={{ borderColor: theme.toolbar.border }}>
+                            <Typography.Paragraph className="!mb-0 rounded-xl border p-3.5 !text-xs" style={{ borderColor: theme.toolbar.border, background: theme.toolbar.panel, color: theme.node.muted }}>
                                 {t("canvas.tools.toPng.hint")}
                             </Typography.Paragraph>
                         }
@@ -410,16 +493,64 @@ export function CanvasToolsDrawer() {
                         downloadLabel={t("canvas.tools.compress.download")}
                         onAdd={() => pngInputRef.current?.click()}
                         onRun={() => void runBatch(pngItems, setPngItems, toPngOne, "canvas.tools.toPng.done")}
-                        onDownloadAll={() => pngItems.forEach((item) => downloadOne(item, true))}
+                        onDownloadAll={() => pngItems.forEach((item) => downloadOne(item, "png"))}
                         onClear={() => clearList(pngItems, setPngItems)}
                         onRemove={(id) => removeItem(id, pngItems, setPngItems)}
-                        onDownload={(item) => downloadOne(item, true)}
+                        onDownload={(item) => downloadOne(item, "png")}
                         onFiles={(files) => addFiles(files, setPngItems)}
                         sizeDeltaMode="any"
                     />
                 ) : null}
+
+                {tool === "face-mesh" ? (
+                    <ToolWorkspace
+                        theme={theme}
+                        items={meshItems}
+                        batchBusy={batchBusy}
+                        inputRef={meshInputRef}
+                        settings={
+                            <Typography.Paragraph className="!mb-0 rounded-xl border p-3.5 !text-xs" style={{ borderColor: theme.toolbar.border, background: theme.toolbar.panel, color: theme.node.muted }}>
+                                {t("canvas.tools.faceMesh.hint")}
+                            </Typography.Paragraph>
+                        }
+                        addLabel={t("canvas.tools.faceMesh.addImages")}
+                        runLabel={t("canvas.tools.faceMesh.run")}
+                        downloadAllLabel={t("canvas.tools.faceMesh.downloadAll")}
+                        clearLabel={t("canvas.tools.compress.clear")}
+                        dropHint={t("canvas.tools.faceMesh.dropHint")}
+                        workingLabel={t("canvas.tools.faceMesh.working")}
+                        downloadLabel={t("canvas.tools.compress.download")}
+                        itemActionLabel={t("canvas.tools.faceMesh.paint")}
+                        onItemAction={(item) => void openFaceMeshPaint(item)}
+                        onAdd={() => meshInputRef.current?.click()}
+                        onRun={() => {
+                            const pending = meshItems.find((item) => !item.result) || meshItems[0];
+                            if (pending) void openFaceMeshPaint(pending);
+                        }}
+                        onDownloadAll={() => meshItems.forEach((item) => downloadOne(item, "mesh"))}
+                        onClear={() => clearList(meshItems, setMeshItems)}
+                        onRemove={(id) => removeItem(id, meshItems, setMeshItems)}
+                        onDownload={(item) => downloadOne(item, "mesh")}
+                        onFiles={(files) => addFiles(files, setMeshItems)}
+                        sizeDeltaMode="any"
+                    />
+                ) : null}
+                    </div>
+                </div>
             </Drawer>
-        </div>
+
+            {paintItem && paintDataUrl ? (
+                <CanvasNodeFaceMeshDialog
+                    dataUrl={paintDataUrl}
+                    open={Boolean(paintItem)}
+                    onClose={() => {
+                        setPaintItem(null);
+                        setPaintDataUrl("");
+                    }}
+                    onConfirm={(result) => void confirmFaceMeshPaint(result)}
+                />
+            ) : null}
+        </>
     );
 }
 
@@ -439,17 +570,29 @@ function ToolCard({
     return (
         <button
             type="button"
-            className="flex w-full items-start gap-3 rounded-xl border px-3.5 py-3.5 text-left transition hover:bg-black/5 dark:hover:bg-white/5"
-            style={{ borderColor: theme.toolbar.border, color: theme.node.text }}
+            className="group flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition hover:border-transparent"
+            style={{ borderColor: theme.toolbar.border, background: theme.toolbar.panel, color: theme.node.text } as CSSProperties}
             onClick={onClick}
+            onMouseEnter={(event) => {
+                event.currentTarget.style.background = theme.toolbar.itemHover;
+            }}
+            onMouseLeave={(event) => {
+                event.currentTarget.style.background = theme.toolbar.panel;
+            }}
         >
-            <span className="grid size-10 shrink-0 place-items-center rounded-lg" style={{ background: theme.toolbar.itemHover }}>
+            <span
+                className="grid size-9 shrink-0 place-items-center rounded-lg"
+                style={{ background: theme.toolbar.activeBg, color: theme.toolbar.activeText }}
+            >
                 {icon}
             </span>
-            <span className="min-w-0">
-                <span className="block text-sm font-semibold">{title}</span>
-                <span className="mt-1 block text-xs opacity-60">{description}</span>
+            <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium leading-5">{title}</span>
+                <span className="mt-0.5 block text-[11px] leading-4" style={{ color: theme.node.muted }}>
+                    {description}
+                </span>
             </span>
+            <ChevronRight className="size-4 shrink-0 opacity-35 transition group-hover:opacity-70" style={{ color: theme.node.muted }} />
         </button>
     );
 }
@@ -467,6 +610,8 @@ function ToolWorkspace({
     dropHint,
     workingLabel,
     downloadLabel,
+    itemActionLabel,
+    onItemAction,
     onAdd,
     onRun,
     onDownloadAll,
@@ -488,6 +633,8 @@ function ToolWorkspace({
     dropHint: string;
     workingLabel: string;
     downloadLabel: string;
+    itemActionLabel?: string;
+    onItemAction?: (item: MediaItem) => void;
     onAdd: () => void;
     onRun: () => void;
     onDownloadAll: () => void;
@@ -535,7 +682,7 @@ function ToolWorkspace({
                     "thin-scrollbar min-h-40 flex-1 space-y-2 overflow-y-auto rounded-xl border border-dashed p-2",
                     !items.length && "grid place-items-center",
                 )}
-                style={{ borderColor: theme.toolbar.border }}
+                style={{ borderColor: theme.toolbar.border, background: theme.toolbar.panel }}
                 onDragOver={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
@@ -547,7 +694,7 @@ function ToolWorkspace({
                 }}
             >
                 {!items.length ? (
-                    <p className="m-0 px-4 text-center text-sm opacity-50">{dropHint}</p>
+                    <p className="m-0 px-4 text-center text-sm" style={{ color: theme.node.muted }}>{dropHint}</p>
                 ) : (
                     items.map((item) => {
                         const ratio =
@@ -566,12 +713,12 @@ function ToolWorkspace({
                             <div
                                 key={item.id}
                                 className="flex gap-3 rounded-lg border p-2"
-                                style={{ borderColor: theme.toolbar.border, background: theme.toolbar.panel }}
+                                style={{ borderColor: theme.toolbar.border, background: theme.node.panel, color: theme.node.text }}
                             >
-                                <SmartImage src={item.resultPreviewUrl || item.previewUrl} alt={item.name} className="size-16 shrink-0 rounded-md object-cover" fallbackIconClassName="size-4" />
+                                <img src={item.resultPreviewUrl || item.previewUrl} alt={item.name} className="size-16 shrink-0 rounded-md object-cover" />
                                 <div className="min-w-0 flex-1">
                                     <div className="truncate text-sm font-medium">{item.name}</div>
-                                    <div className="mt-1 text-xs opacity-60">
+                                    <div className="mt-1 text-xs" style={{ color: theme.node.muted }}>
                                         {formatBytes(item.sourceBytes)}
                                         {item.result ? ` → ${formatBytes(item.result.size)}` : ""}
                                         {item.result ? ` · ${item.result.type || "image/png"}` : ""}
@@ -579,13 +726,25 @@ function ToolWorkspace({
                                     </div>
                                     {item.error ? <div className="mt-1 text-xs text-red-500">{item.error}</div> : null}
                                     {item.busy ? (
-                                        <div className="mt-1 inline-flex items-center gap-1 text-xs opacity-60">
+                                        <div className="mt-1 inline-flex items-center gap-1 text-xs" style={{ color: theme.node.muted }}>
                                             <Loader2 className="size-3 animate-spin" />
                                             {workingLabel}
                                         </div>
                                     ) : null}
                                 </div>
                                 <div className="flex shrink-0 flex-col gap-1">
+                                    {onItemAction && itemActionLabel ? (
+                                        <Tooltip title={itemActionLabel}>
+                                            <Button
+                                                type="text"
+                                                size="small"
+                                                disabled={batchBusy}
+                                                icon={<Brush className="size-3.5" />}
+                                                onClick={() => onItemAction(item)}
+                                                aria-label={itemActionLabel}
+                                            />
+                                        </Tooltip>
+                                    ) : null}
                                     <Button
                                         type="text"
                                         size="small"

@@ -1,4 +1,5 @@
 import { getNodeSpec, NODE_DEFAULT_SIZE } from "@canvas/constant/canvas";
+import { createEmptyStoryboard } from "@canvas/lib/canvas/canvas-storyboard";
 import { nodeSizeFromRatio } from "@canvas/lib/canvas/canvas-node-size";
 import type { AiConfig } from "@canvas/stores/use-config-store";
 import type { UploadedImage } from "@canvas/services/image-storage";
@@ -9,6 +10,10 @@ import { CanvasNodeType, type CanvasImageGenerationType, type CanvasNodeData, ty
 export function createCanvasNode(type: CanvasNodeTypeId, position: Position, metadata?: CanvasNodeMetadata): CanvasNodeData {
     const spec = getNodeSpec(type);
     const id = `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const nextMetadata =
+        type === CanvasNodeType.Script
+            ? { ...spec.metadata, storyboard: createEmptyStoryboard(), ...metadata }
+            : { ...spec.metadata, ...metadata };
 
     return {
         id,
@@ -20,7 +25,7 @@ export function createCanvasNode(type: CanvasNodeTypeId, position: Position, met
         },
         width: spec.width,
         height: spec.height,
-        metadata: { ...spec.metadata, ...metadata },
+        metadata: nextMetadata,
     };
 }
 

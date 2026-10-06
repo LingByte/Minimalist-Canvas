@@ -1,9 +1,10 @@
 import { ArrowLeft, ArrowRight, BookOpen, CheckSquare, ClipboardPaste, Download, FolderPlus, History, ImagePlus, LoaderCircle, PenLine, Plus, SlidersHorizontal, Sparkles, Trash2, Upload } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { App, Button, Checkbox, Drawer, Empty, Image, Input, Modal, Tag, Tooltip, Typography } from "antd";
 import { useTranslation } from "react-i18next";
 import { toIntlLocale } from "@/i18n/languages";
 
+import { CanvasPromptChipInput } from "@canvas/components/canvas/canvas-prompt-chip-input";
 import { ImageSettingsPanel, imageQualityLabel, imageSizeLabel } from "@canvas/components/image-settings-panel";
 import { ModelPicker } from "@canvas/components/model-picker";
 import { PromptSelectDialog } from "@canvas/components/prompts/prompt-select-dialog";
@@ -23,8 +24,10 @@ import {
 import { CloudUploadProgress } from "@canvas/components/canvas/cloud-upload-progress";
 import { assertCanvasMediaUploadSize, QIHUO_MAX_IMAGE_UPLOAD_BYTES } from "@canvas/services/object-storage";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
+import { expandCanvasResourceMentions, type CanvasResourceReference } from "@canvas/lib/canvas/canvas-resource-references";
 import { imageReferenceLabel } from "@canvas/lib/image-reference-prompt";
 import { useConfigStore, useEffectiveConfig, type AiConfig } from "@canvas/stores/use-config-store";
+import { useConfirmGenerationQuota } from "@canvas/lib/use-confirm-generation-quota";
 import { useModelUnitPrice } from "@canvas/lib/use-model-unit-price";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { nanoid } from "nanoid";
@@ -74,7 +77,7 @@ type GenerationLog = {
     imageCount: number;
     size: string;
     quality: string;
-    status: "success" | "failed";
+    status: "pending" | "success" | "failed";
     images: GeneratedImage[];
     thumbnails: string[];
 };
@@ -87,6 +90,7 @@ const RESULT_ACTION_BUTTON_CLASS = "min-w-0 px-1.5 [&_.ant-btn-icon]:shrink-0 [&
 export default function ImagePage() {
     const { message } = App.useApp();
     const { t } = useTranslation();
+    const confirmGenerationQuota = useConfirmGenerationQuota();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const dragDepthRef = useRef(0);
     const config = useConfigStore((state) => state.config);
@@ -132,7 +136,21 @@ export default function ImagePage() {
 
     const model = effectiveConfig.imageModel || effectiveConfig.model;
     const priceHint = useModelUnitPrice(model);
-    const canGenerate = Boolean(prompt.trim());
+    const mentionReferences = useMemo<CanvasResourceReference[]>(
+        () =>
+            references.map((item, index) => ({
+                id: item.id,
+                nodeId: item.id,
+                kind: "image" as const,
+                label: imageReferenceLabel(index),
+                title: item.name || imageReferenceLabel(index),
+                previewUrl: item.dataUrl,
+                active: true,
+            })),
+        [references],
+    );
+    const promptText = expandCanvasResourceMentions(prompt, mentionReferences).trim();
+    const canGenerate = Boolean(promptText);
     const generationCount = Math.max(1, Math.min(10, Number(config.count) || 1));
 
     useEffect(() => {
@@ -274,25 +292,13 @@ export default function ImagePage() {
 
     const confirmGenerate = () => {
         if (!canGenerate || running) return;
-        const count = generationCount;
-        const content = priceHint
-            ? count > 1
-                ? t("workbench.confirmSpendCount", { count, price: priceHint })
-                : t("workbench.confirmSpend", { price: priceHint })
-            : t("workbench.confirmSpendTitle");
-        Modal.confirm({
-            title: t("workbench.confirmSpendTitle"),
-            content,
-            okText: t("workbench.confirmSpendOk"),
-            cancelText: t("common.cancel"),
-            onOk: () => void generate(),
-        });
+        void generate();
     };
 
     const generate = async () => {
         const agentTaskId = agentTaskIdRef.current;
         agentTaskIdRef.current = undefined;
-        const text = prompt.trim();
+        const text = promptText;
         if (!text) {
             message.error(t("imageWorkbench.promptRequired"));
             if (agentTaskId) updateAgentTask(agentTaskId, { status: "failed", error: t("imageWorkbench.promptRequired") });
@@ -308,6 +314,16 @@ export default function ImagePage() {
         const snapshot = buildRequestSnapshot();
         if (!snapshot) {
             if (agentTaskId) updateAgentTask(agentTaskId, { status: "failed", error: t("imageWorkbench.invalidParams") });
+            return;
+        }
+
+        const approved = await confirmGenerationQuota({
+            modelValue: model,
+            mode: "image",
+            count: generationCount,
+        });
+        if (!approved) {
+            if (agentTaskId) updateAgentTask(agentTaskId, { status: "failed", error: t("generationQuota.cancel") });
             return;
         }
 
@@ -485,7 +501,7 @@ export default function ImagePage() {
     };
 
     const buildRequestSnapshot = () => {
-        const text = prompt.trim();
+        const text = promptText;
         if (!text) {
             message.error(t("imageWorkbench.promptRequired"));
             return null;
@@ -664,13 +680,12 @@ export default function ImagePage() {
 
                             <div>
                                 <div className={workbenchPromptShellClassName()}>
-                                    <Input.TextArea
+                                    <CanvasPromptChipInput
                                         value={prompt}
-                                        onChange={(event) => setPrompt(event.target.value)}
-                                        rows={7}
+                                        onChange={setPrompt}
+                                        references={mentionReferences}
                                         placeholder={t("imageWorkbench.promptPlaceholder")}
-                                        variant="borderless"
-                                        className="!min-h-[160px] !bg-transparent !px-3 !pt-3 !pb-12 !text-sm !leading-6"
+                                        className="thin-scrollbar min-h-[160px] w-full cursor-text bg-transparent px-3 pt-3 pb-12 text-sm leading-6 outline-none"
                                     />
                                     <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-end gap-2 p-2">
                                         <button
@@ -699,8 +714,7 @@ export default function ImagePage() {
                             }
                             generateLabel={t("workbench.generate")}
                             generatePrice={priceHint || undefined}
-                            generateTip={t("workbench.retentionTip")}
-                            generating={running}
+                                                        generating={running}
                             disabled={!canGenerate || running}
                             onGenerate={confirmGenerate}
                         />

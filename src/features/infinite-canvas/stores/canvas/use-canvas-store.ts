@@ -7,6 +7,7 @@ import { localForageStorage } from "@canvas/lib/localforage-storage";
 import { removeCanvasWorkspace } from "@canvas/services/fs-store";
 import type { CanvasBackgroundMode } from "@canvas/lib/canvas-theme";
 import type { CanvasAssistantSession, CanvasConnection, CanvasNodeData, ViewportTransform } from "@canvas/types/canvas";
+import type { DirectorScene } from "@canvas/types/director";
 
 export type CanvasProject = {
     id: string;
@@ -22,10 +23,13 @@ export type CanvasProject = {
     backgroundMode: CanvasBackgroundMode;
     showImageInfo: boolean;
     viewport: ViewportTransform;
+    directorScenes?: DirectorScene[];
 };
 
 type CanvasStore = {
     hydrated: boolean;
+    /** Desktop treats local persist as ready; cloud backup still runs in the background. */
+    cloudSynced: boolean;
     projects: CanvasProject[];
     createProject: (title?: string) => string;
     importProject: (project: Partial<CanvasProject>) => string;
@@ -33,7 +37,8 @@ type CanvasStore = {
     renameProject: (id: string, title: string) => void;
     deleteProjects: (ids: string[]) => void;
     replaceProjects: (projects: CanvasProject[]) => void;
-    updateProject: (id: string, patch: Partial<Pick<CanvasProject, "nodes" | "connections" | "chatSessions" | "activeChatId" | "backgroundMode" | "showImageInfo" | "viewport">>) => void;
+    markCloudSynced: () => void;
+    updateProject: (id: string, patch: Partial<Pick<CanvasProject, "nodes" | "connections" | "chatSessions" | "activeChatId" | "backgroundMode" | "showImageInfo" | "viewport" | "directorScenes">>) => void;
     /** Record the last successful cloud sync without bumping updatedAt. */
     markProjectCloudSynced: (id: string, syncedAt: string) => void;
     /** Insert or replace a project keeping its id — used when pulling a cloud copy. */
@@ -71,6 +76,7 @@ export const useCanvasStore = create<CanvasStore>()(
     persist(
         (set, get) => ({
             hydrated: false,
+            cloudSynced: true,
             projects: [],
             createProject: (title = i18n.t("canvas.project.untitled")) => {
                 const now = new Date().toISOString();
@@ -87,6 +93,7 @@ export const useCanvasStore = create<CanvasStore>()(
                     backgroundMode: "lines",
                     showImageInfo: false,
                     viewport: initialViewport,
+                    directorScenes: [],
                 };
                 set((state) => ({ projects: [project, ...state.projects] }));
                 return id;
@@ -105,6 +112,7 @@ export const useCanvasStore = create<CanvasStore>()(
                     backgroundMode: source.backgroundMode || "lines",
                     showImageInfo: source.showImageInfo || false,
                     viewport: source.viewport || initialViewport,
+                    directorScenes: source.directorScenes || [],
                 };
                 set((state) => ({ projects: [project, ...state.projects] }));
                 return project.id;
@@ -123,6 +131,7 @@ export const useCanvasStore = create<CanvasStore>()(
                 for (const id of ids) void removeCanvasWorkspace(id).catch(() => undefined);
             },
             replaceProjects: (projects) => set({ projects }),
+            markCloudSynced: () => set({ cloudSynced: true }),
             markProjectCloudSynced: (id, syncedAt) =>
                 set((state) => ({
                     projects: state.projects.map((project) => (project.id === id ? { ...project, cloudSyncedAt: syncedAt } : project)),
@@ -145,7 +154,7 @@ export const useCanvasStore = create<CanvasStore>()(
                     projects: state.projects,
                 }) as StorageValue<CanvasStore>["state"],
             onRehydrateStorage: () => () => {
-                useCanvasStore.setState({ hydrated: true });
+                useCanvasStore.setState({ hydrated: true, cloudSynced: true });
             },
         },
     ),

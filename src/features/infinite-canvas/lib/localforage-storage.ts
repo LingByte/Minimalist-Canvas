@@ -13,3 +13,7 @@ export const localForageStorage: StateStorage = {
     },
     removeItem: (name) => appStateStorage.removeItem(name),
 };
+
+export function localForageStorageForScope(_scope: string) {
+    return localForageStorage;
+}

@@ -6,7 +6,7 @@ import { uploadMediaFile, type UploadedFile } from "@canvas/services/file-storag
 import { buildApiUrl, resolveModelRequestConfig, resolveModelScript, type AiConfig } from "@canvas/stores/use-config-store";
 import { runModelPlugin } from "./model-plugin";
 
-type RequestOptions = { signal?: AbortSignal };
+type RequestOptions = { signal?: AbortSignal; generationClientId?: string; generationSource?: "canvas" | "workbench"; generationAttemptId?: string };
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
 
 function aiApiUrl(config: AiConfig, path: string) {

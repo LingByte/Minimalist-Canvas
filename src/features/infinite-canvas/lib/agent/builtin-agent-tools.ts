@@ -10,6 +10,29 @@ import { randomId } from "@canvas/lib/utils";
 import type { ResponseFunctionTool } from "@canvas/services/api/image";
 import { useAgentStore, type AgentPermissionMode } from "@canvas/stores/use-agent-store";
 
+export type BuiltinAgentToolDefinition = {
+    type: "function";
+    function: {
+        name: string;
+        description: string;
+        parameters: Record<string, unknown>;
+    };
+};
+
+export type BuiltinAgentToolCall = {
+    id: string;
+    name: string;
+    arguments: string;
+};
+
+export type BuiltinAgentToolResult = {
+    callId: string;
+    name: string;
+    ok: boolean;
+    summary: string;
+    result: unknown;
+};
+
 /**
  * Built-in agent tools — mirror the MCP server's tool list (src-tauri/src/mcp.rs)
  * so the side-panel agent can drive the canvas without an external Codex process.
@@ -403,4 +426,21 @@ function auditCanvasOps(snapshot: CanvasAgentSnapshot, ops: CanvasAgentOp[]) {
         createdConnectionIds,
         generationQueued,
     };
+}
+
+export const BUILTIN_AGENT_TOOLS = builtinAgentTools(true) as BuiltinAgentToolDefinition[];
+
+export async function executeBuiltinAgentTool(
+    call: BuiltinAgentToolCall,
+    ctx: { canvasContext?: unknown; navigate: NavigateFunction },
+): Promise<BuiltinAgentToolResult> {
+    try {
+        const parsed = call.arguments ? JSON.parse(call.arguments) : {};
+        const args = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+        const result = await runBuiltinAgentTool(call.name, args, ctx.navigate);
+        return { callId: call.id, name: call.name, ok: true, summary: call.name, result };
+    } catch (error) {
+        const summary = error instanceof Error ? error.message : String(error);
+        return { callId: call.id, name: call.name, ok: false, summary, result: { error: summary } };
+    }
 }

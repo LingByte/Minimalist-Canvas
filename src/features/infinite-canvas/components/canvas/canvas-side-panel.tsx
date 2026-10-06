@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { App, Empty, Input, Popconfirm, Select, Spin, Tag } from "antd";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { BookOpen, Check, ChevronRight, Download, Eye, FileText, Image as ImageIcon, ListChecks, Music2, Plus, Search, Settings2, Square, Trash2, Type, Video } from "lucide-react";
+import { BookOpen, Check, ChevronRight, Clapperboard, Download, Eye, FileText, Image as ImageIcon, ListChecks, ListVideo, Music2, Plus, Search, Settings2, Square, Trash2, Type, Video } from "lucide-react";
 import { motion } from "motion/react";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -47,6 +47,8 @@ const NODE_TYPE_ICON: Record<string, typeof Square> = {
     [CanvasNodeType.Text]: Type,
     [CanvasNodeType.Config]: Settings2,
     [CanvasNodeType.Group]: Square,
+    [CanvasNodeType.Director]: Clapperboard,
+    [CanvasNodeType.Script]: ListVideo,
 };
 
 const STATUS_COLOR: Record<string, string> = {
@@ -185,15 +187,6 @@ export function CanvasSidePanel({ nodes, selectedNodeIds, onFocusNode, onPreview
                         <CanvasGenerationLogsTab onInsert={onInsertAsset} theme={theme} />
                     )}
                 </div>
-                <div
-                    className="shrink-0 border-t px-3 py-2.5"
-                    style={{ borderColor: theme.toolbar.border }}
-                    data-tour="canvas-retention-tip"
-                >
-                    <p className="text-[11px] leading-relaxed opacity-55">
-                        {t("canvas.sidePanel.retentionTip")}
-                    </p>
-                </div>
                 <button type="button" className="absolute inset-y-0 right-0 z-40 w-4 translate-x-1/2 cursor-col-resize" onPointerDown={startResize} aria-label={t("canvas.sidePanel.resize")} />
             </motion.aside>
         </motion.div>
@@ -247,7 +240,7 @@ function TabButton({
 // Canvas tab: list nodes and center, zoom, and select the clicked node.
 // ---------------------------------------------------------------------------
 
-const NODE_FILTER_VALUES = ["all", CanvasNodeType.Image, CanvasNodeType.Video, CanvasNodeType.Text, CanvasNodeType.Audio, CanvasNodeType.Config, CanvasNodeType.Group];
+const NODE_FILTER_VALUES = ["all", CanvasNodeType.Image, CanvasNodeType.Video, CanvasNodeType.Text, CanvasNodeType.Audio, CanvasNodeType.Config, CanvasNodeType.Group, CanvasNodeType.Director, CanvasNodeType.Script];
 
 function nodePreviewText(node: CanvasNodeData) {
     if (node.type === CanvasNodeType.Text) return node.metadata?.content || node.metadata?.prompt || "";
@@ -397,7 +390,8 @@ const ASSET_GROUPS: { kind: AssetKind; icon: typeof Square }[] = [
 function buildInsertPayload(asset: Asset): InsertAssetPayload {
     if (asset.kind === "text") return { kind: "text", content: asset.data.content, title: asset.title };
     if (asset.kind === "video") return { kind: "video", url: asset.data.url, storageKey: asset.data.storageKey, title: asset.title, width: asset.data.width, height: asset.data.height };
-    return { kind: "image", dataUrl: asset.data.dataUrl, storageKey: asset.data.storageKey, title: asset.title };
+    if (asset.kind === "image") return { kind: "image", dataUrl: asset.data.dataUrl, storageKey: asset.data.storageKey, title: asset.title };
+    return { kind: "text", content: asset.title, title: asset.title };
 }
 
 const CanvasAssetsTab = memo(function CanvasAssetsTab({ onInsert, theme }: { onInsert: (payload: InsertAssetPayload) => void; theme: CanvasTheme }) {
@@ -549,6 +543,7 @@ function AssetCover({ asset }: { asset: Asset }) {
         if (asset.coverUrl) return <SmartImage src={asset.coverUrl} alt="" className="size-full object-cover transition duration-300 group-hover:scale-[1.04]" fallbackClassName="size-full" fallbackIconClassName="size-5" />;
         return <video src={`${asset.data.url}#t=0.1`} muted playsInline preload="metadata" className="size-full object-cover transition duration-300 group-hover:scale-[1.04]" />;
     }
+    if (asset.kind === "model") return <div className="grid size-full place-items-center text-[11px] opacity-70">{asset.title}</div>;
     return <SmartImage src={asset.coverUrl || asset.data.dataUrl} alt="" className="size-full object-cover transition duration-300 group-hover:scale-[1.04]" fallbackClassName="size-full" fallbackIconClassName="size-5" />;
 }
 

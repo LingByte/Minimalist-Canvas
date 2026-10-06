@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
-import { Brush, Camera, Copy, FileText, Grid2x2, Lock, LockOpen, Maximize2, Scissors, Sparkles, Upload, ZoomIn } from "lucide-react";
+import { Brush, Camera, Copy, FileText, Grid2x2, Lock, LockOpen, Maximize2, ScanFace, Scissors, Sparkles, Upload, ZoomIn, Archive } from "lucide-react";
 
 import type { CanvasNodeData } from "@canvas/types/canvas";
 import i18n from "@canvas/i18n";
 
-export type ImageNodeActionToolId = "copyPrompt" | "reversePrompt" | "replace" | "resize" | "maskEdit" | "crop" | "split" | "upscale" | "superResolve" | "angle" | "view";
+export type ImageNodeActionToolId = "copyPrompt" | "reversePrompt" | "replace" | "resize" | "maskEdit" | "crop" | "compress" | "split" | "faceMesh" | "upscale" | "superResolve" | "angle" | "view";
 export type ImageQuickToolId = "info" | "delete" | "saveAsset" | "download" | ImageNodeActionToolId;
 
 export type ImageToolHandlers = {
@@ -12,7 +12,9 @@ export type ImageToolHandlers = {
     onToggleFreeResize: (node: CanvasNodeData) => void;
     onMaskEdit: (node: CanvasNodeData) => void;
     onCrop: (node: CanvasNodeData) => void;
+    onCompress: (node: CanvasNodeData) => void;
     onSplit: (node: CanvasNodeData) => void;
+    onFaceMesh: (node: CanvasNodeData) => void;
     onUpscale: (node: CanvasNodeData) => void;
     onSuperResolve: (node: CanvasNodeData) => void;
     onAngle: (node: CanvasNodeData) => void;
@@ -36,7 +38,7 @@ export type ImageQuickToolsConfig = {
     showLabels: boolean;
 };
 
-export const IMAGE_QUICK_TOOLS_STORAGE_KEY = "canvas-image-quick-tools-v7";
+export const IMAGE_QUICK_TOOLS_STORAGE_KEY = "canvas-image-quick-tools-v9";
 
 const defaultBaseToolIds: ImageQuickToolId[] = ["info", "delete", "saveAsset", "download"];
 
@@ -91,12 +93,28 @@ export const imageToolDefinitions: ImageToolDefinition[] = [
         run: (node, handlers) => handlers.onCrop(node),
     },
     {
+        id: "compress",
+        defaultVisible: true,
+        label: () => i18n.t("canvas.imageTools.compress"),
+        title: () => i18n.t("canvas.imageTools.compressTitle"),
+        icon: () => <Archive className="size-4" />,
+        run: (node, handlers) => handlers.onCompress(node),
+    },
+    {
         id: "split",
         defaultVisible: true,
         label: () => i18n.t("canvas.imageTools.split"),
         title: () => i18n.t("canvas.imageTools.splitTitle"),
         icon: () => <Grid2x2 className="size-4" />,
         run: (node, handlers) => handlers.onSplit(node),
+    },
+    {
+        id: "faceMesh",
+        defaultVisible: true,
+        label: () => i18n.t("canvas.imageTools.faceMesh"),
+        title: () => i18n.t("canvas.imageTools.faceMeshTitle"),
+        icon: () => <ScanFace className="size-4" />,
+        run: (node, handlers) => handlers.onFaceMesh(node),
     },
     {
         id: "upscale",

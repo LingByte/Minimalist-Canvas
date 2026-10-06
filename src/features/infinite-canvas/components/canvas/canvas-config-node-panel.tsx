@@ -8,6 +8,7 @@ import { defaultConfig, resolveModelForCapability, useConfigStore, useEffectiveC
 import { canvasThemes } from "@canvas/lib/canvas-theme";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { CanvasImageSettingsPopover } from "./canvas-image-settings-popover";
+import { CanvasModelPriceHint } from "./canvas-model-price-hint";
 import { CanvasAudioSettingsPopover, type CanvasAudioSettingKey } from "./canvas-audio-settings-popover";
 import { CanvasVideoSettingsPopover } from "./canvas-video-settings-popover";
 import { CanvasTextSettingsPopover } from "./canvas-text-settings-popover";
@@ -110,26 +111,33 @@ export function CanvasConfigNodePanel({ node, isRunning, inputSummary, onConfigC
                 )}
             </div>
 
-            <Button
-                type="primary"
-                className="mt-auto !h-9 !w-full !cursor-pointer !rounded-lg"
-                disabled={isRunning || !canGenerate}
-                onMouseDown={(event) => event.stopPropagation()}
-                onClick={() => {
-                    if (!isRunning) onGenerate(node.id);
-                }}
-            >
-                <span className="inline-flex items-center gap-1.5">
-                    {isRunning ? (
-                        <LoaderCircle className="size-4 animate-spin" />
-                    ) : (
-                        <>
-                            <Play className="size-4" />
-                            <span>{t("canvas.configNode.generate")}</span>
-                        </>
-                    )}
-                </span>
-            </Button>
+            <div className="mt-auto flex items-center gap-2">
+                <CanvasModelPriceHint
+                    modelValue={config.model}
+                    resolution={mode === "video" ? config.vquality : undefined}
+                    className="min-w-0 flex-1 truncate text-left text-[11px] tabular-nums opacity-70"
+                />
+                <Button
+                    type="primary"
+                    className="!h-9 !min-w-[7.5rem] !flex-1 !cursor-pointer !rounded-lg"
+                    disabled={isRunning || !canGenerate}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onClick={() => {
+                        if (!isRunning) onGenerate(node.id);
+                    }}
+                >
+                    <span className="inline-flex items-center gap-1.5">
+                        {isRunning ? (
+                            <LoaderCircle className="size-4 animate-spin" />
+                        ) : (
+                            <>
+                                <Play className="size-4" />
+                                <span>{t("canvas.configNode.generate")}</span>
+                            </>
+                        )}
+                    </span>
+                </Button>
+            </div>
         </div>
     );
 }

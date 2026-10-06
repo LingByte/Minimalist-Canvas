@@ -68,7 +68,7 @@ export function CanvasToolsSidebar(props: { className?: string }) {
         </a>
     ) : (
         <Link
-            to="/"
+            to="/home"
             className="flex items-center justify-center transition-opacity hover:opacity-90"
             aria-label={brand}
         >

@@ -153,3 +153,8 @@ function resourceKind(node: CanvasNodeData): CanvasResourceKind | null {
     // Plugin nodes declare their input eligibility through definition.resource.
     return getNodeDefinition(node.type)?.resource?.(node)?.kind || null;
 }
+
+export function expandCanvasResourceMentions(prompt: string, references: CanvasResourceReference[]) {
+    const byId = new Map(references.map((item) => [item.nodeId, item]));
+    return prompt.replace(/@\[node:([^\]]+)\]/g, (token, nodeId: string) => byId.get(nodeId)?.label || token);
+}

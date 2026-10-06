@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, Download, FolderOpen, Home, Images, Menu, PanelLeftClose, PanelLeftOpen, Plus, Redo2, Trash2, Undo2, Upload } from "lucide-react";
-import { Button, Drawer, Dropdown, Tooltip } from "antd";
+import { Bot, Download, FolderOpen, History, Home, Images, Menu, PanelLeftClose, PanelLeftOpen, Plus, Redo2, Save, Trash2, Undo2, Upload } from "lucide-react";
+import { Button, Dropdown, Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
 
+import { CanvasVersionHistoryDrawer } from "@canvas/components/canvas/canvas-version-history-drawer";
+import { CanvasWalletChip } from "@canvas/components/layout/canvas-wallet-chip";
 import { UserStatusActions } from "@canvas/components/layout/user-status-actions";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
+import type { CanvasProject } from "@canvas/stores/canvas/use-canvas-store";
 import { useCanvasSidePanelStore } from "@canvas/stores/use-canvas-side-panel-store";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 
 export function CanvasTopBar({
+    projectId,
     title,
     titleDraft,
     isTitleEditing,
@@ -18,6 +22,9 @@ export function CanvasTopBar({
     onCancelTitleEditing,
     canUndo,
     canRedo,
+    saveDirty,
+    saveSaving,
+    onSaveProject,
     onHome,
     onProjects,
     onCreateProject,
@@ -25,11 +32,14 @@ export function CanvasTopBar({
     onExportProject,
     onOpenFolder,
     onImportImage,
+    onOpenPlugins,
     onUndo,
     onRedo,
+    onVersionRestored,
     agentOpen,
     onToggleAgent,
 }: {
+    projectId: string;
     title: string;
     titleDraft: string;
     isTitleEditing: boolean;
@@ -39,6 +49,9 @@ export function CanvasTopBar({
     onCancelTitleEditing: () => void;
     canUndo: boolean;
     canRedo: boolean;
+    saveDirty: boolean;
+    saveSaving: boolean;
+    onSaveProject: () => void;
     onHome: () => void;
     onProjects: () => void;
     onCreateProject: () => void;
@@ -46,8 +59,10 @@ export function CanvasTopBar({
     onExportProject: () => void;
     onOpenFolder?: () => void;
     onImportImage: () => void;
+    onOpenPlugins: () => void;
     onUndo: () => void;
     onRedo: () => void;
+    onVersionRestored: (project: CanvasProject) => void;
     agentOpen: boolean;
     onToggleAgent: () => void;
 }) {
@@ -55,9 +70,11 @@ export function CanvasTopBar({
     const { t } = useTranslation();
     const theme = canvasThemes[colorTheme];
     const titleRef = useRef<HTMLDivElement>(null);
-    const [shortcutsOpen, setShortcutsOpen] = useState(false);
+    const [versionsOpen, setVersionsOpen] = useState(false);
     const sidePanelOpen = useCanvasSidePanelStore((state) => state.panelOpen);
     const toggleSidePanel = useCanvasSidePanelStore((state) => state.togglePanel);
+    const saveLabel = saveSaving ? t("canvas.saving") : saveDirty ? t("canvas.saveNow") : t("canvas.saved");
+    const saveHint = saveDirty ? t("canvas.saveHintDirty") : t("canvas.saveHint");
 
     useEffect(() => {
         if (!isTitleEditing) return;
@@ -93,6 +110,19 @@ export function CanvasTopBar({
                                 { key: "new", icon: <Plus className="size-4" />, label: t("canvas.create"), onClick: onCreateProject },
                                 { key: "delete", danger: true, icon: <Trash2 className="size-4" />, label: t("canvas.deleteCurrent"), onClick: onDeleteProject },
                                 { type: "divider" },
+                                {
+                                    key: "save",
+                                    icon: <Save className="size-4" />,
+                                    label: <MenuLabel text={t("canvas.saveNow")} shortcut="⌘ S" />,
+                                    disabled: saveSaving,
+                                    onClick: onSaveProject,
+                                },
+                                {
+                                    key: "versions",
+                                    icon: <History className="size-4" />,
+                                    label: t("canvas.versions.title"),
+                                    onClick: () => setVersionsOpen(true),
+                                },
                                 { key: "import", icon: <Upload className="size-4" />, label: t("canvas.importAsset"), onClick: onImportImage },
                                 { key: "export", icon: <Download className="size-4" />, label: t("canvas.exportCurrent"), onClick: onExportProject },
                                 ...(onOpenFolder ? [{ key: "folder" as const, icon: <FolderOpen className="size-4" />, label: t("canvas.openFolder"), onClick: onOpenFolder }] : []),
@@ -132,19 +162,49 @@ export function CanvasTopBar({
                             </button>
                         )}
                     </div>
+                    <Tooltip title={saveHint}>
+                        <Button
+                            type="text"
+                            loading={saveSaving}
+                            onClick={onSaveProject}
+                            className="!flex !h-8 !items-center !gap-1.5 !rounded-xl !px-2.5 md:!h-9"
+                            style={{
+                                background: saveDirty ? theme.toolbar.activeBg : theme.toolbar.panel,
+                                color: theme.node.text,
+                                boxShadow: "0 10px 30px rgba(15,23,42,.08)",
+                            }}
+                            icon={!saveSaving ? <Save className="size-4" /> : undefined}
+                            aria-label={saveLabel}
+                        >
+                            <span className="hidden text-xs font-medium sm:inline">{saveLabel}</span>
+                            {saveDirty && !saveSaving ? <span className="size-1.5 rounded-full bg-amber-500 sm:ml-0.5" aria-hidden="true" /> : null}
+                        </Button>
+                    </Tooltip>
                 </div>
 
                 <div className="pointer-events-auto flex shrink-0 items-center gap-0.5 md:gap-1.5">
+                    <CanvasWalletChip color={theme.node.text} />
+                    <Tooltip title={t("canvas.versions.title")}>
+                        <button
+                            type="button"
+                            className="grid size-8 shrink-0 place-items-center rounded-md transition hover:bg-black/5 dark:hover:bg-white/10"
+                            style={{ color: theme.node.text }}
+                            onClick={() => setVersionsOpen(true)}
+                            aria-label={t("canvas.versions.title")}
+                        >
+                            <History className="size-4" />
+                        </button>
+                    </Tooltip>
                     <UserStatusActions
                         variant="canvas"
                         compactOnMobile
-                        onOpenShortcuts={() => setShortcutsOpen(true)}
+                        onOpenPlugins={onOpenPlugins}
                     />
                     <span className="mx-0.5 hidden h-6 w-px md:block" style={{ background: theme.toolbar.border }} />
                     <Button
                         type="text"
                         className="!flex !h-8 !w-8 !min-w-8 !items-center !justify-center !rounded-xl !p-0 md:!h-10 md:!w-auto md:!min-w-0 md:!px-3"
-                        style={{ background: agentOpen ? theme.toolbar.activeBg : theme.toolbar.panel, color: theme.node.text, boxShadow: "0 10px 30px rgba(28,25,23,.10)" }}
+                        style={{ background: agentOpen ? theme.toolbar.activeBg : theme.toolbar.panel, color: theme.node.text, boxShadow: "0 10px 30px rgba(15,23,42,.10)" }}
                         icon={<Bot className="size-4" />}
                         onClick={onToggleAgent}
                         aria-label={t(agentOpen ? "topNav.closeAgent" : "topNav.openAgent")}
@@ -153,30 +213,12 @@ export function CanvasTopBar({
                     </Button>
                 </div>
             </div>
-            <Drawer
-                title={t("canvas.shortcuts")}
-                open={shortcutsOpen}
-                onClose={() => setShortcutsOpen(false)}
-                placement="right"
-                size={420}
-                destroyOnHidden
-            >
-                <div className="space-y-2 text-sm">
-                    <Shortcut keys={["Ctrl / Space", t("canvas.shortcut.drag")]} value={t("canvas.shortcut.toggleTool")} />
-                    <Shortcut keys={[t("canvas.shortcut.wheel")]} value={t("canvas.shortcut.zoom")} />
-                    <Shortcut keys={[t("canvas.shortcut.zoomSlider")]} value={t("canvas.shortcut.preciseZoom")} />
-                    <Shortcut keys={[t("canvas.shortcut.drag")]} value={t("canvas.shortcut.boxSelect")} />
-                    <Shortcut keys={["Shift / Cmd", t("canvas.shortcut.click")]} value={t("canvas.shortcut.addSelection")} />
-                    <Shortcut keys={["Ctrl / Cmd", "A"]} value={t("canvas.shortcut.selectAll")} />
-                    <Shortcut keys={["Ctrl / Cmd", "C / V"]} value={t("canvas.shortcut.copyPaste")} />
-                    <Shortcut keys={["Ctrl / Cmd", "Z"]} value={t("canvas.undo")} />
-                    <Shortcut keys={["Ctrl / Cmd", "Shift", "Z"]} value={t("canvas.redo")} />
-                    <Shortcut keys={["Ctrl / Cmd", "Y"]} value={t("canvas.redo")} />
-                    <Shortcut keys={["Delete / Backspace"]} value={t("canvas.shortcut.delete")} />
-                    <Shortcut keys={["Esc"]} value={t("canvas.shortcut.escape")} />
-                    <Shortcut keys={[t("canvas.shortcut.dropMedia")]} value={t("canvas.shortcut.upload")} />
-                </div>
-            </Drawer>
+            <CanvasVersionHistoryDrawer
+                open={versionsOpen}
+                projectId={projectId}
+                onClose={() => setVersionsOpen(false)}
+                onRestored={onVersionRestored}
+            />
         </>
     );
 }
@@ -187,26 +229,5 @@ function MenuLabel({ text, shortcut }: { text: string; shortcut: string }) {
             <span>{text}</span>
             <span className="text-xs opacity-45">{shortcut}</span>
         </span>
-    );
-}
-
-function Shortcut({ keys, value }: { keys: string[]; value: string }) {
-    return (
-        <div className="grid grid-cols-[minmax(0,1fr)_120px] items-center gap-6 rounded-lg px-1 py-1.5">
-            <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-                {keys.map((key, index) => (
-                    <span key={`${key}-${index}`} className="flex items-center gap-1.5">
-                        {index ? <span className="text-xs opacity-35">+</span> : null}
-                        <kbd
-                            className="min-w-9 rounded-md border px-2.5 py-1.5 text-center text-xs font-medium leading-none shadow-[inset_0_-1px_0_rgba(0,0,0,.08),0_1px_2px_rgba(0,0,0,.06)]"
-                            style={{ borderColor: "rgba(120,113,108,.28)", background: "linear-gradient(#fff, rgba(245,245,244,.92))", color: "rgb(68,64,60)" }}
-                        >
-                            {key}
-                        </kbd>
-                    </span>
-                ))}
-            </span>
-            <span className="text-right text-sm opacity-55">{value}</span>
-        </div>
     );
 }

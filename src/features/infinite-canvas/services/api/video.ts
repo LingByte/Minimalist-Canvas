@@ -561,7 +561,7 @@ function assertVideoConfig(config: AiConfig, model: string) {
     if (config.apiFormat === "gemini") throw new Error(apiText("geminiVideoUnsupported"));
 }
 
-function normalizeVideoSeconds(value: string) {
+export function normalizeVideoSeconds(value: string) {
     const seconds = Math.floor(Number(value) || 6);
     return String(Math.max(VIDEO_SECONDS_MIN, Math.min(VIDEO_SECONDS_MAX, seconds)));
 }
@@ -573,15 +573,17 @@ function normalizeVideoSize(value: string) {
     return ["9:16", "2:3", "3:4"].includes(size) ? "720x1280" : "1280x720";
 }
 
-function normalizeVideoResolution(value: string) {
+export function normalizeVideoResolution(value: string) {
     if (value === "low") return "480p";
     if (value === "auto" || value === "high" || value === "medium") return "720p";
     const resolution = value.replace(/p$/i, "") || "720";
     return `${resolution}p`;
 }
 
-function unwrapVideoResponse(payload: ApiVideoResponse) {
-    return unwrapEnvelope(payload, apiText("noVideoTask"));
+function unwrapVideoResponse(payload: ApiVideoResponse): VideoResponse {
+    const data = unwrapEnvelope(payload, apiText("noVideoTask"));
+    if (!data || typeof data !== "object") throw new Error(apiText("noVideoTask"));
+    return data as VideoResponse;
 }
 
 function unwrapEnvelope<T>(payload: ApiEnvelope<T>, emptyMessage: string): T {
@@ -622,9 +624,9 @@ function videoResultUrl(payload: VideoResponse) {
         : undefined;
     // Prefer dedicated result fields over bare video_url/url — upstream often echoes the
     // reference video in video_url while the finished output is only in result_url.
-    return [payload.result_url, payload.url, payload.video_url, contentUrl, nestedUrl, metadataUrl].find(
+    return ([payload.result_url, payload.url, payload.video_url, contentUrl, nestedUrl, metadataUrl].find(
         (url) => typeof url === "string" && (isPublicMediaUrl(url) || /\.mp4(\?|#|$)/i.test(url)),
-    );
+    ) as string | undefined);
 }
 
 function normalizeResultUrlKey(url: string) {

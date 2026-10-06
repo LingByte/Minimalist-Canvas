@@ -77,7 +77,7 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
             onClose={onClose}
             mask={!tourActive}
             zIndex={tourActive ? 10080 : undefined}
-            styles={{ body: { paddingTop: 16, displayBottom: 16 } }}
+            styles={{ body: { paddingTop: 16, paddingBottom: 16 } }}
             extra={
                 <Space>
                     <Button onClick={onClose}>{t("common.cancel")}</Button>

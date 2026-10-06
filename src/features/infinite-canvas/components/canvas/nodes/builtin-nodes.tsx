@@ -1,4 +1,4 @@
-import { FileText, Group, Image as ImageIcon, Music2, Settings2, Video } from "lucide-react";
+import { Clapperboard, FileText, Group, Image as ImageIcon, ListVideo, Music2, Settings2, Video } from "lucide-react";
 
 import i18n from "@canvas/i18n";
 
@@ -20,7 +20,7 @@ function builtinResource(node: CanvasNodeData): CanvasNodeResource | null {
 const iconClass = "size-5";
 
 const BUILTIN_DEFINITIONS: CanvasNodeDefinition[] = [
-    { type: CanvasNodeType.Text, title: i18n.t("assets.kinds.text"), icon: <FileText className={iconClass} />, minimapColor: undefined, resource: builtinResource },
+    { type: CanvasNodeType.Text, title: i18n.t("assets.kinds.text"), icon: <FileText className={iconClass} />, minimapColor: "#a8a29e", resource: builtinResource },
     { type: CanvasNodeType.Image, title: i18n.t("assets.kinds.image"), icon: <ImageIcon className={iconClass} />, minimapColor: "#10b981", keepAspectRatio: (node: CanvasNodeData) => !node.metadata?.freeResize, resource: builtinResource },
     // Native <video>/<audio controls> swallow mouse events in Firefox/Zen; interactionToggle
     // defaults to move mode (pointer-events: none on content) so nodes stay draggable everywhere.
@@ -28,6 +28,8 @@ const BUILTIN_DEFINITIONS: CanvasNodeDefinition[] = [
     { type: CanvasNodeType.Audio, title: i18n.t("assets.kinds.audio"), icon: <Music2 className={iconClass} />, minimapColor: "#a855f7", interactionToggle: true, resource: builtinResource },
     { type: CanvasNodeType.Config, title: i18n.t("canvas.configNode.title"), icon: <Settings2 className={iconClass} />, minimapColor: "#60a5fa", hasSourceHandle: false },
     { type: CanvasNodeType.Group, title: i18n.t("canvas.node.group"), icon: <Group className={iconClass} />, minimapColor: "#94a3b8" },
+    { type: CanvasNodeType.Director, title: i18n.t("canvas.nodeTypes.director"), icon: <Clapperboard className={iconClass} />, minimapColor: "#38bdf8", hidePanel: true },
+    { type: CanvasNodeType.Script, title: i18n.t("canvas.nodeTypes.script"), icon: <ListVideo className={iconClass} />, minimapColor: "#f59e0b", hidePanel: true },
 ].map((def) => {
     const spec = NODE_SPECS[def.type];
     return { ...def, title: spec.title, defaultSize: { width: spec.width, height: spec.height }, defaultMetadata: spec.metadata };

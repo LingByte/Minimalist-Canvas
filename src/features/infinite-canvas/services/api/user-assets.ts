@@ -1,6 +1,6 @@
 import { api } from "@/lib/api";
 
-export type UserAssetKind = "text" | "image" | "video";
+export type UserAssetKind = "text" | "image" | "video" | "model";
 
 export type UserAssetDTO = {
   id: number;

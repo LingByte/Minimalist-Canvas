@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { toIntlLocale } from "@/i18n/languages";
 
 import { AssetPickerModal, type InsertAssetPayload } from "@canvas/components/canvas/asset-picker-modal";
-import { CanvasResourceMentionTextarea } from "@canvas/components/canvas/canvas-resource-mention-textarea";
+import { CanvasPromptChipInput } from "@canvas/components/canvas/canvas-prompt-chip-input";
 import { ModelPicker } from "@canvas/components/model-picker";
 import { PromptSelectDialog } from "@canvas/components/prompts/prompt-select-dialog";
 import { VideoSettingsPanel, VIDEO_SECONDS_MAX, VIDEO_SECONDS_MIN, normalizeVideoResolutionValue, normalizeVideoSizeValue, videoSizeLabel } from "@canvas/components/video-settings-panel";
@@ -25,7 +25,7 @@ import {
 import { CloudUploadProgress } from "@canvas/components/canvas/cloud-upload-progress";
 import { assertCanvasMediaUploadSize, CANVAS_MAX_AUDIO_BYTES, CANVAS_MAX_VIDEO_BYTES, QIHUO_MAX_IMAGE_UPLOAD_BYTES } from "@canvas/services/object-storage";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
-import type { CanvasResourceReference } from "@canvas/lib/canvas/canvas-resource-references";
+import { expandCanvasResourceMentions, type CanvasResourceReference } from "@canvas/lib/canvas/canvas-resource-references";
 import { buildImageReferencePromptText, imageReferenceLabel } from "@canvas/lib/image-reference-prompt";
 import { formatBytes, formatDuration } from "@canvas/lib/image-utils";
 import { deleteStoredMedia, uploadMediaFile } from "@canvas/services/file-storage";
@@ -39,6 +39,7 @@ import { shouldKeepVideoAssetPending } from "@canvas/services/generation-asset-s
 import { useAssetStore } from "@canvas/stores/use-asset-store";
 import { useWorkbenchAgentStore } from "@canvas/stores/use-workbench-agent-store";
 import { boolConfig, useConfigStore, useEffectiveConfig, type AiConfig } from "@canvas/stores/use-config-store";
+import { useConfirmGenerationQuota } from "@canvas/lib/use-confirm-generation-quota";
 import { useModelUnitPrice } from "@canvas/lib/use-model-unit-price";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import type { ReferenceImage } from "@canvas/types/image";
@@ -99,6 +100,7 @@ type UpdateAiConfig = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => 
 export default function VideoPage() {
     const { message } = App.useApp();
     const { t } = useTranslation();
+    const confirmGenerationQuota = useConfirmGenerationQuota();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const videoFileInputRef = useRef<HTMLInputElement>(null);
     const audioFileInputRef = useRef<HTMLInputElement>(null);
@@ -158,7 +160,6 @@ export default function VideoPage() {
 
     const model = effectiveConfig.videoModel || effectiveConfig.model;
     const priceHint = useModelUnitPrice(model);
-    const canGenerate = Boolean(prompt.trim());
     const mentionReferences = useMemo<CanvasResourceReference[]>(() => {
         const images = references.map((item, index) => ({
             id: item.id,
@@ -179,6 +180,8 @@ export default function VideoPage() {
         });
         return [...images, ...videos, ...audios];
     }, [audioReferences, references, t, videoReferences]);
+    const promptText = expandCanvasResourceMentions(prompt, mentionReferences).trim();
+    const canGenerate = Boolean(promptText);
 
     useEffect(() => {
         if (!running || !startedAt) return;
@@ -456,6 +459,17 @@ export default function VideoPage() {
             return;
         }
         const count = Math.max(1, Math.min(VIDEO_MAX_GENERATION_COUNT, generationCount));
+        const approved = await confirmGenerationQuota({
+            modelValue: model,
+            mode: "video",
+            count,
+            seconds: snapshot.config.videoSeconds,
+            resolution: snapshot.config.vquality,
+        });
+        if (!approved) {
+            if (agentTaskId) updateAgentTask(agentTaskId, { status: "failed", error: t("generationQuota.cancel") });
+            return;
+        }
         setElapsedMs(0);
         setRunning(true);
         if (agentTaskId) updateAgentTask(agentTaskId, { status: "running", error: undefined });
@@ -564,7 +578,7 @@ export default function VideoPage() {
     }, [autoRunToken]);
 
     const buildRequestSnapshot = () => {
-        const text = prompt.trim();
+        const text = promptText;
         if (!text) {
             message.error(t("videoWorkbench.promptRequired"));
             return null;
@@ -584,16 +598,7 @@ export default function VideoPage() {
             setBatchConfirmOpen(true);
             return;
         }
-        const content = priceHint
-            ? t("workbench.confirmSpend", { price: priceHint })
-            : t("workbench.confirmSpendTitle");
-        Modal.confirm({
-            title: t("workbench.confirmSpendTitle"),
-            content,
-            okText: t("workbench.confirmSpendOk"),
-            cancelText: t("common.cancel"),
-            onOk: () => void generate(),
-        });
+        void generate();
     };
 
     const confirmBatchGenerate = () => {
@@ -991,14 +996,12 @@ export default function VideoPage() {
 
                             <div>
                                 <div className={workbenchPromptShellClassName()}>
-                                    <CanvasResourceMentionTextarea
+                                    <CanvasPromptChipInput
                                         value={prompt}
                                         onChange={setPrompt}
                                         references={mentionReferences}
-                                        rows={7}
                                         placeholder={t("videoWorkbench.promptPlaceholder")}
-                                        className="min-h-[160px] w-full resize-y border-0 bg-transparent px-3 pt-3 pb-12 text-sm leading-6 text-stone-900 outline-none dark:text-stone-100"
-                                        style={{ color: "inherit" }}
+                                        className="thin-scrollbar min-h-[160px] w-full cursor-text bg-transparent px-3 pt-3 pb-12 text-sm leading-6 outline-none"
                                     />
                                     <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-end gap-2 p-2">
                                         <button
@@ -1034,8 +1037,7 @@ export default function VideoPage() {
                             }
                             generateLabel={t("workbench.generate")}
                             generatePrice={priceHint || undefined}
-                            generateTip={t("workbench.retentionTip")}
-                            generating={running}
+                                                        generating={running}
                             disabled={!canGenerate || running}
                             onGenerate={requestGenerate}
                         />

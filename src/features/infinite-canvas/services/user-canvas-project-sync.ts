@@ -130,6 +130,9 @@ function normalizeRemoteProject(
       y: typeof viewport?.y === 'number' ? viewport.y : initialViewport.y,
       k: typeof viewport?.k === 'number' ? viewport.k : initialViewport.k,
     },
+    directorScenes: Array.isArray(root.directorScenes)
+      ? (root.directorScenes as CanvasProject['directorScenes'])
+      : [],
   }
 }
 
@@ -230,7 +233,8 @@ function projectNeedsCloudSync(older: CanvasProject | undefined, project: Canvas
     older.chatSessions !== project.chatSessions ||
     older.activeChatId !== project.activeChatId ||
     older.backgroundMode !== project.backgroundMode ||
-    older.showImageInfo !== project.showImageInfo
+    older.showImageInfo !== project.showImageInfo ||
+    older.directorScenes !== project.directorScenes
   )
 }
 
@@ -363,6 +367,37 @@ export async function pullCanvasProjectFromCloud(
   skipPushUntil = Date.now() + 2500
   useCanvasStore.getState().restoreProject(remote)
   return remote
+}
+
+export async function deleteCanvasProjectsFromCloud(ids: string[]): Promise<void> {
+  ensureCanvasProjectBackupSubscription()
+  const unique = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)))
+  if (unique.length === 0) return
+  for (const id of unique) {
+    clearProjectTimers(id)
+    dirtyProjectIds.delete(id)
+    const existing = deleteTimers.get(id)
+    if (existing) {
+      clearTimeout(existing)
+      deleteTimers.delete(id)
+    }
+  }
+  await deleteUserCanvasProjectsByClientIds(unique)
+  skipPushUntil = Date.now() + 2500
+  useCanvasStore.getState().deleteProjects(unique)
+  skipPushUntil = 0
+}
+
+export function applyRestoredCanvasProject(
+  clientId: string,
+  project: unknown,
+  fallbackTitle?: string
+): CanvasProject | null {
+  const normalized = normalizeRemoteProject(project, clientId, fallbackTitle)
+  if (!normalized) return null
+  skipPushUntil = Date.now() + 3000
+  useCanvasStore.getState().restoreProject(normalized)
+  return normalized
 }
 
 /**

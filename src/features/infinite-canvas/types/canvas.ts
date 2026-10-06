@@ -16,6 +16,8 @@ export enum CanvasNodeType {
     Video = "video",
     Audio = "audio",
     Group = "group",
+    Director = "director",
+    Script = "script",
 }
 
 // Node types are open strings: built-ins use CanvasNodeType and plugins use "<pluginId>:<name>".
@@ -24,6 +26,19 @@ export type CanvasNodeTypeId = CanvasNodeType | (string & {});
 export type CanvasNodeStatus = "idle" | "success" | "loading" | "error";
 export type CanvasGenerationMode = "text" | "image" | "video" | "audio";
 export type CanvasImageGenerationType = "generation" | "edit";
+
+export type StoryboardRow = {
+    id: string;
+    shotNumber: number;
+    durationSeconds: number;
+    plotDescription: string;
+    imageNodeId?: string;
+    videoNodeId?: string;
+};
+
+export type StoryboardData = {
+    rows: StoryboardRow[];
+};
 
 export type CanvasNodeImage = {
     id: string;
@@ -82,6 +97,39 @@ export type CanvasNodeMetadata = {
     durationMs?: number;
     groupId?: string;
     interactive?: boolean; // Plugin node interaction/move state; see CanvasNodeDefinition.interactionToggle.
+    workflowKind?: string;
+    workflowTitle?: string;
+    workflowDescription?: string;
+    shotIndex?: number;
+    assetTags?: string[];
+    assetId?: string;
+    directorSceneId?: string;
+    directorShotId?: string;
+    directorPreviewNodeId?: string;
+    directorClayVideoNodeId?: string;
+    directorDepthNodeId?: string;
+    directorNormalNodeId?: string;
+    directorCoverStorageKey?: string;
+    directorCoverUrl?: string;
+    directorCoverSceneUpdatedAt?: string;
+    referenceAssetNodeIds?: string[];
+    videoCameraMoveId?: string;
+    videoCameraMovePrompt?: string;
+    videoEditOperation?: string;
+    videoStartFrameNodeId?: string;
+    videoEndFrameNodeId?: string;
+    storyboard?: StoryboardData;
+    hasAudio?: boolean;
+    videoPreview?: {
+        content?: string;
+        storageKey?: string;
+        width?: number;
+        height?: number;
+        bytes?: number;
+        mimeType?: string;
+        captureVersion?: number;
+        sourceKey?: string;
+    };
 };
 
 export type CanvasNodeData = {

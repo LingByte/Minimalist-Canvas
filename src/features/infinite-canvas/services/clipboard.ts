@@ -1,3 +1,5 @@
+import { readImage as readTauriClipboardImage, readText as readTauriClipboardText } from "@tauri-apps/plugin-clipboard-manager";
+
 import { isTauri } from "@canvas/services/fs-store";
 
 /**
@@ -64,8 +66,7 @@ export async function readClipboardImage(): Promise<File | null> {
     if (isTauri()) {
         // 2a. Try native image read.
         try {
-            const { readImage } = await import("@tauri-apps/plugin-clipboard-manager");
-            const image = await readImage();
+            const image = await readTauriClipboardImage();
             const rgba = await image.rgba();
             const { width, height } = await image.size();
             console.log("[clipboard] tauri readImage ok", { rgbaLen: rgba.length, width, height });
@@ -87,8 +88,7 @@ export async function readClipboardImage(): Promise<File | null> {
 
         // 2b. Try native text read — maybe the clipboard has an image URL.
         try {
-            const { readText } = await import("@tauri-apps/plugin-clipboard-manager");
-            const text = ((await readText()) ?? "").trim();
+            const text = ((await readTauriClipboardText()) ?? "").trim();
             if (isHttpUrl(text)) {
                 console.log("[clipboard] tauri readText got URL:", text);
                 const file = await urlToImageFile(text);
@@ -115,8 +115,7 @@ export async function readClipboardText(): Promise<string> {
     // Tauri fallback.
     if (isTauri()) {
         try {
-            const { readText } = await import("@tauri-apps/plugin-clipboard-manager");
-            return (await readText()) ?? "";
+            return (await readTauriClipboardText()) ?? "";
         } catch (error) {
             console.warn("[clipboard] tauri readText failed", error);
         }

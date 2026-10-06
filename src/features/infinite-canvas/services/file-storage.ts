@@ -4,7 +4,17 @@ import { publishCloudMediaUrl } from "@canvas/services/cloud-upload-progress";
 import { blobStore, isTauri } from "@canvas/services/fs-store";
 import { uploadCanvasMedia, assertCanvasMediaUploadSize } from "@canvas/services/object-storage";
 
-export type UploadedFile = { url: string; storageKey: string; bytes: number; mimeType: string; width?: number; height?: number; durationMs?: number };
+export type UploadedFile = {
+    url: string;
+    storageKey: string;
+    bytes: number;
+    mimeType: string;
+    width?: number;
+    height?: number;
+    durationMs?: number;
+    preview?: { url: string; storageKey: string; width: number; height: number; bytes: number; mimeType: string };
+    pendingRemoteUpload?: boolean;
+};
 
 const store = blobStore("media_files");
 const objectUrls = new Map<string, string>();
@@ -16,7 +26,14 @@ export type UploadMediaOptions = {
     signal?: AbortSignal;
 };
 
-export async function uploadMediaFile(input: string | Blob, prefix = "file", options?: UploadMediaOptions): Promise<UploadedFile> {
+export async function uploadMediaFile(
+    input: string | Blob,
+    prefix = "file",
+    options?: UploadMediaOptions | ((uploadedBytes: number, totalBytes: number) => void),
+    _scope?: unknown,
+): Promise<UploadedFile> {
+    const resolvedOptions: UploadMediaOptions | undefined =
+        typeof options === "function" ? { onProgress: options } : options;
     const blob = typeof input === "string" ? await fetchBlob(input) : input;
     assertCanvasMediaUploadSize(blob.size, blob.type, input instanceof File ? input.name : "");
     const storageKey = `${prefix}:${nanoid()}`;
@@ -36,8 +53,8 @@ export async function uploadMediaFile(input: string | Blob, prefix = "file", opt
         filename: input instanceof File ? input.name : undefined,
         contentType: base.mimeType,
         purpose: "canvas",
-        onProgress: options?.onProgress,
-        signal: options?.signal,
+        onProgress: resolvedOptions?.onProgress,
+        signal: resolvedOptions?.signal,
         onSuccess: (uploaded) => {
             if (uploaded.accessUrl && isPubliclyReachableMediaUrl(uploaded.accessUrl)) {
                 publishCloudMediaUrl(storageKey, uploaded.accessUrl);
@@ -52,15 +69,15 @@ export async function uploadMediaFile(input: string | Blob, prefix = "file", opt
             return null;
         })
         .catch((error) => {
-            if (isAbortError(error) || options?.signal?.aborted) throw error;
+            if (isAbortError(error) || resolvedOptions?.signal?.aborted) throw error;
             return null;
         });
 
     // Local file is already usable. Cloud upload continues in the background.
-    if (options?.background) return base;
+    if (resolvedOptions?.background) return base;
 
     const uploaded = await cloud;
-    if (options?.signal?.aborted) {
+    if (resolvedOptions?.signal?.aborted) {
         const error = new Error("Upload canceled");
         error.name = "AbortError";
         throw error;

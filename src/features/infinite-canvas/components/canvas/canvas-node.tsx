@@ -57,6 +57,7 @@ type CanvasNodeProps = {
     onDownloadBatchImage?: (node: CanvasNodeData, imageId: string) => void;
     onRetryBatchImage?: (node: CanvasNodeData, imageId: string) => void;
     onDeleteBatchImage?: (nodeId: string, imageId: string) => void;
+    onImageNaturalSize?: (nodeId: string, width: number, height: number) => void;
     onRetry?: (node: CanvasNodeData) => void;
     onCheckVideoStatus?: (node: CanvasNodeData) => void;
     onGenerateImage?: (node: CanvasNodeData) => void;
@@ -429,7 +430,7 @@ export const CanvasNode = React.memo(function CanvasNode({
 
                 {showImageInfo && hasImageContent ? <ImageInfoBar node={data} /> : null}
 
-                {!isGroup && !hasImageContent && !hasVideoContent && !hasAudioContent ? <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12" style={{ background: `linear-gradient(to top, ${theme.canvas.background}66, transparent)` }} /> : null}
+                {!isGroup && data.type !== CanvasNodeType.Director && data.type !== CanvasNodeType.Script && !hasImageContent && !hasVideoContent && !hasAudioContent ? <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12" style={{ background: `linear-gradient(to top, ${theme.canvas.background}66, transparent)` }} /> : null}
 
                 <ResizeHandle corner="top-left" onMouseDown={handleResizeMouseDown} />
                 <ResizeHandle corner="top-right" onMouseDown={handleResizeMouseDown} />
@@ -446,7 +447,7 @@ export const CanvasNode = React.memo(function CanvasNode({
 });
 
 function NodeContent(props: NodeContentRendererProps) {
-    if (props.node.type === CanvasNodeType.Config && props.renderNodeContent) return props.renderNodeContent(props.node);
+    if ((props.node.type === CanvasNodeType.Config || props.node.type === CanvasNodeType.Director || props.node.type === CanvasNodeType.Script) && props.renderNodeContent) return props.renderNodeContent(props.node);
     if (props.isBatchRoot) return <ImageNodeContent {...props} />;
     if (props.node.metadata?.status === "loading") {
         return <LoadingContent theme={props.theme} progress={props.node.metadata?.generationProgress} />;
@@ -474,6 +475,8 @@ const nodeContentRenderers = {
     [CanvasNodeType.Video]: VideoNodeContent,
     [CanvasNodeType.Audio]: AudioNodeContent,
     [CanvasNodeType.Group]: GroupNodeContent,
+    [CanvasNodeType.Director]: EmptyImageContent,
+    [CanvasNodeType.Script]: EmptyImageContent,
 } satisfies Record<CanvasNodeType, (props: NodeContentRendererProps) => ReactNode>;
 
 function GroupNodeContent({ node, theme, groupChildCount }: NodeContentRendererProps) {

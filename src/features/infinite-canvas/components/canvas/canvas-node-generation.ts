@@ -32,12 +32,12 @@ export function buildNodeGenerationContext(
     nodes: CanvasNodeData[],
     connections: CanvasConnection[],
     prompt: string,
-    options?: { appendUpstreamText?: boolean },
+    options?: { appendUpstreamText?: boolean; includeSourceMedia?: boolean },
 ): NodeGenerationContext {
     const inputs = buildNodeGenerationInputs(nodeId, nodes, connections);
     const sourceNode = nodes.find((node) => node.id === nodeId);
     if (sourceNode?.type === CanvasNodeType.Config && Boolean(sourceNode.metadata?.composerContent?.trim())) {
-        return buildComposerGenerationContext(inputs, prompt);
+        return withSourceMedia(buildComposerGenerationContext(inputs, prompt), sourceNode, options?.includeSourceMedia);
     }
 
     const appendUpstreamText = options?.appendUpstreamText !== false;
@@ -51,14 +51,41 @@ export function buildNodeGenerationContext(
     const referenceVideos = inputs.map((input) => input.video).filter((video): video is ReferenceVideo => Boolean(video));
     const referenceAudios = inputs.map((input) => input.audio).filter((audio): audio is ReferenceAudio => Boolean(audio));
 
+    return withSourceMedia(
+        {
+            prompt: upstreamText ? `${prompt}\n\n${upstreamText}` : prompt,
+            referenceImages,
+            referenceVideos,
+            referenceAudios,
+            textCount: inputs.filter((input) => input.type === "text").length,
+            imageCount: referenceImages.length,
+            videoCount: referenceVideos.length,
+            audioCount: referenceAudios.length,
+        },
+        sourceNode,
+        options?.includeSourceMedia,
+    );
+}
+
+function withSourceMedia(
+    context: NodeGenerationContext,
+    sourceNode: CanvasNodeData | undefined,
+    include?: boolean,
+): NodeGenerationContext {
+    if (!include || !sourceNode) return context;
+    const image = readReferenceImage(sourceNode);
+    const audio = readReferenceAudio(sourceNode);
+    const referenceImages = image && !context.referenceImages.some((item) => item.id === image.id)
+        ? [image, ...context.referenceImages]
+        : context.referenceImages;
+    const referenceAudios = audio && !context.referenceAudios.some((item) => item.id === audio.id)
+        ? [audio, ...context.referenceAudios]
+        : context.referenceAudios;
     return {
-        prompt: upstreamText ? `${prompt}\n\n${upstreamText}` : prompt,
+        ...context,
         referenceImages,
-        referenceVideos,
         referenceAudios,
-        textCount: inputs.filter((input) => input.type === "text").length,
         imageCount: referenceImages.length,
-        videoCount: referenceVideos.length,
         audioCount: referenceAudios.length,
     };
 }

@@ -74,6 +74,18 @@ export function assetToUpsertInput(asset: Asset): UpsertUserAssetInput | null {
       bytes: asset.data.bytes,
     };
   }
+  if (asset.kind === "model") {
+    const mediaUrl = firstDurableUrl(asset.data.url, ...metadataDurableUrls(asset.metadata));
+    const storageKey = asset.data.storageKey || "";
+    if (!mediaUrl && !storageKey) return null;
+    return {
+      ...base,
+      media_url: mediaUrl,
+      storage_key: storageKey,
+      mime_type: asset.data.mimeType,
+      bytes: asset.data.bytes,
+    };
+  }
   const mediaUrl = firstDurableUrl(asset.data.url, ...metadataDurableUrls(asset.metadata));
   const storageKey = asset.data.storageKey || "";
   if (!mediaUrl && !storageKey) return null;
@@ -142,6 +154,21 @@ export function userAssetDtoToAsset(dto: UserAssetDTO): Asset | null {
       },
     };
   }
+  if (dto.kind === "model") {
+    const mediaUrl = dto.media_url || "";
+    if (!mediaUrl && !dto.storage_key) return null;
+    return {
+      ...base,
+      kind: "model",
+      data: {
+        url: mediaUrl,
+        storageKey: dto.storage_key || undefined,
+        mimeType: dto.mime_type || "model/gltf-binary",
+        bytes: dto.bytes || 0,
+        fileName: dto.title,
+      },
+    };
+  }
   return null;
 }
 
@@ -197,6 +224,39 @@ async function ensureDurableAssetMedia(asset: Asset): Promise<Asset> {
         data: {
           ...asset.data,
           dataUrl: uploaded.accessUrl,
+          bytes: uploaded.bytes || asset.data.bytes,
+          mimeType: uploaded.mimeType || asset.data.mimeType,
+        },
+      };
+    } catch {
+      return asset;
+    }
+  }
+
+  if (asset.kind === "model") {
+    const existing = firstDurableUrl(asset.data.url, ...metadataDurableUrls(asset.metadata));
+    if (existing) {
+      return {
+        ...asset,
+        data: { ...asset.data, url: existing },
+        metadata: { ...asset.metadata, upstreamUrl: firstDurableUrl(...metadataDurableUrls(asset.metadata), existing) || existing },
+      };
+    }
+    let blob: Blob | null = null;
+    if (asset.data.storageKey) blob = await getMediaBlob(asset.data.storageKey);
+    if (!blob && asset.data.url) blob = await blobFromUrl(asset.data.url);
+    if (!blob) return asset;
+    try {
+      const uploaded = await uploadCanvasMedia(blob, {
+        contentType: asset.data.mimeType || blob.type || "model/gltf-binary",
+        purpose: "canvas",
+      });
+      if (!uploaded?.accessUrl) return asset;
+      return {
+        ...asset,
+        data: {
+          ...asset.data,
+          url: uploaded.accessUrl,
           bytes: uploaded.bytes || asset.data.bytes,
           mimeType: uploaded.mimeType || asset.data.mimeType,
         },

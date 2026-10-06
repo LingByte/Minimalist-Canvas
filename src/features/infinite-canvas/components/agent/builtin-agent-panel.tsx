@@ -1,24 +1,32 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { App, Button, Dropdown, Tooltip } from "antd";
-import { Bot, History, MessageSquare, PanelRightClose, PlugZap, Plus, Settings2, Sparkles, TerminalSquare } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { App, Button, Tooltip } from "antd";
+import {
+    Bot,
+    History,
+    MessageSquare,
+    PanelRightClose,
+    Plus,
+    Settings2,
+    Sparkles,
+    Trash2,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useNavigate, useParams } from "react-router-dom";
 
 import { AgentChatTimeline } from "./agent-chat";
 import { AgentChatComposer } from "./agent-chat-composer";
 import { AgentConnectView } from "./agent-connect-view";
-import { AgentMcpSettings } from "./agent-mcp-settings";
 import { AgentPanelTabs } from "./agent-panel-tabs";
-import { BuiltinAgentHistoryView } from "./builtin-agent-history-view";
-import { toolCallDetail, toolName, toolSummary } from "./agent-event-formatters";
+import { runBuiltinAgentHarness } from "@canvas/lib/agent/builtin-agent-harness";
+import {
+    deleteBuiltinAgentThread,
+    loadBuiltinAgentThreads,
+    titleFromMessages,
+    upsertBuiltinAgentThread,
+    type BuiltinAgentThread,
+} from "@canvas/lib/canvas/builtin-agent-threads";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
 import { randomId } from "@canvas/lib/utils";
-import { builtinAgentSystemPrompt, builtinAgentTools, runBuiltinAgentTool, toolResultText } from "@canvas/lib/agent/builtin-agent-tools";
-import { describeToolsForReAct, parseReActActions, reactSystemPrompt, stripReActBlocks } from "@canvas/lib/agent/react-parser";
-import { applyBuiltinThread, builtinSession, deleteBuiltinThread, flushBuiltinSession, listBuiltinThreads, loadBuiltinThread, persistBuiltinSession, resetBuiltinSession, restoreLatestBuiltinSession, type BuiltinThreadSummary } from "@canvas/lib/agent/builtin-agent-session";
-import { requestAgentChatCompletion, type AgentToolCall } from "@canvas/services/api/image";
-import { selectedBuiltinSkillPrompt, useBuiltinSkillStore } from "@canvas/stores/use-builtin-skill-store";
-import { useMcpClientStore } from "@canvas/stores/use-mcp-client-store";
 import { useAgentStore, type AgentChatItem, type AgentModel } from "@canvas/stores/use-agent-store";
 import {
     encodeChannelModel,
@@ -33,54 +41,35 @@ import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { getDefaultChannel } from "@canvas/integration/gateway-utils";
 import { syncGatewayModels } from "@canvas/integration/sync-gateway-models";
 
-const MAX_TOOL_ROUNDS = 8;
-
-function parseToolArguments(raw: string): Record<string, unknown> {
-    try {
-        const parsed = JSON.parse(raw || "{}");
-        return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
-    } catch {
-        return {};
-    }
-}
-
 /**
- * Built-in side-panel chat: uses the user's channel Base URL + API Key.
- * Does not depend on external Canvas Agent / SSE.
+ * Built-in ReAct agent: Base URL + API Key, canvas tools, context, multi-turn local history.
  */
 export function BuiltinAgentPanel() {
     const { message } = App.useApp();
     const { t } = useTranslation();
     const navigate = useNavigate();
+    const { id: projectId = "default" } = useParams();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const config = useEffectiveConfig();
     const isAiConfigReady = useConfigStore((state) => state.isAiConfigReady);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const updateConfig = useConfigStore((state) => state.updateConfig);
-    const {
-        prompt,
-        sending,
-        waiting,
-        activeTab,
-        activity,
-    } = useAgentStore();
+    const { prompt, sending, waiting, activeTab, activity, messages } = useAgentStore();
     const setAgentState = useAgentStore((state) => state.setAgentState);
     const closePanel = useAgentStore((state) => state.closePanel);
     const abortRef = useRef<AbortController | null>(null);
-    const [streamId, setStreamId] = useState("");
     const [syncingModels, setSyncingModels] = useState(false);
-    const [threads, setThreads] = useState<BuiltinThreadSummary[]>([]);
-    const [activeThreadId, setActiveThreadId] = useState(builtinSession.threadId);
     const didSyncModelsRef = useRef(false);
-    const skills = useBuiltinSkillStore((state) => state.skills);
-    const selectedSkillName = useBuiltinSkillStore((state) => state.selectedName);
-    const loadSkills = useBuiltinSkillStore((state) => state.load);
-    const selectSkill = useBuiltinSkillStore((state) => state.select);
+    const [threads, setThreads] = useState<BuiltinAgentThread[]>(() => loadBuiltinAgentThreads(projectId));
+    const [activeThreadId, setActiveThreadId] = useState(() => {
+        const loaded = loadBuiltinAgentThreads(projectId);
+        return loaded[0]?.id || randomId();
+    });
+    const hydratedRef = useRef(false);
 
     const textModels = useMemo(() => {
         const listed = selectableModelsByCapability(config, "text");
         if (listed.length) return listed;
-        // Catalog may omit capability labels; fall back to name heuristics.
         return config.channels.flatMap((channel) =>
             channel.models
                 .filter((model) => model.capability === "text" || guessCapability(model.name) === "text")
@@ -95,7 +84,31 @@ export function BuiltinAgentPanel() {
     const ready = Boolean(textModel) && isAiConfigReady(config, textModel);
     const channel = textModel ? resolveModelChannel(config, textModel) : getDefaultChannel(config) || null;
 
-    // Pull gateway models once when the chat panel has no text model yet.
+    useEffect(() => {
+        const loaded = loadBuiltinAgentThreads(projectId);
+        setThreads(loaded);
+        const nextId = loaded[0]?.id || randomId();
+        setActiveThreadId(nextId);
+        setAgentState({
+            messages: loaded[0]?.messages || [],
+            prompt: "",
+            activeTab: "chat",
+            connectError: "",
+        });
+        hydratedRef.current = true;
+    }, [projectId, setAgentState]);
+
+    useEffect(() => {
+        if (!hydratedRef.current || sending || waiting || !messages.length) return;
+        const thread: BuiltinAgentThread = {
+            id: activeThreadId,
+            title: titleFromMessages(messages, t("agent.history.untitled")),
+            updatedAt: Date.now(),
+            messages,
+        };
+        setThreads(upsertBuiltinAgentThread(projectId, thread));
+    }, [activeThreadId, messages, projectId, sending, t, waiting]);
+
     useEffect(() => {
         if (textModels.length || didSyncModelsRef.current || syncingModels) return;
         const apiKey = (channel?.apiKey || config.apiKey || "").trim();
@@ -113,7 +126,6 @@ export function BuiltinAgentPanel() {
         };
     }, [channel?.apiKey, config.apiKey, syncingModels, textModels.length]);
 
-    // Persist the resolved default so workbenches and reconnect share the same text model.
     useEffect(() => {
         if (!textModel) return;
         if (config.textModel === textModel) return;
@@ -126,17 +138,16 @@ export function BuiltinAgentPanel() {
     const composerModels = useMemo<AgentModel[]>(
         () =>
             textModels.map((value) => {
-                const ch = resolveModelChannel(config, value);
                 const name = modelOptionName(value);
                 return {
                     id: value,
                     model: value,
-                    displayName: ch.name ? `${name} 路 ${ch.name}` : name,
+                    displayName: name,
                     defaultReasoningEffort: "medium" as const,
                     supportedReasoningEfforts: [],
                 };
             }),
-        [config, textModels],
+        [textModels],
     );
 
     useEffect(() => {
@@ -144,7 +155,6 @@ export function BuiltinAgentPanel() {
             connected: ready,
             enabled: ready,
             activity: ready ? (textModel ? modelOptionName(textModel) : "") : "",
-            // Keep connectError empty for "not configured" 鈥?status UI should not say 杩炴帴澶辫触.
             connectError: "",
         });
     }, [ready, setAgentState, textModel]);
@@ -157,80 +167,73 @@ export function BuiltinAgentPanel() {
     const stopTurn = () => {
         abortRef.current?.abort();
         abortRef.current = null;
-        setAgentState({ sending: false, waiting: false });
-        setStreamId("");
+        const latest = useAgentStore.getState().messages;
+        setAgentState({
+            sending: false,
+            waiting: false,
+            messages: latest.map((item) => (item.streamId ? { ...item, streamId: undefined } : item)),
+        });
     };
 
-    const getMessages = () => useAgentStore.getState().messages;
+    const persistCurrentThread = (nextMessages = messages) => {
+        if (!nextMessages.length) return;
+        const thread: BuiltinAgentThread = {
+            id: activeThreadId,
+            title: titleFromMessages(nextMessages, t("agent.history.untitled")),
+            updatedAt: Date.now(),
+            messages: nextMessages,
+        };
+        setThreads(upsertBuiltinAgentThread(projectId, thread));
+    };
 
     const startNewThread = () => {
         stopTurn();
-        flushBuiltinSession(getMessages);
-        resetBuiltinSession();
-        setActiveThreadId(builtinSession.threadId);
+        persistCurrentThread();
+        const nextId = randomId();
+        setActiveThreadId(nextId);
         setAgentState({ messages: [], prompt: "", connectError: "", activeTab: "chat" });
-        void listBuiltinThreads().then(setThreads);
     };
 
-    const refreshThreads = () => void listBuiltinThreads().then(setThreads);
-
-    const openThread = (id: string) => {
-        if (id === activeThreadId) {
+    const resumeThread = (threadId: string) => {
+        if (threadId === activeThreadId) {
             setAgentState({ activeTab: "chat" });
             return;
         }
         stopTurn();
-        flushBuiltinSession(getMessages);
-        void loadBuiltinThread(id).then((thread) => {
-            if (!thread) return;
-            const restored = applyBuiltinThread(thread);
-            setActiveThreadId(thread.id);
-            setAgentState({ messages: restored, prompt: "", connectError: "", activeTab: "chat" });
+        persistCurrentThread();
+        const thread = threads.find((item) => item.id === threadId);
+        setActiveThreadId(threadId);
+        setAgentState({
+            messages: thread?.messages || [],
+            prompt: "",
+            connectError: "",
+            activeTab: "chat",
         });
     };
 
-    const deleteThreads = (ids: string[]) => {
-        const removingCurrent = ids.includes(builtinSession.threadId);
-        void Promise.all(ids.map((id) => deleteBuiltinThread(id))).then(() => {
-            if (removingCurrent) {
-                resetBuiltinSession();
-                setActiveThreadId(builtinSession.threadId);
-                setAgentState({ messages: [] });
-            }
-            refreshThreads();
+    const removeThread = (threadId: string) => {
+        stopTurn();
+        const next = deleteBuiltinAgentThread(projectId, threadId);
+        setThreads(next);
+        if (threadId !== activeThreadId) return;
+        const fallback = next[0];
+        const nextId = fallback?.id || randomId();
+        setActiveThreadId(nextId);
+        setAgentState({
+            messages: fallback?.messages || [],
+            prompt: "",
+            connectError: "",
+            activeTab: "chat",
         });
     };
-
-    // Restore the latest conversation once, and load local skills.
-    useEffect(() => {
-        if (builtinSession.hydrated) {
-            setActiveThreadId(builtinSession.threadId);
-            void listBuiltinThreads().then(setThreads);
-            return;
-        }
-        void restoreLatestBuiltinSession().then((restored) => {
-            setActiveThreadId(builtinSession.threadId);
-            if (restored.length && !useAgentStore.getState().messages.length) {
-                setAgentState({ messages: restored });
-            }
-        });
-        void listBuiltinThreads().then(setThreads);
-        void loadSkills();
-        void useMcpClientStore.getState().connectAll();
-    }, [loadSkills, setAgentState]);
-
-    // Refresh the thread list whenever the history tab opens.
-    useEffect(() => {
-        if (activeTab === "history") refreshThreads();
-    }, [activeTab]);
 
     const changeModel = (next: string) => {
         updateConfig("textModel", next);
         updateConfig("model", next);
     };
 
-    const sendPrompt = async () => {
-        const text = prompt.trim();
+    const sendPrompt = async (overrideText?: string) => {
+        const text = (overrideText ?? prompt).trim();
         if (!text || sending || waiting) return;
         if (!ready || !textModel) {
             openConfigDialog(false, "channels");
@@ -239,270 +242,176 @@ export function BuiltinAgentPanel() {
             return;
         }
 
-        const userMessage: AgentChatItem = { id: randomId(), role: "user", text };
-        const nextStreamId = randomId();
-        const canvasContext = useAgentStore.getState().canvasContext;
-        const hasCanvas = Boolean(canvasContext?.snapshot);
-        const tools = builtinAgentTools(hasCanvas);
-        const requestConfig = {
-            ...config,
-            model: textModel,
-            textModel,
-            systemPrompt: [config.systemPrompt, builtinAgentSystemPrompt(hasCanvas), selectedBuiltinSkillPrompt()].filter(Boolean).join("\n\n"),
+        const userMessage: AgentChatItem = {
+            id: randomId(),
+            role: "user",
+            text,
+            threadId: activeThreadId,
         };
+        const history = [...messages]
+            .filter((item) => item.role === "user" || item.role === "assistant")
+            .map((item) => ({ role: item.role as "user" | "assistant", content: item.text }));
 
-        builtinSession.transcript.push({ role: "user", content: text });
         abortRef.current?.abort();
         const controller = new AbortController();
         abortRef.current = controller;
-        setStreamId(nextStreamId);
         setAgentState({
             prompt: "",
             sending: true,
             waiting: true,
-            messages: [...useAgentStore.getState().messages, userMessage],
+            messages: [...messages, userMessage],
             connectError: "",
             activity: t("agent.panel.builtinStreaming"),
+            activeTab: "chat",
         });
 
-        /** Lazily append or update an assistant bubble for the current model call. */
-        const pushAssistantDelta = (id: string, delta: string) => {
-            const latest = useAgentStore.getState().messages;
-            if (latest.some((item) => item.id === id)) {
-                setAgentState({ messages: latest.map((item) => (item.id === id ? { ...item, text: delta, streamId: nextStreamId } : item)) });
-            } else {
-                setAgentState({ messages: [...latest, { id, role: "assistant" as const, text: delta, streamId: nextStreamId }] });
-            }
-        };
-        /** Insert or update a tool-call card in the timeline. */
-        const upsertToolMessage = (id: string, call: AgentToolCall, status: "inProgress" | "completed" | "failed", text: string, output = "") => {
-            const detail = toolCallDetail(call.function.name, parseToolArguments(call.function.arguments), status, output);
-            const latest = useAgentStore.getState().messages;
-            const item: AgentChatItem = { id, role: "tool", title: toolName(call.function.name), text, detail };
-            setAgentState({
-                messages: latest.some((existing) => existing.id === id)
-                    ? latest.map((existing) => (existing.id === id ? item : existing))
-                    : [...latest, item],
-            });
-        };
-        /** Insert or update the plan card (kind:"todo" is rendered by the task-progress bar, not inline). */
-        const upsertPlanMessage = (tasks: Array<{ step: string; status: string }>, explanation = "") => {
-            const status = tasks.length && tasks.every((task) => task.status === "completed" || task.status === "done") ? "completed" : "inProgress";
-            const item: AgentChatItem = {
-                id: "builtin-plan",
-                role: "tool",
-                title: t("agent.events.plan"),
-                text: explanation || toolName("update_plan"),
-                detail: { kind: "todo", tasks, status, explanation },
-            };
-            const latest = useAgentStore.getState().messages;
-            setAgentState({
-                messages: latest.some((existing) => existing.id === item.id)
-                    ? latest.map((existing) => (existing.id === item.id ? item : existing))
-                    : [...latest, item],
-            });
-        };
-        /** Remove an assistant bubble that ended up empty (ReAct action-only output). */
-        const removeMessage = (id: string) => {
-            const latest = useAgentStore.getState().messages;
-            setAgentState({ messages: latest.filter((item) => item.id !== id) });
-        };
-        const clearStreamFlags = () => {
-            const latest = useAgentStore.getState().messages;
-            setAgentState({ messages: latest.map((item) => (item.streamId === nextStreamId ? { ...item, streamId: undefined } : item)) });
-        };
-        const normalizePlanTasks = (value: unknown): Array<{ step: string; status: string }> =>
-            Array.isArray(value)
-                ? value
-                      .map((task) => {
-                          const record = task as Record<string, unknown>;
-                          const step = typeof record?.step === "string" ? record.step : typeof record?.title === "string" ? record.title : "";
-                          const status = typeof record?.status === "string" && ["pending", "inProgress", "completed", "failed", "done"].includes(record.status) ? record.status : "pending";
-                          return step ? { step, status } : null;
-                      })
-                      .filter((task): task is { step: string; status: string } => Boolean(task))
-                : [];
-        const isToolUnsupportedError = (error: unknown) => {
-            const text = error instanceof Error ? error.message : String(error);
-            return /\b(tools?|function_call|function[s]?)\b.{0,80}(not|un)?support|unknown|invalid|unrecognized|400/i.test(text);
-        };
-
         try {
-            let rounds = 0;
-            let reactMode = false;
-            const callModel = async (onDelta: (text: string) => void) => {
-                try {
-                    return await requestAgentChatCompletion(
-                        reactMode
-                            ? { ...requestConfig, systemPrompt: `${requestConfig.systemPrompt}\n\n${reactSystemPrompt(describeToolsForReAct(tools))}` }
-                            : requestConfig,
-                        builtinSession.transcript,
-                        reactMode ? [] : tools,
-                        onDelta,
-                        { signal: controller.signal },
-                    );
-                } catch (error) {
-                    if (!reactMode && isToolUnsupportedError(error)) {
-                        reactMode = true;
-                        return callModel(onDelta);
-                    }
-                    throw error;
-                }
-            };
-
-            for (;;) {
-                const iterationId = randomId();
-                let iterationText = "";
-                const result = await callModel((delta) => {
-                    iterationText = delta;
-                    pushAssistantDelta(iterationId, delta);
-                });
-
-                // Native tool_calls, or ReAct "Action:" blocks parsed from plain text.
-                let calls = result.toolCalls;
-                let assistantVisible = result.content;
-                if (!calls.length && result.content) {
-                    const reactCalls = parseReActActions(result.content);
-                    if (reactCalls.length) {
-                        reactMode = true;
-                        calls = reactCalls.map((call) => ({ id: randomId(), type: "function" as const, function: { name: call.name, arguments: JSON.stringify(call.args) } }));
-                        assistantVisible = stripReActBlocks(result.content);
-                        if (assistantVisible) pushAssistantDelta(iterationId, assistantVisible);
-                        else if (useAgentStore.getState().messages.some((item) => item.id === iterationId)) removeMessage(iterationId);
-                    }
-                }
-
-                if (!calls.length) {
-                    if (reactMode && assistantVisible) assistantVisible = stripReActBlocks(assistantVisible) || assistantVisible;
-                    if (assistantVisible && !iterationText) pushAssistantDelta(iterationId, assistantVisible);
-                    else if (reactMode && assistantVisible && assistantVisible !== result.content && useAgentStore.getState().messages.some((item) => item.id === iterationId)) pushAssistantDelta(iterationId, assistantVisible);
-                    if (assistantVisible) builtinSession.transcript.push({ role: "assistant", content: assistantVisible });
-                    break;
-                }
-
-                rounds += 1;
-                if (result.content) builtinSession.transcript.push({ role: "assistant", content: result.content });
-                for (const call of calls) {
-                    const callArgs = parseToolArguments(call.function.arguments);
-                    const runningText = t("agent.eventMore.toolRunning", { action: toolName(call.function.name) });
-                    const transcriptResult = (content: string) => {
-                        if (reactMode) builtinSession.transcript.push({ role: "user", content: `Observation: ${content}` });
-                        else builtinSession.transcript.push({ role: "tool", tool_call_id: call.id, content });
-                    };
-                    if (reactMode) {
-                        builtinSession.transcript.push({ role: "assistant", content: `Action: ${call.function.name}\nAction Input: ${call.function.arguments}` });
-                    } else {
-                        builtinSession.transcript.push({ type: "function_call", call_id: call.id, name: call.function.name, arguments: call.function.arguments });
-                    }
-
-                    if (call.function.name === "update_plan") {
-                        upsertPlanMessage(normalizePlanTasks(callArgs.tasks), typeof callArgs.explanation === "string" ? callArgs.explanation : "");
-                        transcriptResult(toolResultText({ ok: true }));
-                        continue;
-                    }
-
-                    const toolItemId = randomId();
-                    upsertToolMessage(toolItemId, call, "inProgress", runningText);
-                    setAgentState({ activity: runningText });
-                    try {
-                        const output = await runBuiltinAgentTool(call.function.name, callArgs, navigate);
-                        const outputText = toolResultText(output);
-                        transcriptResult(outputText);
-                        upsertToolMessage(toolItemId, call, "completed", toolSummary({ tool: call.function.name, arguments: call.function.arguments, result: output }) || runningText);
-                    } catch (error) {
-                        if (controller.signal.aborted) throw error;
-                        const errText = error instanceof Error ? error.message : t("agent.state.requestFailed");
-                        transcriptResult(`Error: ${errText}`);
-                        upsertToolMessage(toolItemId, call, "failed", errText, errText);
-                    }
-                }
-                if (rounds >= MAX_TOOL_ROUNDS) {
-                    builtinSession.transcript.push({ role: "system", content: t("agent.builtin.toolLimitReached", { count: MAX_TOOL_ROUNDS }) });
-                    const finalId = randomId();
-                    const finalResult = await callModel((delta) => pushAssistantDelta(finalId, delta));
-                    if (finalResult.content) {
-                        const visible = stripReActBlocks(finalResult.content) || finalResult.content;
-                        pushAssistantDelta(finalId, visible);
-                        builtinSession.transcript.push({ role: "assistant", content: visible });
-                    }
-                    break;
-                }
-            }
-            clearStreamFlags();
-            setAgentState({ sending: false, waiting: false, activity: textModel ? modelOptionName(textModel) : "" });
-            persistBuiltinSession(() => useAgentStore.getState().messages);
+            const canvasContext = useAgentStore.getState().canvasContext;
+            await runBuiltinAgentHarness({
+                config: { ...config, model: textModel, textModel },
+                history,
+                userText: text,
+                canvasContext,
+                navigate,
+                signal: controller.signal,
+                handlers: {
+                    onAssistantDelta: (assistantId, delta) => {
+                        const latest = useAgentStore.getState().messages;
+                        const exists = latest.some((item) => item.id === assistantId);
+                        setAgentState({
+                            messages: exists
+                                ? latest.map((item) =>
+                                      item.id === assistantId
+                                          ? { ...item, text: delta, streamId: assistantId, threadId: activeThreadId }
+                                          : item,
+                                  )
+                                : [
+                                      ...latest,
+                                      {
+                                          id: assistantId,
+                                          role: "assistant",
+                                          text: delta,
+                                          streamId: assistantId,
+                                          threadId: activeThreadId,
+                                      },
+                                  ],
+                        });
+                    },
+                    onAssistantFinalize: (assistantId, finalText) => {
+                        const latest = useAgentStore.getState().messages;
+                        setAgentState({
+                            messages: latest.map((item) =>
+                                item.id === assistantId
+                                    ? { ...item, text: finalText || item.text, streamId: undefined }
+                                    : item,
+                            ),
+                        });
+                    },
+                    onToolStart: (item) => {
+                        const latest = useAgentStore.getState().messages;
+                        setAgentState({
+                            messages: [...latest, { ...item, threadId: activeThreadId }],
+                            activity: item.title || item.text,
+                        });
+                    },
+                    onToolFinish: (itemId, patch) => {
+                        const latest = useAgentStore.getState().messages;
+                        setAgentState({
+                            messages: latest.map((item) => (item.id === itemId ? { ...item, ...patch } : item)),
+                        });
+                    },
+                    onActivity: (value) => setAgentState({ activity: value }),
+                },
+            });
+            const finalized = useAgentStore.getState().messages;
+            setAgentState({
+                sending: false,
+                waiting: false,
+                activity: textModel ? modelOptionName(textModel) : "",
+            });
+            persistCurrentThread(finalized);
         } catch (error) {
-            clearStreamFlags();
             if (controller.signal.aborted) {
                 setAgentState({ sending: false, waiting: false, activity: textModel ? modelOptionName(textModel) : "" });
-                persistBuiltinSession(() => useAgentStore.getState().messages);
                 return;
             }
             const errText = error instanceof Error ? error.message : t("agent.state.requestFailed");
+            const latest = useAgentStore.getState().messages;
+            const withError: AgentChatItem[] = [
+                ...latest,
+                { id: randomId(), role: "error", text: errText, threadId: activeThreadId },
+            ];
             setAgentState({
+                messages: withError,
                 sending: false,
                 waiting: false,
                 connectError: errText,
                 activity: t("agent.status.failed"),
-                messages: [...useAgentStore.getState().messages, { id: randomId(), role: "error" as const, text: errText }],
             });
+            persistCurrentThread(withError);
             message.error(errText);
         } finally {
             if (abortRef.current === controller) abortRef.current = null;
-            setStreamId("");
         }
     };
 
     useEffect(() => () => abortRef.current?.abort(), []);
 
     const statusText = channelLabel || t("agent.status.disconnected");
-    const statusColor = ready ? "#16a34a" : "#d97706";
+    const conversationTitle = useMemo(
+        () => titleFromMessages(messages, t("agent.runtime.newConversation")),
+        [messages, t],
+    );
+    const suggestions = useMemo(
+        () => [
+            t("agent.chat.suggestions.storyboard"),
+            t("agent.chat.suggestions.prompt"),
+            t("agent.chat.suggestions.shotList"),
+            t("agent.chat.suggestions.review"),
+        ],
+        [t],
+    );
+    const tabValue = activeTab === "setup" || activeTab === "history" ? activeTab : "chat";
 
     return (
         <>
             <AgentPanelTabs
-                value={activeTab === "skills" || activeTab === "log" ? "chat" : activeTab}
+                value={tabValue}
                 theme={theme}
                 leading={
-                    <div className="flex items-center gap-1">
-                        <span className="grid size-8 place-items-center">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                        <span
+                            className="grid size-8 place-items-center rounded-lg"
+                            style={{ background: theme.toolbar.activeBg }}
+                        >
                             <Bot className="size-4" />
                         </span>
-                        <div className="hidden text-base font-semibold leading-5 @min-[560px]:block">Agent</div>
-                        <Tooltip title={t("agent.panel.connectionSettings", { status: statusText })} placement="bottom">
-                            <Button
-                                size="small"
-                                type="text"
-                                className="!h-8 !w-8 !min-w-8 !px-0 @min-[560px]:!w-auto @min-[560px]:!min-w-0 @min-[560px]:!px-[7px]"
-                                aria-label={t("agent.panel.connectionSettingsLabel", { status: statusText })}
-                                icon={<PlugZap className="size-3.5" style={{ color: statusColor }} />}
-                                onClick={() => setAgentState({ activeTab: "setup" })}
-                            >
-                                <span className="hidden max-w-[120px] truncate @min-[560px]:inline">{statusText}</span>
-                            </Button>
-                        </Tooltip>
+                        <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold leading-4">{t("agent.panel.brandName")}</div>
+                            <div className="hidden truncate text-[11px] leading-4 @min-[480px]:block" style={{ color: theme.node.muted }}>
+                                {messages.length ? conversationTitle : statusText}
+                            </div>
+                        </div>
                     </div>
                 }
                 items={[
                     { value: "chat", label: t("agent.panel.chat"), icon: <MessageSquare className="size-3.5" /> },
-                    { value: "history", label: t("agent.panel.history"), icon: <History className="size-3.5" /> },
+                    { value: "history", label: t("agent.panel.history"), icon: <History className="size-3.5" />, count: threads.length },
                     { value: "setup", label: t("agent.connect.settingsTab"), icon: <Settings2 className="size-3.5" /> },
                 ]}
-                onChange={(next) => setAgentState({ activeTab: next as "chat" | "setup" | "history" })}
+                onChange={(next) => setAgentState({ activeTab: next })}
                 right={
                     <>
                         <Tooltip title={t("agent.history.newThread")} placement="bottom">
                             <Button
                                 size="small"
                                 type="text"
-                                className="!h-8 !w-8 !min-w-8 !px-0 @min-[560px]:!w-auto @min-[560px]:!min-w-0 @min-[560px]:!px-[7px]"
+                                className="!h-8 !w-8 !min-w-8 !px-0"
                                 aria-label={t("agent.history.newThread")}
                                 disabled={sending || waiting}
                                 icon={<Plus className="size-3.5" />}
                                 onClick={startNewThread}
-                            >
-                                <span className="hidden @min-[560px]:inline">{t("agent.history.newThread")}</span>
-                            </Button>
+                            />
                         </Tooltip>
                         <Tooltip title={t("agent.panel.collapse")}>
                             <Button
@@ -519,32 +428,67 @@ export function BuiltinAgentPanel() {
                 }
             />
 
-            {activeTab === "setup" ? (
-                <>
-                    <AgentConnectView
-                        theme={theme}
-                        connected={ready}
-                        activity={activity}
-                        connectError=""
-                        onToggleEnabled={() => openConfigDialog(false, "channels")}
-                        builtin
-                        baseUrl={channel?.baseUrl || config.baseUrl || ""}
-                        channelName={channel?.name || ""}
-                        modelLabel={textModel ? modelOptionName(textModel) : ""}
-                    />
-                    <AgentMcpSettings theme={theme} />
-                </>
-            ) : activeTab === "history" ? (
-                <BuiltinAgentHistoryView
+            {tabValue === "setup" ? (
+                <AgentConnectView
                     theme={theme}
-                    threads={threads}
-                    activeThreadId={activeThreadId}
-                    busy={sending || waiting}
-                    onRefresh={refreshThreads}
-                    onNewThread={startNewThread}
-                    onOpenThread={openThread}
-                    onDeleteThreads={deleteThreads}
+                    connected={ready}
+                    activity={activity}
+                    connectError=""
+                    onToggleEnabled={() => openConfigDialog(false, "channels")}
+                    builtin
+                    baseUrl={channel?.baseUrl || config.baseUrl || ""}
+                    channelName={channel?.name || ""}
+                    modelLabel={textModel ? modelOptionName(textModel) : ""}
                 />
+            ) : tabValue === "history" ? (
+                <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto p-3">
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                        <div className="text-sm" style={{ color: theme.node.muted }}>
+                            {threads.length
+                                ? t("agent.history.count", { count: threads.length })
+                                : t("agent.history.empty")}
+                        </div>
+                        <Button size="small" type="primary" icon={<Plus className="size-3.5" />} disabled={sending || waiting} onClick={startNewThread}>
+                            {t("agent.history.newThread")}
+                        </Button>
+                    </div>
+                    <div className="space-y-2">
+                        {threads.map((thread) => {
+                            const active = thread.id === activeThreadId;
+                            return (
+                                <div
+                                    key={thread.id}
+                                    className="group flex items-start gap-2 rounded-xl border px-3 py-2.5 transition hover:bg-black/[.03] dark:hover:bg-white/[.04]"
+                                    style={{
+                                        borderColor: active ? theme.node.text : theme.node.stroke,
+                                        background: active ? theme.toolbar.activeBg : "transparent",
+                                    }}
+                                >
+                                    <button
+                                        type="button"
+                                        className="min-w-0 flex-1 text-left"
+                                        onClick={() => resumeThread(thread.id)}
+                                    >
+                                        <div className="truncate text-sm font-medium leading-5">{thread.title}</div>
+                                        <div className="mt-0.5 text-[11px] tabular-nums" style={{ color: theme.node.muted }}>
+                                            {new Date(thread.updatedAt).toLocaleString()}
+                                            {active ? ` · ${t("agent.history.current")}` : ""}
+                                        </div>
+                                    </button>
+                                    <Button
+                                        type="text"
+                                        size="small"
+                                        danger
+                                        className="!h-7 !w-7 !min-w-7 opacity-0 group-hover:opacity-100"
+                                        icon={<Trash2 className="size-3.5" />}
+                                        aria-label={t("agent.history.deleteCount", { count: 1 })}
+                                        onClick={() => removeThread(thread.id)}
+                                    />
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
             ) : (
                 <>
                     <AgentChatTimeline
@@ -556,66 +500,69 @@ export function BuiltinAgentPanel() {
                         onRejectTool={() => undefined}
                         onApproveTool={() => undefined}
                         onApprovalDecision={() => undefined}
-                    />
-                    <AgentChatComposer
-                        prompt={prompt}
-                        disabled={!ready}
-                        sending={sending || waiting}
-                        placeholder={
-                            ready
-                                ? t("agent.panel.placeholderBuiltin")
-                                : syncingModels
-                                  ? t("agent.connect.syncingModels")
-                                  : t("agent.connect.configureAiFirst")
-                        }
-                        theme={theme}
-                        hint={t("agent.composer.tokenHint")}
-                        models={composerModels}
-                        model={textModel || composerModels[0]?.model}
-                        onModelChange={changeModel}
-                        onPromptChange={(next) => setAgentState({ prompt: next })}
-                        onSubmit={() => void sendPrompt()}
-                        onStop={stopTurn}
-                        left={
-                            <>
-                                {skills.length ? (
-                                    <Dropdown
-                                        trigger={["click"]}
-                                        menu={{
-                                            items: [
-                                                { key: "", label: t("agent.builtin.noSkill") },
-                                                ...skills.map((skill) => ({
-                                                    key: skill.name,
-                                                    label: `${skill.name}${skill.description ? ` · ${skill.description}` : ""}`,
-                                                })),
-                                            ],
-                                            selectable: true,
-                                            selectedKeys: selectedSkillName ? [selectedSkillName] : [],
-                                            onClick: ({ key }) => selectSkill(String(key)),
+                        emptyState={
+                            <div className="flex h-full min-h-[280px] flex-col items-center justify-center px-6 py-10 text-center">
+                                <div
+                                    className="mb-4 grid size-12 place-items-center rounded-2xl"
+                                    style={{ background: theme.toolbar.activeBg, color: theme.node.text }}
+                                >
+                                    <Sparkles className="size-5" />
+                                </div>
+                                <div className="text-base font-semibold leading-6">{t("agent.chat.emptyTitle")}</div>
+                                <div className="mt-1.5 max-w-[280px] text-sm leading-5" style={{ color: theme.node.muted }}>
+                                    {ready ? t("agent.chat.emptyHint") : t("agent.connect.configureAiFirst")}
+                                </div>
+                                {ready ? (
+                                    <div className="mt-5 flex w-full max-w-[340px] flex-col gap-2">
+                                        {suggestions.map((item) => (
+                                            <button
+                                                key={item}
+                                                type="button"
+                                                className="rounded-xl border px-3.5 py-2.5 text-left text-sm leading-5 transition hover:bg-black/[.03] dark:hover:bg-white/[.04]"
+                                                style={{ borderColor: theme.node.stroke, color: theme.node.text }}
+                                                onClick={() => void sendPrompt(item)}
+                                            >
+                                                {item}
+                                            </button>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <Button
+                                        className="mt-5"
+                                        type="primary"
+                                        icon={<Settings2 className="size-4" />}
+                                        onClick={() => {
+                                            openConfigDialog(false, "channels");
+                                            setAgentState({ activeTab: "setup" });
                                         }}
                                     >
-                                        <Tooltip title={t("agent.builtin.skillPicker")} placement="top">
-                                            <Button
-                                                size="small"
-                                                type="text"
-                                                className="!h-9 !px-2"
-                                                style={{ color: selectedSkillName ? theme.node.text : theme.node.muted }}
-                                                icon={<Sparkles className="size-4" />}
-                                            >
-                                                {selectedSkillName ? <span className="max-w-[120px] truncate text-[11px]">{selectedSkillName}</span> : null}
-                                            </Button>
-                                        </Tooltip>
-                                    </Dropdown>
-                                ) : null}
-                                {streamId ? (
-                                    <span className="hidden text-[11px] @min-[660px]:inline" style={{ color: theme.node.muted }}>
-                                        <TerminalSquare className="mr-1 inline size-3" />
-                                        {t("agent.panel.builtinStreaming")}
-                                    </span>
-                                ) : null}
-                            </>
+                                        {t("agent.connect.openAiConfig")}
+                                    </Button>
+                                )}
+                            </div>
                         }
                     />
+                    <div className="shrink-0 px-1 pb-1 pt-1">
+                        <AgentChatComposer
+                            prompt={prompt}
+                            disabled={!ready}
+                            sending={sending || waiting}
+                            placeholder={
+                                ready
+                                    ? t("agent.panel.placeholderBuiltin")
+                                    : syncingModels
+                                      ? t("agent.connect.syncingModels")
+                                      : t("agent.connect.configureAiFirst")
+                            }
+                            theme={theme}
+                            models={composerModels}
+                            model={textModel || composerModels[0]?.model}
+                            onModelChange={changeModel}
+                            onPromptChange={(next) => setAgentState({ prompt: next })}
+                            onSubmit={() => void sendPrompt()}
+                            onStop={stopTurn}
+                        />
+                    </div>
                 </>
             )}
         </>

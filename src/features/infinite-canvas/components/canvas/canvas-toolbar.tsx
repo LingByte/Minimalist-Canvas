@@ -1,7 +1,7 @@
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode, RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Button, Segmented, Switch } from "antd";
-import { CircleDot, Clapperboard, ClipboardPaste, Eraser, Grid2x2, Group, Hand, Image as ImageIcon, Info, Moon, MousePointer2, Music2, Palette, Puzzle, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Upload, Video } from "lucide-react";
+import { CircleDot, Clapperboard, Eraser, FolderOpen, Grid2x2, Group, Hand, Image as ImageIcon, Info, ListVideo, Moon, MousePointer2, Music2, Palette, Puzzle, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Video, Wand2 } from "lucide-react";
 
 import { useTheme } from "@/context/theme-provider";
 
@@ -11,7 +11,6 @@ import { useCanvasHost } from "@canvas/integration/canvas-host-context";
 import { useCanvasSidePanelStore } from "@canvas/stores/use-canvas-side-panel-store";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { AnimatedThemeToggler } from "@canvas/components/ui/animated-theme-toggler";
-import { CloudUploadProgress } from "@canvas/components/canvas/cloud-upload-progress";
 import { useTranslation } from "react-i18next";
 import { cn } from "@canvas/lib/utils";
 
@@ -22,23 +21,25 @@ export function CanvasToolbar({
     canRedo,
     backgroundMode,
     showImageInfo,
+    toolsOpen,
     onAddImage,
     onAddVideo,
     onAddAudio,
-    onImportStoryboard,
     onAddText,
     onAddConfig,
     onAddGroup,
+    onAddDirector,
+    onAddScript,
     onAddExtensionNode,
     onUndo,
     onRedo,
-    onUpload,
-    onPaste,
+    onOpenAssets,
     onDelete,
     onClear,
     onCanvasToolChange,
     onBackgroundModeChange,
     onShowImageInfoChange,
+    onToolsOpenChange,
 }: {
     selectedCount: number;
     canvasTool: "select" | "pan";
@@ -46,23 +47,25 @@ export function CanvasToolbar({
     canRedo: boolean;
     backgroundMode: CanvasBackgroundMode;
     showImageInfo: boolean;
+    toolsOpen?: boolean;
     onAddImage: () => void;
     onAddVideo: () => void;
     onAddAudio: () => void;
-    onImportStoryboard: () => void;
     onAddText: () => void;
     onAddConfig: () => void;
     onAddGroup: () => void;
+    onAddDirector: () => void;
+    onAddScript: () => void;
     onAddExtensionNode: (type: string) => void;
     onUndo: () => void;
     onRedo: () => void;
-    onUpload: () => void;
-    onPaste: () => void;
+    onOpenAssets: () => void;
     onDelete: () => void;
     onClear: () => void;
     onCanvasToolChange: (tool: "select" | "pan") => void;
     onBackgroundModeChange: (mode: CanvasBackgroundMode) => void;
     onShowImageInfoChange: (show: boolean) => void;
+    onToolsOpenChange?: (open: boolean) => void;
 }) {
     const wrapRef = useRef<HTMLDivElement>(null);
     const { t } = useTranslation();
@@ -83,11 +86,10 @@ export function CanvasToolbar({
     const [panelX, setPanelX] = useState(0);
     const [extensionsOpen, setExtensionsOpen] = useState(false);
     const [extPanelX, setExtPanelX] = useState(0);
-    const [cloudUploadOpen, setCloudUploadOpen] = useState(false);
     // Keep extension plugin nodes synchronized with registry changes.
     useNodeRegistryVersion();
     const extensionDefs = listNodeDefinitions().filter((def) => def.showInCreateMenu !== false && getNodePluginId(def.type) !== "builtin");
-    const dockStyle = { background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.toolbar.item, boxShadow: colorTheme === "dark" ? "0 18px 45px rgba(0,0,0,.32)" : "0 16px 40px rgba(28,25,23,.12)" };
+    const dockStyle = { background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.toolbar.item, boxShadow: colorTheme === "dark" ? "0 18px 45px rgba(0,0,0,.32)" : "0 16px 40px rgba(15,23,42,.12)" };
     const hoverStyle = { background: theme.toolbar.itemHover, color: theme.toolbar.activeText };
     const activeStyle = { background: theme.toolbar.activeBg, color: theme.toolbar.activeText };
     const tip = hovered ? toolLabel(hovered, t) : "";
@@ -96,8 +98,6 @@ export function CanvasToolbar({
     useEffect(() => {
         if (!extensionsOpen && !appearanceOpen) return;
         const handlePointerDown = (event: PointerEvent) => {
-            const cloudPanel = document.getElementById("canvas-cloud-upload-panel");
-            if (cloudPanel?.contains(event.target as Node)) return;
             if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
                 setExtensionsOpen(false);
                 setAppearanceOpen(false);
@@ -141,14 +141,17 @@ export function CanvasToolbar({
                 <ToolbarButton id="tool-audio" label={t("canvas.toolbar.audio")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddAudio}>
                     <Music2 className="size-4.5" />
                 </ToolbarButton>
-                <ToolbarButton id="tool-storyboard" label={t("canvas.storyboard.toolbar")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onImportStoryboard}>
-                    <Clapperboard className="size-4.5" />
-                </ToolbarButton>
                 <ToolbarButton id="tool-config" label={t("canvas.toolbar.config")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddConfig}>
                     <Settings2 className="size-4.5" />
                 </ToolbarButton>
                 <ToolbarButton id="tool-group" label={t("canvas.toolbar.group")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddGroup}>
                     <Group className="size-4.5" />
+                </ToolbarButton>
+                <ToolbarButton id="tool-director" label={t("canvas.toolbar.director")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddDirector}>
+                    <Clapperboard className="size-4.5" />
+                </ToolbarButton>
+                <ToolbarButton id="tool-script" label={t("canvas.toolbar.script")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddScript}>
+                    <ListVideo className="size-4.5" />
                 </ToolbarButton>
                 {extensionDefs.length ? (
                     <ToolbarButton
@@ -164,19 +167,32 @@ export function CanvasToolbar({
                         onClick={(event) => {
                             setExtPanelX(getTipX(wrapRef.current, event.currentTarget));
                             setAppearanceOpen(false);
-                            setCloudUploadOpen(false);
                             setExtensionsOpen((value) => !value);
                         }}
                     >
                         <Puzzle className="size-4.5" />
                     </ToolbarButton>
                 ) : null}
-                <ToolbarButton id="tool-upload" label={t("canvas.toolbar.upload")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onUpload}>
-                    <Upload className="size-4.5" />
+                <ToolbarButton id="tool-assets" label={t("canvas.toolbar.assets")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onOpenAssets}>
+                    <FolderOpen className="size-4.5" />
                 </ToolbarButton>
-                <ToolbarButton id="tool-paste" label={t("canvas.toolbar.paste")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onPaste}>
-                    <ClipboardPaste className="size-4.5" />
-                </ToolbarButton>
+                {onToolsOpenChange ? (
+                    <ToolbarButton
+                        id="tool-tools"
+                        label={t("canvas.tools.open")}
+                        active={Boolean(toolsOpen)}
+                        hovered={hovered}
+                        activeStyle={activeStyle}
+                        hoverStyle={hoverStyle}
+                        wrapRef={wrapRef}
+                        onTipX={setTipX}
+                        onHover={setHovered}
+                        onClick={() => onToolsOpenChange(!toolsOpen)}
+                        dataTour="canvas-tools-fab"
+                    >
+                        <Wand2 className="size-4.5" />
+                    </ToolbarButton>
+                ) : null}
                 <Divider theme={theme} />
                 <ToolbarButton
                     id="tool-style"
@@ -191,7 +207,6 @@ export function CanvasToolbar({
                     onClick={(event) => {
                         setPanelX(getTipX(wrapRef.current, event.currentTarget));
                         setExtensionsOpen(false);
-                        setCloudUploadOpen(false);
                         setAppearanceOpen((value) => !value);
                     }}
                 >
@@ -209,26 +224,6 @@ export function CanvasToolbar({
                 <ToolbarButton id="tool-clear" label={t("canvas.toolbar.clear")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onClear} danger>
                     <Eraser className="size-4.5" />
                 </ToolbarButton>
-                <Divider theme={theme} />
-                <CloudUploadProgress
-                    variant="toolbar"
-                    open={cloudUploadOpen}
-                    onOpenChange={(next) => {
-                        if (next) {
-                            setAppearanceOpen(false);
-                            setExtensionsOpen(false);
-                        }
-                        setCloudUploadOpen(next);
-                    }}
-                    toolbar={{
-                        hovered,
-                        hoverStyle,
-                        activeStyle,
-                        wrapRef,
-                        onTipX: setTipX,
-                        onHover: setHovered,
-                    }}
-                />
             </div>
 
             {extensionsOpen && extensionDefs.length ? (
@@ -337,6 +332,7 @@ function ToolbarButton({
     onClick,
     disabled = false,
     danger = false,
+    dataTour,
     children,
 }: {
     id: string;
@@ -351,6 +347,7 @@ function ToolbarButton({
     onClick?: (event: ReactMouseEvent<HTMLElement>) => void;
     disabled?: boolean;
     danger?: boolean;
+    dataTour?: string;
     children: ReactNode;
 }) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
@@ -361,6 +358,7 @@ function ToolbarButton({
             aria-label={label}
             className="!h-8 !w-8 !min-w-8 !p-0"
             disabled={disabled}
+            data-tour={dataTour}
             style={active ? activeStyle : hovered === id && !disabled ? hoverStyle : { color: danger ? "#f87171" : theme.toolbar.item, opacity: disabled ? 0.35 : 1 }}
             icon={children}
             onMouseEnter={(event) => {
@@ -416,16 +414,16 @@ function toolLabel(id: string, t: (key: string) => string) {
     if (id === "tool-image") return t("canvas.toolbar.image");
     if (id === "tool-video") return t("canvas.toolbar.video");
     if (id === "tool-audio") return t("canvas.toolbar.audio");
-    if (id === "tool-storyboard") return t("canvas.storyboard.toolbar");
     if (id === "tool-config") return t("canvas.toolbar.config");
     if (id === "tool-group") return t("canvas.toolbar.group");
+    if (id === "tool-director") return t("canvas.toolbar.director");
+    if (id === "tool-script") return t("canvas.toolbar.script");
     if (id === "tool-extensions") return t("canvas.toolbar.extensions");
-    if (id === "tool-upload") return t("canvas.toolbar.upload");
-    if (id === "tool-paste") return t("canvas.toolbar.paste");
+    if (id === "tool-assets") return t("canvas.toolbar.assets");
+    if (id === "tool-tools") return t("canvas.tools.open");
     if (id === "tool-style") return t("canvas.toolbar.appearance");
     if (id === "tool-delete") return t("canvas.deleteSelected");
     if (id === "tool-clear") return t("canvas.toolbar.clear");
-    if (id === "tool-cloud-upload") return t("canvas.cloudUpload.title");
     return "";
 }
 

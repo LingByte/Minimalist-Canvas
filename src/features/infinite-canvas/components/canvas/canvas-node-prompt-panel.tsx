@@ -8,6 +8,7 @@ import { defaultConfig, resolveModelForCapability, useConfigStore, useEffectiveC
 import { canvasThemes } from "@canvas/lib/canvas-theme";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { CanvasImageSettingsPopover } from "./canvas-image-settings-popover";
+import { CanvasModelPriceHint } from "./canvas-model-price-hint";
 import { CanvasPromptLibrary } from "./canvas-prompt-library";
 import { CanvasAudioSettingsPopover, type CanvasAudioSettingKey } from "./canvas-audio-settings-popover";
 import { CanvasPromptChipInput } from "./canvas-prompt-chip-input";
@@ -204,17 +205,23 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
                         </>
                     )}
                 </div>
-                <Button
-                    type="primary"
-                    className="!h-10 !min-w-16 shrink-0 !rounded-full !px-3"
-                    disabled={isRunning || !prompt.trim()}
-                    onClick={() => {
-                        if (!isRunning) submit();
-                    }}
-                    aria-label={t(isRunning ? "canvas.node.generating" : "canvas.promptPanel.generate")}
-                >
-                    {isRunning ? <LoaderCircle className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}
-                </Button>
+                <div className="flex shrink-0 items-center gap-2">
+                    <CanvasModelPriceHint
+                        modelValue={config.model}
+                        resolution={mode === "video" ? config.vquality : undefined}
+                    />
+                    <Button
+                        type="primary"
+                        className="!h-10 !min-w-16 shrink-0 !rounded-full !px-3"
+                        disabled={isRunning || (mode !== "video" && !prompt.trim())}
+                        onClick={() => {
+                            if (!isRunning) submit();
+                        }}
+                        aria-label={t(isRunning ? "canvas.node.generating" : "canvas.promptPanel.generate")}
+                    >
+                        {isRunning ? <LoaderCircle className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}
+                    </Button>
+                </div>
             </div>
             <Modal title={t("canvas.promptPanel.editorTitle")} open={expanded} centered width={760} footer={null} onCancel={() => setExpanded(false)} destroyOnHidden>
                 <div data-canvas-no-zoom className="pt-2" onWheelCapture={(event) => event.stopPropagation()}>

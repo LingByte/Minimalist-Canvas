@@ -54,7 +54,7 @@ export type LocalImageGenerationLog = {
     imageCount: number;
     size: string;
     quality: string;
-    status: "success" | "failed";
+    status: "pending" | "success" | "failed";
     images: LocalGeneratedImage[];
     thumbnails: string[];
     /** workbench | canvas — optional, older rows omit it */

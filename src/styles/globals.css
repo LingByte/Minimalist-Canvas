@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "../features/infinite-canvas/styles/director.css";
 @source "../../../node_modules/streamdown/dist/*.js";
 
 @custom-variant dark (&:is(.dark *));
@@ -1042,3 +1043,200 @@
 .captcha-slider-handle:disabled {
   cursor: not-allowed;
 }
+
+/* Docs reading surface */
+.docs-shell {
+  --docs-rail: color-mix(in oklch, var(--muted) 55%, var(--background));
+}
+
+.docs-prose {
+  font-size: 14.5px;
+  line-height: 1.7;
+}
+
+.docs-prose .prose {
+  --tw-prose-body: color-mix(in oklch, var(--foreground) 84%, transparent);
+  --tw-prose-headings: var(--foreground);
+  --tw-prose-links: var(--foreground);
+  --tw-prose-bold: var(--foreground);
+  --tw-prose-code: var(--foreground);
+}
+
+.docs-prose .prose h2 {
+  margin-top: 1.85rem;
+  margin-bottom: 0.65rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
+  font-size: 1.18rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.docs-prose .prose h3 {
+  margin-top: 1.35rem;
+  margin-bottom: 0.45rem;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+
+.docs-prose .prose p {
+  margin-top: 0.6rem;
+  margin-bottom: 0.6rem;
+  max-width: 68ch;
+}
+
+.docs-prose .prose ul,
+.docs-prose .prose ol {
+  margin-top: 0.5rem;
+  margin-bottom: 0.75rem;
+  max-width: 68ch;
+}
+
+.docs-prose .prose li {
+  margin-top: 0.28rem;
+  margin-bottom: 0.28rem;
+  padding-left: 0.1rem;
+}
+
+.docs-prose .prose ol > li::marker {
+  font-weight: 650;
+  color: color-mix(in oklch, var(--foreground) 50%, transparent);
+}
+
+.docs-prose .prose table {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin: 0.95rem 0 1.2rem;
+  overflow-x: auto;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid color-mix(in oklch, var(--border) 75%, transparent);
+  border-radius: 0.6rem;
+  background: var(--card);
+}
+
+.docs-prose .prose thead {
+  background: color-mix(in oklch, var(--muted) 45%, transparent);
+}
+
+.docs-prose .prose th,
+.docs-prose .prose td {
+  border: 0;
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 65%, transparent);
+  border-right: 1px solid color-mix(in oklch, var(--border) 40%, transparent);
+  padding: 0.55rem 0.8rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.docs-prose .prose th {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.docs-prose .prose th:last-child,
+.docs-prose .prose td:last-child {
+  border-right: 0;
+}
+
+.docs-prose .prose tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.docs-prose .prose tbody tr:hover td {
+  background: color-mix(in oklch, var(--muted) 28%, transparent);
+}
+
+.docs-prose .prose td:nth-child(1),
+.docs-prose .prose th:nth-child(1) {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--card);
+  white-space: normal;
+  min-width: 7rem;
+}
+
+.docs-prose .prose thead th:nth-child(1) {
+  background: color-mix(in oklch, var(--muted) 58%, var(--card));
+}
+
+.docs-prose .prose :not(pre) > code {
+  font-size: 0.84em;
+  border-radius: 0.3rem;
+  border: 1px solid color-mix(in oklch, var(--border) 65%, transparent);
+  background: color-mix(in oklch, var(--muted) 40%, transparent);
+  padding: 0.1rem 0.3rem;
+}
+
+.docs-prose .docs-code-wrap {
+  margin: 0.85rem 0 1.15rem;
+}
+
+.docs-prose .docs-code-wrap pre {
+  margin: 0;
+  border-radius: 0.6rem;
+  border-color: color-mix(in oklch, var(--border) 70%, transparent);
+  background: color-mix(in oklch, var(--muted) 38%, var(--background));
+  padding: 0.85rem 1rem;
+}
+
+.docs-prose .prose blockquote {
+  margin: 0.9rem 0;
+  border-left-width: 2px;
+  border-left-color: color-mix(in oklch, var(--foreground) 30%, transparent);
+  border-radius: 0 0.5rem 0.5rem 0;
+  background: color-mix(in oklch, var(--muted) 28%, transparent);
+  padding: 0.55rem 0.85rem;
+}
+
+.docs-page-hero {
+  position: relative;
+  padding-bottom: 1.1rem;
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 65%, transparent);
+}
+
+.docs-page-hero::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 2.75rem;
+  height: 2px;
+  background: var(--foreground);
+  opacity: 0.4;
+}
+
+.docs-endpoint-strip {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--muted) 18%, var(--card)),
+      var(--card)
+    );
+}
+
+/* Puzzle captcha (auth gate) */
+@keyframes captcha-slider-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-6px);
+  }
+  40% {
+    transform: translateX(6px);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(4px);
+  }
+}
+

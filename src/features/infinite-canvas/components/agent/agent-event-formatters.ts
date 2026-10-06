@@ -530,7 +530,14 @@ export function scopeChatItem(item: AgentChatItem, threadId: string, turnId: str
 }
 
 export function bindPendingTurnMessages(messages: AgentChatItem[], threadId: string, turnId: string) {
-    const index = messages.findLastIndex((item) => item.role === "user" && item.threadId === threadId && !item.turnId);
+    let index = -1;
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+        const item = messages[i];
+        if (item.role === "user" && item.threadId === threadId && !item.turnId) {
+            index = i;
+            break;
+        }
+    }
     if (index < 0) return messages;
     return messages.map((item, itemIndex) => itemIndex === index ? scopeChatItem(item, threadId, turnId) : item);
 }

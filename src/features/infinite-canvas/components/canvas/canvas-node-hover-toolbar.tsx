@@ -28,7 +28,9 @@ type CanvasNodeHoverToolbarProps = {
     onSaveAsset: (node: CanvasNodeData) => void;
     onMaskEdit: (node: CanvasNodeData) => void;
     onCrop: (node: CanvasNodeData) => void;
+    onCompress: (node: CanvasNodeData) => void;
     onSplit: (node: CanvasNodeData) => void;
+    onFaceMesh: (node: CanvasNodeData) => void;
     onUpscale: (node: CanvasNodeData) => void;
     onSuperResolve: (node: CanvasNodeData) => void;
     onAngle: (node: CanvasNodeData) => void;
@@ -66,7 +68,9 @@ export function CanvasNodeHoverToolbar({
     onSaveAsset,
     onMaskEdit,
     onCrop,
+    onCompress,
     onSplit,
+    onFaceMesh,
     onUpscale,
     onSuperResolve,
     onAngle,
@@ -86,6 +90,7 @@ export function CanvasNodeHoverToolbar({
     const { message } = App.useApp();
     const { t } = useTranslation();
     const copyText = useCopyText();
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
 
     useEffect(() => {
         try {
@@ -112,7 +117,7 @@ export function CanvasNodeHoverToolbar({
     const isImage = node.type === CanvasNodeType.Image;
     const isVideo = node.type === CanvasNodeType.Video;
     const isAudio = node.type === CanvasNodeType.Audio;
-    const hasImage = isImage && Boolean(node.metadata?.content);
+    const hasImage = isImage && Boolean(node.metadata?.content || node.metadata?.storageKey);
     const hasVideo = isVideo && Boolean(node.metadata?.content);
     const hasAudio = isAudio && Boolean(node.metadata?.content);
     const isText = node.type === CanvasNodeType.Text;
@@ -128,7 +133,7 @@ export function CanvasNodeHoverToolbar({
         }
         copyText(prompt, t("common.promptCopied"));
     };
-    const imageTools = buildImageToolbarTools(node, { onUpload, onToggleFreeResize, onMaskEdit, onCrop, onSplit, onUpscale, onSuperResolve, onAngle, onViewImage, onCopyPrompt: copyImagePrompt, onReversePrompt });
+    const imageTools = buildImageToolbarTools(node, { onUpload, onToggleFreeResize, onMaskEdit, onCrop, onCompress, onSplit, onFaceMesh, onUpscale, onSuperResolve, onAngle, onViewImage, onCopyPrompt: copyImagePrompt, onReversePrompt });
 
     function openImageToolSettings() {
         onKeep(activeNode.id);
@@ -156,7 +161,7 @@ export function CanvasNodeHoverToolbar({
         ...(isAudio ? [{ id: "uploadAudio", title: t(hasAudio ? "canvas.nodeToolbar.replaceAudio" : "canvas.nodeToolbar.uploadAudio"), label: t(hasAudio ? "canvas.nodeToolbar.replaceAudio" : "canvas.nodeToolbar.uploadAudio"), icon: <Music2 className="size-4" />, onClick: () => onUpload(node) }] : []),
         ...(hasImage ? imageTools.map((tool) => ({ id: tool.id, title: tool.title, label: tool.label, icon: tool.icon, active: tool.active, onClick: tool.onClick })) : []),
     ];
-    const toolbarTools = hasImage ? [...baseToolbarTools, ...nodeToolbarTools].filter((tool) => quickImageToolIdSet.has(tool.id as ImageQuickToolId)) : [...baseToolbarTools, ...nodeToolbarTools, ...extraTools];
+    const toolbarTools = hasImage ? [...baseToolbarTools, ...nodeToolbarTools, ...extraTools].filter((tool) => extraTools.some((item) => item.id === tool.id) || quickImageToolIdSet.has(tool.id as ImageQuickToolId)) : [...baseToolbarTools, ...nodeToolbarTools, ...extraTools];
     const selectableImageToolbarTools = [...baseToolbarTools, ...nodeToolbarTools].filter((tool) => tool.id !== "retry") as ImageToolbarSettingsTool[];
 
     const closeImageToolSettings = () => {
@@ -184,8 +189,8 @@ export function CanvasNodeHoverToolbar({
     return (
         <>
             <div
-                className="absolute z-[70] flex h-12 -translate-x-1/2 -translate-y-full items-center overflow-visible rounded-[18px] border border-black/10 bg-white text-[15px] text-stone-800 shadow-[0_8px_28px_rgba(15,23,42,.12)] dark:border-white/10 dark:bg-stone-900 dark:text-stone-100 dark:shadow-[0_8px_28px_rgba(0,0,0,.4)]"
-                style={{ left, top }}
+                className="absolute z-[70] flex h-12 -translate-x-1/2 -translate-y-full items-center overflow-visible rounded-[18px] border text-[15px] shadow-[0_8px_28px_rgba(15,23,42,.12)]"
+                style={{ left, top, background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
                 onMouseEnter={() => onKeep(node.id)}
                 onMouseLeave={() => {
                     if (!imageToolSettingsOpen) onLeave();
@@ -287,13 +292,23 @@ export function CanvasNodeInfoModal({ node, open, onClose }: { node: CanvasNodeD
 }
 
 function ToolbarAction({ title, label, icon, onClick, showLabel, active = false, danger = false }: ToolbarTool & { showLabel: boolean }) {
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const hasText = showLabel && Boolean(label);
     return (
-        <Tooltip title={title} placement="top" mouseEnterDelay={0.2} color="#ffffff" styles={{ root: { color: "#242529", boxShadow: "0 8px 24px rgba(15,23,42,.16)", fontSize: 13, fontWeight: 500 } }}>
+        <Tooltip title={title} placement="top" mouseEnterDelay={0.2} color="#ffffff" styles={{ root: { color: "#0f172a", boxShadow: "0 8px 24px rgba(15,23,42,.16)", fontSize: 13, fontWeight: 500 } }}>
             <button type="button" className={`group relative flex h-12 items-center whitespace-nowrap px-1.5 ${danger ? "text-[#ef4444]" : ""}`} onClick={onClick} aria-label={title}>
-                <span className={`flex h-9 items-center ${hasText ? "gap-2 px-2.5" : "justify-center px-2"} rounded-lg transition group-hover:bg-stone-100 dark:group-hover:bg-stone-700 ${active ? "bg-stone-200 dark:bg-stone-600" : ""}`}>
+                <span
+                    className={`flex h-9 items-center rounded-lg transition ${hasText ? "gap-2 px-2.5" : "justify-center px-2"}`}
+                    style={{ background: active ? theme.toolbar.activeBg : undefined }}
+                    onMouseEnter={(event) => {
+                        if (!active) event.currentTarget.style.background = theme.toolbar.itemHover;
+                    }}
+                    onMouseLeave={(event) => {
+                        event.currentTarget.style.background = active ? theme.toolbar.activeBg : "";
+                    }}
+                >
                     {icon}
-                    {hasText ? <span>{label}</span> : null}
+                    {hasText ? <span className="text-[13px] font-medium leading-none">{label}</span> : null}
                 </span>
             </button>
         </Tooltip>
