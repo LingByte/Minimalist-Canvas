@@ -65,6 +65,19 @@ export function useVersionCheck() {
                 }
                 return true;
             } catch (error) {
+                const text = error instanceof Error ? error.message : String(error);
+                const missingPlatform =
+                    /None of the fallback platforms|was not found in the response `platforms`/i.test(
+                        text
+                    );
+                if (missingPlatform) {
+                    console.warn("[updater] no package for this platform", error);
+                    clearPendingUpdate();
+                    if (showMessage) {
+                        message.warning(t("version.noPlatformUpdate"));
+                    }
+                    return false;
+                }
                 console.error(error);
                 if (showMessage) {
                     message.error(

@@ -4,9 +4,20 @@ import { getVersion } from "@tauri-apps/api/app";
 import { t } from "i18next";
 import { toast } from "sonner";
 
+import { openExternal } from "@/lib/open-external";
 import { isTauri } from "@canvas/services/fs-store";
 
 const AUTO_CHECK_DELAY_MS = 4000;
+const RELEASES_LATEST_URL =
+    "https://github.com/LingByte/Minimalist-Canvas/releases/latest";
+
+/** Tauri throws this when latest.json has no package for the running OS/arch. */
+function isMissingPlatformError(error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return /None of the fallback platforms|was not found in the response `platforms`/i.test(
+        message
+    );
+}
 
 let checking = false;
 let autoCheckTimer: number | null = null;
@@ -52,6 +63,20 @@ export async function checkForAppUpdate(options?: { manual?: boolean }) {
             },
         });
     } catch (error) {
+        if (isMissingPlatformError(error)) {
+            // Current latest.json may only list Windows; macOS needs app+dmg in CI.
+            console.warn("[updater] no package for this platform in latest.json", error);
+            if (options?.manual) {
+                toast.message(t("No in-app update for this platform"), {
+                    description: t("Download the latest installer from GitHub Releases."),
+                    action: {
+                        label: t("Open download page"),
+                        onClick: () => void openExternal(RELEASES_LATEST_URL),
+                    },
+                });
+            }
+            return;
+        }
         console.error("[updater] check failed", error);
         if (options?.manual) toast.error(t("Update check failed"));
     } finally {

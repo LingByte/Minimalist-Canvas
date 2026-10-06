@@ -19,8 +19,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Build `app` so createUpdaterArtifacts emits darwin-*-app.tar.gz for in-app updates.
+          # DMG remains the stable download asset for humans.
           - os: macos-latest
-            args: --target universal-apple-darwin --bundles dmg
+            args: --target universal-apple-darwin --bundles app,dmg
             asset: Minimalist-Canvas-macOS.dmg
             find: "*/bundle/dmg/*.dmg"
           - os: windows-latest
