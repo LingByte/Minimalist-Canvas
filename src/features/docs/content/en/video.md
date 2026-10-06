@@ -2,16 +2,17 @@
 
 Video generation is **asynchronous**: submit a task, poll until it finishes, then fetch the content.
 
+> **Parameters differ by model.** Some models take the aspect ratio as `ratio`, others as `aspect_ratio`; some take duration as `seconds`, others as `duration`, and some have a fixed duration. Find your model under [Models and parameters](#models-and-parameters) below and follow its field list. The model lists update live from the models currently available.
+
 ## Create a video task
 
 **Endpoint:** `POST {baseUrl}/videos`
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `model` | string | yes | Video model name, e.g. `dq-sd933-pro` |
+| `model` | string | yes | Video model name, see [Models and parameters](#models-and-parameters) |
 | `prompt` | string | yes | Video description |
-| `seconds` | number | no | Duration in seconds (model-dependent) |
-| `ratio` | string | no | Aspect ratio, e.g. `16:9`, `9:16` |
+| Duration, ratio, etc. | — | no | Field names depend on the model, see [Models and parameters](#models-and-parameters) |
 
 > **messages format also accepted**: if `prompt` is absent, you may send `messages` (OpenAI chat format) and the gateway will extract the prompt from `messages[].content` automatically.
 
@@ -22,28 +23,12 @@ curl {baseUrl}/videos \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "dq-sd933-pro",
+    "model": "{{videoModel:standard}}",
     "prompt": "A cat walking on a sunny beach, cinematic",
     "seconds": 4,
     "ratio": "16:9"
   }'
 ```
-
-### messages compatibility
-
-```bash
-curl {baseUrl}/videos \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "dq-sd933-pro",
-    "messages": [
-      {"role": "user", "content": "A cat walking on a sunny beach, cinematic"}
-    ]
-  }'
-```
-
-The gateway automatically extracts message content into the `prompt` field before forwarding upstream.
 
 ### Sample response
 
@@ -74,81 +59,70 @@ After the task completes, download via the content proxy:
 
 | Status | Meaning |
 |--------|---------|
-| `queued` / `pending` | Waiting |
-| `processing` / `in_progress` | Generating |
-| `completed` | Done |
-| `failed` / `cancelled` | Failed or cancelled |
+| `queued` | Waiting |
+| `in_progress` | Generating |
+| `completed` | Done (`succeeded` for the multi-reference `/video/generations` format) |
+| `failed` | Failed |
 
-## MaxForAI channel setup
+## Models and parameters
 
-MaxForAI upstream uses a standard `prompt` field (not messages). Supported fields: `model`, `prompt`, `seconds`, `ratio`.
+### Standard video models
 
-When creating a channel in the admin panel:
-- **Type**: select `MaxForAI`
-- **Base URL**: `https://maxforai.top` (pre-filled)
-- **Key**: API Key from the MaxForAI token page
-- **Models**: video models like `dq-sd933-pro`; add chat models yourself
+**Available models:** {{videoModels:standard}}
 
-Chat completions use the standard OpenAI path: `POST {baseUrl}/chat/completions` (same MaxForAI channel).
+| Field | Description |
+|-------|-------------|
+| `prompt` | Video description; `messages` also accepted |
+| `seconds` | Duration in seconds; allowed values depend on the model |
+| `ratio` | Aspect ratio, e.g. `16:9`, `9:16` (use `ratio`, not `size`) |
 
-## OmegaAI channel setup
+See [Standard usage](#standard-usage-recommended) above for a request example.
 
-[ΩMEGA AI](https://omegaai.xin/) supports **async video/image only** (upstream chat is currently unavailable). Submit via `POST {baseUrl}/videos`; the adaptor forwards to upstream `POST /v1/media/generate`.
+### Video / async image models
 
-Polling uses `GET /v1/tasks/{task_id}`. **Success status is `succeeded` (not `completed`)**. Result URL is in `result.url` (may be relative; the gateway resolves it).
+**Available models:** {{videoModels:media}}
 
-When creating a channel in the admin panel:
-- **Type**: select `OmegaAI`
-- **Base URL**: `https://omegaai.xin` (pre-filled)
-- **Key**: API Key from the OmegaAI user center
-- **Models**:
-  - Async image: `gemini-3.1-flash-image-preview`
-  - Video: `seedance-v2-720p`, `cvk`, `db-ai-video-v1`, `sd-2-c3`, `d-ai-video-v3`, `seedance2.5-900`
+This group contains both video models and async image models. All are submitted via `POST {baseUrl}/videos` and polled / downloaded as described above.
 
-Submit example:
+| Field | Description |
+|-------|-------------|
+| `duration` / `seconds` | Duration in seconds (either one) |
+| `aspect_ratio` / `ratio` | Aspect ratio, e.g. `16:9` |
+| `resolution` | Resolution, e.g. `720p` |
+| `images` / `videos` / `audios` | Reference media as arrays of public URLs |
+| `auto_face_mask` | Automatically mask faces |
 
 ```bash
 curl {baseUrl}/videos \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "seedance-v2-720p",
+    "model": "{{videoModel:media}}",
     "prompt": "City night timelapse",
     "duration": 5,
     "aspect_ratio": "16:9"
   }'
 ```
 
-Optional fields: `duration` / `seconds`, `aspect_ratio` / `ratio`, `resolution`, `images` / `videos` / `audios` (public URL arrays), `auto_face_mask`.
+### Multi-reference video models
 
-> Upstream `POST /v1/images/generations` and `POST /v1/videos/generations` are demo stubs. Use this gateway's `/videos` (forwarded to `/v1/media/generate`) for real generation.
+**Available models:** {{videoModels:multi_reference}}
 
-## XManWay channel setup
+These models accept two request formats:
 
-[XManWay](https://newapi.xmanway.com/) provides multiple video models with two request formats:
+| Format | Endpoint | Use case | Success status |
+|--------|----------|----------|----------------|
+| Standard | `POST {baseUrl}/videos` | Text-to-video, single-image reference | `completed` |
+| Multi-reference | `POST {baseUrl}/video/generations` | Image / video / audio references | `succeeded` |
 
-| Format | Gateway endpoint | Use case |
-|--------|------------------|----------|
-| OpenAI video | `POST {baseUrl}/videos` | Text-to-video, single-image reference |
-| Multi-reference | `POST {baseUrl}/video/generations` | Image / video / audio references |
-
-**Models:** `seedance-2.0`, `seedance-2.0-fast`, `minimax-h3`, `kling-3.0-omni`, `happyhorse`
-
-OpenAI format success status is `completed`; multi-reference format uses `succeeded`. Download via `GET {baseUrl}/videos/{task_id}/content` for OpenAI format; multi-reference tasks return a URL in the poll response.
-
-When creating a channel in the admin panel:
-- **Type**: select `XManWay`
-- **Base URL**: `https://newapi.xmanway.com` (pre-filled)
-- **Key**: API Key from the console
-
-OpenAI format example:
+Standard format fields: `seconds` (duration), `size` (resolution, e.g. `1080p`), `aspect_ratio`; pass a single reference image via `images` or `input_reference.image_url`. Download with `GET {baseUrl}/videos/{task_id}/content`.
 
 ```bash
 curl {baseUrl}/videos \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "seedance-2.0",
+    "model": "{{videoModel:multi_reference}}",
     "prompt": "Sunset at the beach, slow dolly forward",
     "seconds": 8,
     "size": "1080p",
@@ -156,14 +130,14 @@ curl {baseUrl}/videos \
   }'
 ```
 
-Multi-reference example:
+Multi-reference format fields: `duration`, `resolution`, `aspect_ratio`, `image_references` (array of image URLs). Poll with `GET {baseUrl}/video/generations/{task_id}`; the result URL is in the response `url` field.
 
 ```bash
 curl {baseUrl}/video/generations \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "minimax-h3",
+    "model": "{{videoModel:multi_reference}}",
     "prompt": "Person in image 1 walks toward the building in image 2",
     "duration": 10,
     "resolution": "720p",
@@ -175,10 +149,30 @@ curl {baseUrl}/video/generations \
   }'
 ```
 
-For local assets without a public URL, declare `type: "upload"` in `input_reference` / `image_references`, upload via `upload.slots`, then call `POST /v1/uploads/complete` (request body is passed through upstream).
+Use publicly accessible URLs for reference media.
+
+### 30-second video models
+
+**Available models:** {{videoModels:fixed_30s}}
+
+| Field | Description |
+|-------|-------------|
+| `ratio` | Aspect ratio; only `16:9`, `9:16`, `1:1`, `3:4`, `4:3`, `21:9`. Missing or other values fall back to `16:9`. `aspect_ratio` is also accepted |
+| `seconds` | **Always 30 seconds**; any other value is ignored |
+| `images` | Up to 9 reference images, JPG / PNG only, each side ≤ 8192 px, 50 MB total |
+
+```bash
+curl {baseUrl}/videos \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "{{videoModel:fixed_30s}}",
+    "prompt": "A cat walking on a sunny beach, cinematic",
+    "ratio": "9:16"
+  }'
+```
 
 ## Notes
 
 - Video jobs can take minutes; poll until completion
-- The channel Test button skips video/media models to avoid billed generation — verify with curl instead
 - Check **Task logs** in the console for history

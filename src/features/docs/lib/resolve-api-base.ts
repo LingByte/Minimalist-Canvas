@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 /** Production fallback when the current origin cannot be resolved. */
-export const DEFAULT_DOCS_API_ORIGIN = 'https://simplefuture.zone'
+export const DEFAULT_DOCS_API_ORIGIN = 'https://canvas.soulmy.top'
 
 function withV1(origin: string): string {
   const normalized = origin.trim().replace(/\/+$/, '')

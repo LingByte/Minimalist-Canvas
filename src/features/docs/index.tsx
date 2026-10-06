@@ -17,10 +17,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { CheckOutlined, CopyOutlined, DownloadOutlined, MenuOutlined } from '@ant-design/icons'
+import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Button, Drawer } from 'antd'
 import { ArrowLeft, ArrowRight, Bug } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -46,6 +47,11 @@ import {
   getDocsSection,
   type DocsSectionId,
 } from './lib/sections'
+import {
+  getDocsVideoModels,
+  renderDocsVideoModels,
+  type DocsVideoModelsState,
+} from './lib/video-models'
 
 type DocsPageProps = {
   section: DocsSectionId
@@ -64,10 +70,43 @@ function DocsPageInner(props: DocsPageProps) {
   const activeSection = getDocsSection(props.section)
   const adjacent = getAdjacentDocsSections(props.section)
 
+  useEffect(() => {
+    setSampleEndpoint(null)
+    setDebugEndpoint(null)
+    setCopied(false)
+  }, [props.section])
+
+  const videoModelsQuery = useQuery({
+    queryKey: ['docs', 'video-models'],
+    queryFn: getDocsVideoModels,
+    enabled: props.section === 'video',
+    staleTime: 60_000,
+    retry: false,
+  })
+  const videoModels = videoModelsQuery.data
+  const videoModelsFailed = videoModelsQuery.isError
+
   const prepared = useMemo(() => {
-    const raw = getDocsContent(props.section, locale)
+    let videoModelsState: DocsVideoModelsState = { status: 'loading' }
+    if (videoModels) {
+      videoModelsState = { status: 'ready', groups: videoModels }
+    } else if (videoModelsFailed) {
+      videoModelsState = { status: 'error' }
+    } else if (props.section !== 'video') {
+      videoModelsState = { status: 'ready', groups: [] }
+    }
+    const raw = renderDocsVideoModels(
+      getDocsContent(props.section, locale),
+      videoModelsState,
+      {
+        loading: t('docs.videoModels.loading'),
+        unavailable: t('docs.videoModels.unavailable'),
+        empty: t('docs.videoModels.empty'),
+        separator: t('docs.videoModels.separator'),
+      }
+    )
     return prepareDocsMarkdown(raw, baseUrl)
-  }, [baseUrl, locale, props.section])
+  }, [baseUrl, locale, props.section, t, videoModels, videoModelsFailed])
 
   const primaryEndpoint =
     sampleEndpoint &&
@@ -117,15 +156,20 @@ function DocsPageInner(props: DocsPageProps) {
   }
 
   return (
-    <div>
-      <div className='flex min-h-[calc(100svh-3.5rem)]'>
-        <aside className='border-border/60 bg-background sticky top-14 hidden h-[calc(100svh-3.5rem)] w-[17.5rem] shrink-0 border-r lg:block'>
+    <div className='docs-shell bg-background relative min-h-[calc(100svh-3.5rem)]'>
+      <div
+        aria-hidden
+        className='pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(ellipse_70%_55%_at_8%_-10%,color-mix(in_oklch,var(--foreground)_8%,transparent),transparent_70%),radial-gradient(ellipse_50%_40%_at_92%_0%,color-mix(in_oklch,var(--muted)_80%,transparent),transparent_65%)]'
+      />
+
+      <div className='relative flex min-h-[calc(100svh-3.5rem)]'>
+        <aside className='border-border/40 bg-muted/15 sticky top-14 hidden h-[calc(100svh-3.5rem)] w-[16.5rem] shrink-0 border-r backdrop-blur-sm lg:block'>
           <DocsNav activeId={props.section} />
         </aside>
 
         <div className='min-w-0 flex-1'>
-          <div className='border-border/70 bg-background/80 sticky top-14 z-10 border-b backdrop-blur-sm lg:hidden'>
-            <div className='flex items-center gap-2 px-4 py-2'>
+          <div className='border-border/40 bg-background/90 sticky top-14 z-10 border-b backdrop-blur-md lg:hidden'>
+            <div className='flex items-center gap-2 px-4 py-2.5'>
               <Button
                 size='small'
                 icon={<MenuOutlined />}
@@ -144,7 +188,7 @@ function DocsPageInner(props: DocsPageProps) {
             placement='left'
             open={navOpen}
             onClose={() => setNavOpen(false)}
-            width={288}
+            width={300}
             styles={{ body: { padding: 0 } }}
           >
             <DocsNav
@@ -160,28 +204,23 @@ function DocsPageInner(props: DocsPageProps) {
             onClose={() => setDebugEndpoint(null)}
           />
 
-          <div className='mx-auto flex w-full max-w-7xl gap-10 px-4 py-8 sm:px-6 lg:gap-12 lg:px-10 lg:py-12'>
+          <div className='mx-auto flex w-full max-w-6xl gap-8 px-4 py-7 sm:px-6 lg:gap-10 lg:px-8 lg:py-9'>
             <article className='min-w-0 flex-1'>
-              <p className='text-muted-foreground mb-3 text-[11px] font-medium tracking-[0.14em] uppercase'>
-                {t('docs.title')}
-                {activeSection ? (
-                  <>
-                    <span className='text-border mx-1.5'>/</span>
+              {activeSection ? (
+                <header className='docs-page-hero mb-7'>
+                  <p className='text-muted-foreground mb-2 text-[11px] font-medium tracking-[0.14em] uppercase'>
+                    {t('docs.title')}
+                    <span className='text-border mx-2'>/</span>
                     {t(
                       activeSection.group === 'guides'
                         ? 'docs.groups.guides'
                         : 'docs.groups.reference'
                     )}
-                  </>
-                ) : null}
-              </p>
-
-              {activeSection ? (
-                <header className='border-border/60 mb-10 border-b pb-8'>
-                  <h1 className='text-foreground text-3xl font-semibold tracking-tight sm:text-[2rem]'>
+                  </p>
+                  <h1 className='text-foreground max-w-3xl text-[1.65rem] leading-[1.15] font-semibold tracking-tight sm:text-[1.9rem]'>
                     {t(activeSection.titleKey)}
                   </h1>
-                  <p className='text-muted-foreground mt-3 max-w-2xl text-[15px] leading-7'>
+                  <p className='text-muted-foreground mt-2 max-w-2xl text-[14px] leading-relaxed'>
                     {t(activeSection.descriptionKey)}
                   </p>
                   <div className='mt-5 flex flex-wrap gap-2'>
