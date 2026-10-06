@@ -54,7 +54,8 @@ export interface PublicHeaderProps {
 }
 
 function isNavLinkActive(pathname: string, href: string) {
-  if (href === '/') return pathname === '/' || pathname === '/home'
+  if (href === '/home') return pathname === '/home'
+  if (href === '/') return pathname === '/'
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 

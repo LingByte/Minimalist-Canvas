@@ -27,11 +27,12 @@ const ConfigOnboardingTour = lazy(() =>
 
 /** Marketing / landing — top header with logo, no sidebar. */
 function isLandingPath(pathname: string) {
-    return pathname === "/" || pathname === "/home";
+    return pathname === "/";
 }
 
 /** Console & site pages — site sidebar (logo in sidebar). */
 const APP_SHELL_PREFIXES = [
+    "/home",
     "/dashboard",
     "/pricing",
     "/docs",
@@ -40,6 +41,9 @@ const APP_SHELL_PREFIXES = [
     "/keys",
     "/usage-logs",
     "/generation-logs",
+    "/creative-circle",
+    "/prompt-library",
+    "/campaigns",
 ] as const;
 
 function isAppShellPath(pathname: string) {

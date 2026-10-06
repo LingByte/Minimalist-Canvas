@@ -20,26 +20,34 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { TopNavLink } from '@/components/layout/types'
+import { useActiveCampaigns } from '@/features/campaigns/hooks'
 
 /**
- * Desktop site nav — same labels/order as the web PublicHeader.
+ * Desktop site nav — mirrors the web console sidebar product destinations.
  * Canvas is an in-app route here (not an external tab).
  */
 export function useDesktopSiteNavLinks(): TopNavLink[] {
   const { t } = useTranslation()
+  const campaigns = useActiveCampaigns()
 
   return useMemo(
     () => [
-      { title: t('Home'), href: '/' },
+      { title: t('Home'), href: '/home' },
       { title: t('Console'), href: '/dashboard' },
       { title: t('Common Logs'), href: '/usage-logs/common' },
       { title: t('Task Logs'), href: '/usage-logs/task' },
       { title: t('Canvas'), href: '/canvas' },
       { title: t('Generation Records'), href: '/generation-logs' },
-      { title: t('Model Selection'), href: '/pricing' },
+      { title: t('Prompt library'), href: '/prompt-library' },
+      { title: t('Creative Circle'), href: '/creative-circle' },
+      ...campaigns.map((campaign) => ({
+        title: campaign.title,
+        href: `/campaigns/${campaign.slug}`,
+      })),
+      { title: t('Model Square'), href: '/pricing' },
       { title: t('Docs'), href: '/docs' },
       { title: t('FAQ'), href: '/faq' },
     ],
-    [t]
+    [campaigns, t]
   )
 }

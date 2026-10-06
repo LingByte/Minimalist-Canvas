@@ -17,15 +17,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import {
+  BookMarked,
   BookOpen,
   Boxes,
   CircleHelp,
   Frame,
+  Gift,
   History,
   Home,
   LayoutDashboard,
   ListTodo,
   ScrollText,
+  Sparkles,
   type LucideIcon,
 } from 'lucide-react'
 import { startTransition, useCallback, useMemo, type MouseEvent } from 'react'
@@ -42,19 +45,26 @@ import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
 const NAV_ICONS: Record<string, LucideIcon> = {
-  '/': Home,
+  '/home': Home,
   '/dashboard': LayoutDashboard,
   '/usage-logs/common': ScrollText,
   '/usage-logs/task': ListTodo,
   '/canvas': Frame,
   '/generation-logs': History,
+  '/prompt-library': BookMarked,
+  '/creative-circle': Sparkles,
   '/pricing': Boxes,
   '/docs': BookOpen,
   '/faq': CircleHelp,
 }
 
+function navIconFor(href: string): LucideIcon {
+  if (href.startsWith('/campaigns/')) return Gift
+  return NAV_ICONS[href] ?? Boxes
+}
+
 function isNavActive(pathname: string, href: string) {
-  if (href === '/') return pathname === '/' || pathname === '/home'
+  if (href === '/home') return pathname === '/home'
   if (href === '/canvas') {
     return pathname === '/canvas' || pathname.startsWith('/canvas/')
   }
@@ -79,7 +89,7 @@ export function DesktopSiteSidebar(props: { className?: string }) {
     () =>
       links.map((link) => ({
         ...link,
-        icon: NAV_ICONS[link.href] ?? Boxes,
+        icon: navIconFor(link.href),
       })),
     [links]
   )
@@ -104,8 +114,8 @@ export function DesktopSiteSidebar(props: { className?: string }) {
       aria-label={t('Primary')}
     >
       <Link
-        to='/'
-        onClick={(event) => go('/', event)}
+        to='/home'
+        onClick={(event) => go('/home', event)}
         className='flex h-14 w-full items-center justify-center px-2 transition-opacity hover:opacity-90'
         aria-label={systemName}
       >

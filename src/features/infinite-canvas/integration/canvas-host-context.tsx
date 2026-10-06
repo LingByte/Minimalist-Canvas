@@ -16,7 +16,7 @@ export type CanvasHostContextValue = {
 
 const defaultValue: CanvasHostContextValue = {
   embedded: false,
-  homeHref: '/',
+  homeHref: '/home',
   logo: DEFAULT_LOGO,
   brandName: DEFAULT_SYSTEM_NAME,
   brandTagline: DEFAULT_SYSTEM_TAGLINE,
