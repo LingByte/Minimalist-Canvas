@@ -31,11 +31,14 @@ function shouldSyncModelsForPath(pathname: string) {
 }
 
 function scheduleIdle(task: () => void) {
-  if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-    window.requestIdleCallback(() => task(), { timeout: 2500 })
+  const win = globalThis as typeof globalThis & {
+    requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number
+  }
+  if (typeof win.requestIdleCallback === 'function') {
+    win.requestIdleCallback(() => task(), { timeout: 2500 })
     return
   }
-  window.setTimeout(task, 120)
+  win.setTimeout(task, 120)
 }
 
 /** Sync canvas default channel models from GET /api/canvas/models (with capability). */

@@ -1,13 +1,14 @@
 import { type AiConfig, type ModelChannel } from '@canvas/stores/use-config-store'
 
 export const GATEWAY_CHANNEL_ID = 'default'
-export const PRODUCT_DEFAULT_BASE_URL = 'https://simplefuture.zone'
+export const PRODUCT_DEFAULT_BASE_URL = 'https://canvas.soulmy.top'
 const LEGACY_PRODUCT_DEFAULT_BASE_URLS = [
   'http://localhost:3000',
   'https://canvas.lingecho.com',
   'http://1.14.99.158:9000',
   'https://simplefuture.zone',
   'https://ai.lingecho.com',
+  'https://canvas.soulmy.top',
 ]
 
 const LEGACY_OPENAI_BASE_URL = 'https://api.openai.com'

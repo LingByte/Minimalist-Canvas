@@ -64,10 +64,10 @@ export type WebdavSyncConfig = {
     directory: string;
     lastSyncedAt: string;
 };
-export type ConfigTabKey = "channels" | "preferences" | "webdav" | "local-storage";
+export type ConfigTabKey = "channels" | "preferences" | "webdav" | "local-storage" | "plugins";
 
 const CHANNEL_MODEL_SEPARATOR = "::";
-const DEFAULT_OPENAI_BASE_URL = "https://simplefuture.zone";
+const DEFAULT_OPENAI_BASE_URL = "https://canvas.soulmy.top";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
 /** Built-in relay key for this desktop build. */
 const BUILTIN_API_KEY = "sk-VsOmVvXFwhvpDeJSK5RFWYWo2xMtL37FIv6ju0goTUzOUPTA";

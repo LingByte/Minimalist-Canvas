@@ -37,6 +37,10 @@ export default defineConfig(({ envMode }) => {
       alias: {
         '@': path.resolve(__dirname, './src'),
         '@canvas': path.resolve(__dirname, './src/features/infinite-canvas'),
+        '@tauri-apps/plugin-clipboard-manager': path.resolve(
+          __dirname,
+          './node_modules/@tauri-apps/plugin-clipboard-manager/dist-js/index.js'
+        ),
         react: path.resolve(__dirname, './node_modules/react'),
         'react-dom': path.resolve(__dirname, './node_modules/react-dom'),
         'react/jsx-runtime': path.resolve(__dirname, './node_modules/react/jsx-runtime.js'),

@@ -40,6 +40,9 @@
         },
         {
           "url": "https://simplefuture.zone/*"
+        },
+        {
+          "url": "https://canvas.soulmy.top/*"
         }
       ]
     },
@@ -66,6 +69,12 @@
         },
         {
           "url": "https://*.simplefuture.zone/*"
+        },
+        {
+          "url": "https://canvas.soulmy.top/*"
+        },
+        {
+          "url": "https://*.soulmy.top/*"
         },
         {
           "url": "https://*.lingecho.com/*"
