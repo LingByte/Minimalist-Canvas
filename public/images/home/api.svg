@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="672" height="896" viewBox="0 0 672 896" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="80" y1="40" x2="620" y2="860" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1220"/>
+      <stop offset="0.45" stop-color="#12304F"/>
+      <stop offset="1" stop-color="#071018"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="336" y1="180" x2="336" y2="720" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5EC8FF" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#5EC8FF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="148" y1="250" x2="524" y2="650" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1A2B3F"/>
+      <stop offset="1" stop-color="#101A28"/>
+    </linearGradient>
+  </defs>
+  <rect width="672" height="896" fill="url(#bg)"/>
+  <circle cx="336" cy="390" r="220" fill="url(#glow)"/>
+  <rect x="118" y="236" width="436" height="380" rx="28" fill="url(#panel)" stroke="#6ECFF7" stroke-opacity="0.28"/>
+  <rect x="148" y="278" width="120" height="28" rx="8" fill="#3BB4EA" fill-opacity="0.9"/>
+  <rect x="284" y="282" width="220" height="20" rx="6" fill="#E8F7FF" fill-opacity="0.18"/>
+  <rect x="148" y="336" width="376" height="14" rx="4" fill="#E8F7FF" fill-opacity="0.14"/>
+  <rect x="148" y="366" width="300" height="14" rx="4" fill="#E8F7FF" fill-opacity="0.1"/>
+  <rect x="148" y="416" width="376" height="120" rx="14" fill="#071018" fill-opacity="0.72" stroke="#6ECFF7" stroke-opacity="0.16"/>
+  <rect x="168" y="442" width="56" height="12" rx="4" fill="#6ECFF7" fill-opacity="0.85"/>
+  <rect x="236" y="442" width="200" height="12" rx="4" fill="#E8F7FF" fill-opacity="0.22"/>
+  <rect x="168" y="472" width="280" height="10" rx="4" fill="#E8F7FF" fill-opacity="0.12"/>
+  <rect x="168" y="496" width="240" height="10" rx="4" fill="#E8F7FF" fill-opacity="0.1"/>
+  <circle cx="520" cy="700" r="56" fill="#3BB4EA" fill-opacity="0.18"/>
+  <circle cx="150" cy="720" r="34" fill="#6ECFF7" fill-opacity="0.12"/>
+</svg>
