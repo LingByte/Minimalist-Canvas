@@ -42,9 +42,10 @@ import { PricingAntProvider } from './pricing-ant-provider'
 import { getPerfMetrics } from '@/features/performance-metrics/api'
 import {
   formatLatency,
+  formatSuccessRateLabel,
   formatThroughput,
-  formatUptimePct,
   getSuccessRateTextClass,
+  isSparseSuccessRate,
 } from '@/features/performance-metrics/lib/format'
 import { getLobeIcon } from '@/lib/lobe-icon'
 import { cn } from '@/lib/utils'
@@ -218,8 +219,12 @@ function OverviewSummaryGrid(props: { model: PricingModel }) {
       <OverviewMetric
         icon={HeartPulse}
         label={t('Success rate')}
-        value={formatUptimePct(successRate)}
-        valueClassName={getSuccessRateTextClass(successRate)}
+        value={t(formatSuccessRateLabel(successRate))}
+        valueClassName={cn(
+          getSuccessRateTextClass(successRate),
+          isSparseSuccessRate(successRate) &&
+            'font-sans text-xs font-medium tracking-normal whitespace-normal'
+        )}
       />
     </div>
   )

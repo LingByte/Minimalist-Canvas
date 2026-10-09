@@ -40,6 +40,7 @@ import { parseLogOther } from '../lib/format'
 import { fetchLogsByCategory } from '../lib/utils'
 import type { LogCategory } from '../types'
 import { CommonLogsFilterBar } from './common-logs-filter-bar'
+import { TaskLogsBulkActions } from './task-logs-bulk-actions'
 import { TaskLogsFilterBar } from './task-logs-filter-bar'
 import { UsageLogsMobileList } from './usage-logs-mobile-card'
 import {
@@ -169,7 +170,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       isAdmin
     ),
     pagination,
-    enableRowSelection: false,
+    enableRowSelection: logCategory === 'task' && isAdmin,
     onPaginationChange,
     onColumnFiltersChange,
     manualPagination: true,
@@ -208,6 +209,11 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
         ) : (
           <TaskLogsFilterBar table={table} logCategory={logCategory} />
         )
+      }
+      bulkActions={
+        logCategory === 'task' && isAdmin ? (
+          <TaskLogsBulkActions table={table} />
+        ) : null
       }
       renderRow={(row) => {
         const logType = (row.original as Record<string, unknown>).type as

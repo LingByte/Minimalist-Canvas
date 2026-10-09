@@ -679,6 +679,7 @@ export default {
         importedDirectConfig: "已导入本地直连配置",
         importFailed: "配置文件读取失败",
         saved: "配置已保存",
+        saveFailed: "设置未能保存到服务器，请重试。",
         savedContinue: "配置已保存，请继续刚才的请求",
         onboarding: {
             aria: "配置引导",
@@ -703,7 +704,7 @@ export default {
                 },
                 baseUrl: {
                     title: "接口地址（Base URL）",
-                    body: "填写 API 服务根地址，例如本站网关或自建中转。不要漏协议（https://），一般也不需要手动再拼 /v1。",
+                    body: "桌面端接口地址已固定为产品网关，不用手填。这里只确认密钥和模型。",
                 },
                 apiKey: {
                     title: "API Key",
@@ -729,6 +730,9 @@ export default {
         },
         channels: {
             description: "每个渠道选择一个协议并拉取模型，为每个模型指定能力（生图/视频/文本/音频），并可自定义调用脚本。",
+            embeddedDescription: "接口地址已固定为产品网关，不用填写。只需粘贴 API Key，并选择模型。",
+            apiKeyReady: "已填写 API Key",
+            apiKeyMissing: "未填写 API Key",
             add: "新增渠道",
             unnamed: "未命名渠道",
             numberedName: "渠道 {{count}}",
@@ -764,6 +768,7 @@ export default {
             name: "渠道名称",
             protocol: "协议",
             baseUrl: "接口地址",
+            embeddedGatewayHint: "请求会发到固定网关 {{url}}，这里不用再填接口地址。",
             models: "渠道模型",
             modelDescription: "已选 {{count}} 个；为每个模型指定能力并可自定义调用脚本。",
             selectModels: "选择模型",

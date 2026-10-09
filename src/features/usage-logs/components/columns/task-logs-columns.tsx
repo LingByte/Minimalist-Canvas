@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { ColumnDef } from '@tanstack/react-table'
 import { useQueryClient } from '@tanstack/react-query'
-import { Avatar, Button } from 'antd'
+import { Avatar, Button, Checkbox } from 'antd'
 import { Music } from 'lucide-react'
 /* eslint-disable react-refresh/only-export-components */
 import { useState, useMemo } from 'react'
@@ -142,8 +142,39 @@ function AdminPullUpstreamButton({ taskId }: { taskId: string }) {
 export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
   const { t } = useTranslation()
   const { isAdminView } = useLogsViewScope()
-  const columns: ColumnDef<TaskLog>[] = [
-    {
+  const columns: ColumnDef<TaskLog>[] = []
+
+  if (isAdmin) {
+    columns.push({
+      id: 'select',
+      header: ({ table }) => (
+        <Checkbox
+          checked={table.getIsAllPageRowsSelected()}
+          indeterminate={
+            table.getIsSomePageRowsSelected() &&
+            !table.getIsAllPageRowsSelected()
+          }
+          onChange={(e) => table.toggleAllPageRowsSelected(e.target.checked)}
+          aria-label={t('Select all')}
+          onClick={(e) => e.stopPropagation()}
+        />
+      ),
+      cell: ({ row }) => (
+        <Checkbox
+          checked={row.getIsSelected()}
+          onChange={(e) => row.toggleSelected(e.target.checked)}
+          aria-label={t('Select row')}
+          onClick={(e) => e.stopPropagation()}
+        />
+      ),
+      enableSorting: false,
+      enableHiding: false,
+      enableResizing: false,
+      size: 40,
+    })
+  }
+
+  columns.push({
       accessorKey: 'submit_time',
       header: t('Submit Time'),
       cell: ({ row }) => {
@@ -166,8 +197,7 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
         )
       },
       size: 180,
-    },
-  ]
+    })
 
   if (isAdmin) {
     columns.push(createChannelColumn<TaskLog>({ headerLabel: t('Channel') }), {

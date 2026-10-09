@@ -19,7 +19,10 @@ For commercial licensing, please contact support@quantumnous.com
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { getSuccessRateDotClass } from '@/features/performance-metrics/lib/format'
+import {
+  getSuccessRateDotClass,
+  isSparseSuccessRate,
+} from '@/features/performance-metrics/lib/format'
 import { cn } from '@/lib/utils'
 
 export type ModelPerfBadgeData = {
@@ -95,7 +98,11 @@ export const ModelPerfBadge = memo(function ModelPerfBadge(
         </div>
       </div>
       <div
-        title={`${t('Success rate')}: ${success_rate.toFixed(1)}%`}
+        title={`${t('Success rate')}: ${
+          isSparseSuccessRate(success_rate)
+            ? t('Not enough data yet')
+            : `${success_rate.toFixed(1)}%`
+        }`}
         className='min-w-0'
       >
         <div className='text-muted-foreground/55 truncate text-[10px] leading-4'>

@@ -37,6 +37,7 @@ import {
 import { taskStatusMapper } from '../lib/mappers'
 import { buildBaseParams, getDefaultTimeRange } from '../lib/utils'
 import type { DrawingLogFilters, LogCategory, TaskLogFilters } from '../types'
+import { AdminTaskTokenSelect } from './admin-task-token-select'
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
 import {
   LogsFilterField,
@@ -120,11 +121,20 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
         : {
             ...baseFilters,
             ...(searchParams.filter ? { taskId: searchParams.filter } : {}),
+            ...(searchParams.upstreamTaskId
+              ? { upstreamTaskId: String(searchParams.upstreamTaskId) }
+              : {}),
             ...(searchParams.status
               ? { status: String(searchParams.status) }
               : {}),
             ...(searchParams.missingResult === '1'
               ? { missingResult: true }
+              : {}),
+            ...(typeof searchParams.tokenId === 'number'
+              ? { tokenId: searchParams.tokenId }
+              : {}),
+            ...(searchParams.token
+              ? { tokenName: String(searchParams.token) }
               : {}),
           }
 
@@ -136,8 +146,11 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
     searchParams.channel,
     searchParams.userId,
     searchParams.filter,
+    searchParams.upstreamTaskId,
     searchParams.status,
     searchParams.missingResult,
+    searchParams.tokenId,
+    searchParams.token,
   ])
 
   const applyFilters = useCallback(
@@ -194,7 +207,12 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
   const handleUserChange = useCallback(
     (nextUserId: number | undefined) => {
       setFilters((prev) => {
-        const next = { ...prev, userId: nextUserId }
+        const next = {
+          ...prev,
+          userId: nextUserId,
+          tokenId: undefined,
+          tokenName: undefined,
+        }
         queueMicrotask(() => applyFilters(next))
         return next
       })
@@ -221,9 +239,16 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
           start_timestamp: baseParams.start_timestamp,
           end_timestamp: baseParams.end_timestamp,
           task_id: (filterParams.filter as string | undefined) || undefined,
+          upstream_task_id:
+            (filterParams.upstreamTaskId as string | undefined) || undefined,
           status: (filterParams.status as string | undefined) || undefined,
           missing_result:
             filterParams.missingResult === '1' ? '1' : undefined,
+          token_id:
+            typeof filterParams.tokenId === 'number'
+              ? filterParams.tokenId
+              : undefined,
+          token_name: (filterParams.token as string | undefined) || undefined,
         },
       })
       if (items.length === 0) {
@@ -290,9 +315,16 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
           start_timestamp: baseParams.start_timestamp,
           end_timestamp: baseParams.end_timestamp,
           task_id: (filterParams.filter as string | undefined) || undefined,
+          upstream_task_id:
+            (filterParams.upstreamTaskId as string | undefined) || undefined,
           status: (filterParams.status as string | undefined) || undefined,
           missing_result:
             filterParams.missingResult === '1' ? '1' : undefined,
+          token_id:
+            typeof filterParams.tokenId === 'number'
+              ? filterParams.tokenId
+              : undefined,
+          token_name: (filterParams.token as string | undefined) || undefined,
         },
       })
       const queue = items.filter((item) => item.task_id)
@@ -363,6 +395,18 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
   const missingResult =
     props.logCategory === 'task' &&
     Boolean((filters as TaskLogFilters).missingResult)
+  const taskUpstreamId =
+    props.logCategory === 'task'
+      ? (filters as TaskLogFilters).upstreamTaskId || ''
+      : ''
+  const taskTokenId =
+    props.logCategory === 'task'
+      ? (filters as TaskLogFilters).tokenId
+      : undefined
+  const taskTokenName =
+    props.logCategory === 'task'
+      ? (filters as TaskLogFilters).tokenName || ''
+      : ''
   const statusOptions = useMemo(
     () => [
       { value: '', label: t('All statuses') },
@@ -379,8 +423,10 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
       : t('Filter by task ID')
   const hasAdditionalFilters =
     !!filterValue ||
+    !!taskUpstreamId ||
     !!taskStatus ||
     missingResult ||
+    taskTokenId != null ||
     !!filters.channel ||
     filters.userId != null
   const dateRangeFilter = (
@@ -406,6 +452,24 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
       />
     </LogsFilterField>
   )
+  const upstreamTaskIdFilter =
+    props.logCategory === 'task' ? (
+      <LogsFilterField>
+        <LogsFilterInput
+          aria-label={t('Upstream Task ID')}
+          placeholder={t('Upstream Task ID')}
+          value={taskUpstreamId}
+          onChange={(e) => {
+            const value = e.target.value
+            setFilters((prev) => ({
+              ...prev,
+              upstreamTaskId: value || undefined,
+            }) as TaskLogsFilters)
+          }}
+          onKeyDown={handleKeyDown}
+        />
+      </LogsFilterField>
+    ) : null
   const statusFilter =
     props.logCategory === 'task' ? (
       <LogsFilterField>
@@ -444,6 +508,27 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
               const next = {
                 ...prev,
                 missingResult: value === '1',
+              } as TaskLogsFilters
+              queueMicrotask(() => applyFilters(next))
+              return next
+            })
+          }}
+        />
+      </LogsFilterField>
+    ) : null
+  const tokenFilter =
+    isAdmin && props.logCategory === 'task' ? (
+      <LogsFilterField>
+        <AdminTaskTokenSelect
+          userId={filters.userId}
+          tokenId={taskTokenId}
+          tokenName={taskTokenName}
+          onChange={(nextTokenId, nextTokenName) => {
+            setFilters((prev) => {
+              const next = {
+                ...prev,
+                tokenId: nextTokenId,
+                tokenName: nextTokenName || undefined,
               } as TaskLogsFilters
               queueMicrotask(() => applyFilters(next))
               return next
@@ -532,9 +617,11 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
         <>
           {dateRangeFilter}
           {taskIdFilter}
+          {upstreamTaskIdFilter}
           {statusFilter}
           {missingResultFilter}
           {userFilter}
+          {tokenFilter}
           {channelFilter}
         </>
       }
@@ -542,14 +629,16 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
       mobileFilters={
         <>
           {taskIdFilter}
+          {upstreamTaskIdFilter}
           {statusFilter}
           {missingResultFilter}
           {userFilter}
+          {tokenFilter}
           {channelFilter}
         </>
       }
       mobileFilterCount={
-        [filterValue, taskStatus, missingResult, filters.userId, filters.channel].filter(
+        [filterValue, taskUpstreamId, taskStatus, missingResult, filters.userId, taskTokenId, filters.channel].filter(
           Boolean
         ).length
       }

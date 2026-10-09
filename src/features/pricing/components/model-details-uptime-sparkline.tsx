@@ -22,9 +22,11 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
-  formatUptimePct,
+  formatSuccessRateLabel,
   getSuccessRateDotClass,
   getSuccessRateTextClass,
+  isSparseSuccessRate,
+  SPARSE_SUCCESS_RATE_COPY,
 } from '@/features/performance-metrics/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -61,6 +63,7 @@ function heightFor(uptime: number): string {
 }
 
 export function UptimeSparkline(props: UptimeSparklineProps) {
+  const { t } = useTranslation()
   const size = props.size ?? 'md'
   const showOverall = props.showOverall ?? true
 
@@ -93,7 +96,7 @@ export function UptimeSparkline(props: UptimeSparklineProps) {
             title={
               <div className='font-mono text-xs'>
                 <div className='font-medium'>{day.date}</div>
-                <div>{day.uptime_pct.toFixed(2)}%</div>
+                <div>{t(formatSuccessRateLabel(day.uptime_pct))}</div>
                 {day.outage_minutes > 0 ? (
                   <div className='opacity-80'>
                     {day.outage_minutes} min outage
@@ -129,7 +132,7 @@ export function UptimeSparkline(props: UptimeSparklineProps) {
             getSuccessRateTextClass(overall)
           )}
         >
-          {overall.toFixed(1)}%
+          {t(formatSuccessRateLabel(overall))}
         </span>
       )}
     </div>
@@ -146,12 +149,14 @@ export function UptimeStatusRow(props: {
 }) {
   const { t } = useTranslation()
   const summary = useMemo(() => aggregateUptime(props.series), [props.series])
+  const sparse = isSparseSuccessRate(summary.uptime_pct)
   const status = useMemo(() => {
+    if (sparse) return 'unknown'
     if (summary.uptime_pct >= 99.9) return 'operational'
     if (summary.uptime_pct >= 99.0) return 'minor'
     if (summary.uptime_pct >= 95.0) return 'degraded'
     return 'major'
-  }, [summary.uptime_pct])
+  }, [sparse, summary.uptime_pct])
 
   const StatusIcon =
     status === 'operational'
@@ -167,7 +172,9 @@ export function UptimeStatusRow(props: {
         ? 'text-emerald-600 dark:text-emerald-400'
         : status === 'degraded'
           ? 'text-amber-600 dark:text-amber-400'
-          : 'text-rose-600 dark:text-rose-400'
+          : status === 'unknown'
+            ? 'text-muted-foreground'
+            : 'text-rose-600 dark:text-rose-400'
 
   const statusLabel =
     status === 'operational'
@@ -176,7 +183,9 @@ export function UptimeStatusRow(props: {
         ? t('Minor blips in the last 30 days')
         : status === 'degraded'
           ? t('Degraded performance recently')
-          : t('Significant outages detected')
+          : status === 'unknown'
+            ? t(SPARSE_SUCCESS_RATE_COPY)
+            : t('Significant outages detected')
 
   return (
     <div
@@ -206,7 +215,7 @@ export function UptimeStatusRow(props: {
           </span>
         )}
         <span className='text-muted-foreground hidden sm:inline'>
-          {formatUptimePct(summary.uptime_pct)} {t('overall')}
+          {t(formatSuccessRateLabel(summary.uptime_pct))} {t('overall')}
         </span>
       </div>
     </div>

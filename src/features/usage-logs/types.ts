@@ -70,8 +70,11 @@ export interface DrawingLogFilters extends CommonFilters {
  */
 export interface TaskLogFilters extends CommonFilters {
   taskId?: string
+  upstreamTaskId?: string
   status?: string
   missingResult?: boolean
+  tokenId?: number
+  tokenName?: string
 }
 
 /**
@@ -346,6 +349,7 @@ export interface GetLogsParams {
   page_size?: number
   type?: number
   username?: string
+  user_id?: number
   token_name?: string
   model_name?: string
   start_timestamp?: number
@@ -409,9 +413,12 @@ export interface GetTaskLogsParams {
   page_size?: number
   channel_id?: string
   task_id?: string
+  upstream_task_id?: string
   user_id?: string
   status?: string
   missing_result?: string
+  token_id?: number
+  token_name?: string
   start_timestamp?: number
   end_timestamp?: number
 }

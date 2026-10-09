@@ -374,7 +374,12 @@ function TaskLogsCard<TData>({
   return (
     <div className='space-y-2.5'>
       <div className='flex min-w-0 items-start justify-between gap-3'>
-        <CompactCell cell={taskIdCell} className='flex-1' />
+        {cells.has('select') ? (
+          <div className='shrink-0 pt-0.5'>
+            <CompactCell cell={cells.get('select')} />
+          </div>
+        ) : null}
+        <CompactCell cell={taskIdCell} className='min-w-0 flex-1' />
         <CompactCell cell={statusCell} className='shrink-0 text-right' />
       </div>
 

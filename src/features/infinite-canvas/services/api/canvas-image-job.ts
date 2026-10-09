@@ -18,7 +18,7 @@ import type { ReferenceImage } from "@canvas/types/image";
 export const IMAGE_JOB_POLL_INTERVAL_MS = 2000;
 export const IMAGE_JOB_POLL_MAX_ATTEMPTS = 300; // ~10 minutes
 
-export function canUseServerImageJob(config: AiConfig, model = config.imageModel || config.model) {
+export function canUseServerImageJob(config: AiConfig, model = config.model || config.imageModel) {
   const requestConfig = resolveModelRequestConfig(config, model);
   if (resolveModelScript(config, model)) return false;
   if (requestConfig.apiFormat === "gemini") return false;
@@ -39,7 +39,7 @@ export async function startRecoverableImageJob(options: {
   mode: "generation" | "edit";
   references?: ReferenceImage[];
 }): Promise<GenerationAsset | null> {
-  const model = options.config.imageModel || options.config.model;
+  const model = options.config.model || options.config.imageModel;
   if (!canUseServerImageJob(options.config, model)) return null;
   const requestConfig = resolveModelRequestConfig(options.config, model);
   const references =

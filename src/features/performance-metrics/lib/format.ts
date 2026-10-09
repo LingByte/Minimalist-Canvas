@@ -33,6 +33,18 @@ export function formatUptimePct(pct: number): string {
   return `${pct.toFixed(2)}%`
 }
 
+export const SPARSE_SUCCESS_RATE_COPY = 'Not enough data yet'
+
+/** Pricing treats 0% as sparse samples, not a real failure rate. */
+export function isSparseSuccessRate(rate: number): boolean {
+  return !Number.isFinite(rate) || rate <= 0
+}
+
+export function formatSuccessRateLabel(pct: number): string {
+  if (isSparseSuccessRate(pct)) return SPARSE_SUCCESS_RATE_COPY
+  return formatUptimePct(pct)
+}
+
 export type SuccessRateLevel =
   | 'excellent'
   | 'good'
@@ -53,7 +65,7 @@ const SUCCESS_RATE_WARNING_MIN = 70
  * - unknown: non-finite values
  */
 export function getSuccessRateLevel(rate: number): SuccessRateLevel {
-  if (!Number.isFinite(rate)) return 'unknown'
+  if (!Number.isFinite(rate) || rate <= 0) return 'unknown'
   if (rate >= SUCCESS_RATE_EXCELLENT_MIN) return 'excellent'
   if (rate >= SUCCESS_RATE_GOOD_MIN) return 'good'
   if (rate >= SUCCESS_RATE_WARNING_MIN) return 'warning'

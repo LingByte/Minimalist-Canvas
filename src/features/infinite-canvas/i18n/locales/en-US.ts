@@ -677,6 +677,7 @@ export default {
         importedDirectConfig: "Local direct connection settings imported",
         importFailed: "Failed to read the settings file",
         saved: "Settings saved",
+        saveFailed: "Could not save settings to the server. Please try again.",
         savedContinue: "Settings saved. Continue with your previous request.",
         onboarding: {
             aria: "Settings onboarding",
@@ -701,7 +702,7 @@ export default {
                 },
                 baseUrl: {
                     title: "Base URL",
-                    body: "Enter the API root, such as this gateway or your own proxy. Include https://, and usually do not append /v1 yourself.",
+                    body: "The desktop app uses the built-in gateway. You do not enter a Base URL — confirm the API key and models here.",
                 },
                 apiKey: {
                     title: "API Key",
@@ -727,6 +728,9 @@ export default {
         },
         channels: {
             description: "Choose a protocol for each provider, fetch its models, assign capabilities, and optionally customize request scripts.",
+            embeddedDescription: "The API endpoint is the built-in gateway. Paste an API key and pick models — no Base URL to fill in.",
+            apiKeyReady: "API key set",
+            apiKeyMissing: "API key missing",
             add: "Add provider",
             unnamed: "Unnamed provider",
             numberedName: "Provider {{count}}",
@@ -762,6 +766,7 @@ export default {
             name: "Provider name",
             protocol: "Protocol",
             baseUrl: "API endpoint",
+            embeddedGatewayHint: "Requests go to the fixed gateway {{url}}. You do not enter a Base URL here.",
             models: "Provider models",
             modelDescription: "{{count}} selected; assign a capability to each model and optionally customize its request script.",
             selectModels: "Select models",

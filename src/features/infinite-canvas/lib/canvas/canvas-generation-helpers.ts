@@ -201,9 +201,15 @@ export function getInputSummary(inputs: NodeGenerationInput[]) {
 }
 
 export function buildGenerationConfig(config: AiConfig, node: CanvasNodeData | undefined, mode: CanvasNodeGenerationMode): AiConfig {
+    const model = resolveModelForCapability(config, node?.metadata?.model, mode);
     return {
         ...config,
-        model: resolveModelForCapability(config, node?.metadata?.model, mode),
+        model,
+        // Server image jobs read imageModel before model. Keep the node choice on both.
+        ...(mode === "image" ? { imageModel: model } : {}),
+        ...(mode === "video" ? { videoModel: model } : {}),
+        ...(mode === "audio" ? { audioModel: model } : {}),
+        ...(mode === "text" ? { textModel: model } : {}),
         reasoningEffort: node?.metadata?.reasoningEffort || config.reasoningEffort || defaultConfig.reasoningEffort,
         quality: node?.metadata?.quality || config.quality || defaultConfig.quality,
         size: node?.metadata?.size || config.size || defaultConfig.size,

@@ -125,3 +125,32 @@ export async function hydrateUserCanvasConfigFromServer(): Promise<void> {
 
     return hydratePromise;
 }
+
+export function isUserCanvasConfigHydrated() {
+    return hydratedFromDatabase;
+}
+
+/** Wait until the in-flight (or next) DB hydrate finishes. */
+export function waitForUserCanvasConfigHydration(): Promise<void> {
+    if (hydratedFromDatabase && !hydratePromise) return Promise.resolve();
+    return hydrateUserCanvasConfigFromServer();
+}
+
+/** Persist the current in-memory config to the database immediately. */
+export async function flushUserCanvasConfigToServer(): Promise<boolean> {
+    if (!hydratedFromDatabase || Date.now() < skipPushUntil) return false;
+    if (pushTimer) {
+        clearTimeout(pushTimer);
+        pushTimer = null;
+    }
+    try {
+        const state = useConfigStore.getState();
+        const result = await putUserCanvasConfig({
+            config: state.config,
+            webdav: state.webdav,
+        });
+        return Boolean(result);
+    } catch {
+        return false;
+    }
+}

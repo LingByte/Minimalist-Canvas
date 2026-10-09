@@ -4,7 +4,11 @@ import { App } from "antd";
 import { useTranslation } from "react-i18next";
 
 import { hydrateUserAssetsFromServer } from "@canvas/services/user-asset-sync";
-import { hydrateUserCanvasConfigFromServer } from "@canvas/services/user-canvas-config-sync";
+import {
+    flushUserCanvasConfigToServer,
+    hydrateUserCanvasConfigFromServer,
+    waitForUserCanvasConfigHydration,
+} from "@canvas/services/user-canvas-config-sync";
 import { restoreCanvasProjectsIfLocalEmpty } from "@canvas/services/user-canvas-project-sync";
 import { createModelChannel, useConfigStore } from "@canvas/stores/use-config-store";
 import { usePromptSourceStore } from "@canvas/stores/use-prompt-source-store";
@@ -15,8 +19,6 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     const { message } = App.useApp();
     const { t } = useTranslation();
     const handledConfigParams = useRef(false);
-    const updateConfig = useConfigStore((state) => state.updateConfig);
-    const config = useConfigStore((state) => state.config);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const loadSources = usePromptSourceStore((state) => state.loadSources);
     const isAuthenticated = useAuthStore((s) => Boolean(s.auth.user && s.auth.accessToken));
@@ -47,10 +49,12 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
         searchParams.delete("apiKey");
         searchParams.delete("apikey");
         window.history.replaceState(null, "", `${window.location.pathname}${searchParams.size ? `?${searchParams}` : ""}${window.location.hash}`);
-        const firstChannel = config.channels[0];
-        updateConfig(
-            "channels",
-            firstChannel
+
+        void (async () => {
+            await waitForUserCanvasConfigHydration().catch(() => undefined);
+            const config = useConfigStore.getState().config;
+            const firstChannel = config.channels[0];
+            const channels = firstChannel
                 ? config.channels.map((channel, index) =>
                       index === 0
                           ? {
@@ -60,13 +64,27 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
                             }
                           : channel,
                   )
-                : [createModelChannel({ id: "default", name: t("config.channels.defaultName"), baseUrl: baseUrl || undefined, apiKey: apiKey || "" })],
-        );
-        if (baseUrl) updateConfig("baseUrl", baseUrl);
-        if (apiKey) updateConfig("apiKey", apiKey);
-        openConfigDialog(false);
-        message.success(t("config.importedDirectConfig"));
-    }, [config.channels, message, openConfigDialog, t, updateConfig]);
+                : [
+                      createModelChannel({
+                          id: "default",
+                          name: t("config.channels.defaultName"),
+                          baseUrl: baseUrl || undefined,
+                          apiKey: apiKey || "",
+                      }),
+                  ];
+            useConfigStore.setState({
+                config: {
+                    ...config,
+                    channels,
+                    ...(baseUrl ? { baseUrl } : {}),
+                    ...(apiKey ? { apiKey } : {}),
+                },
+            });
+            await flushUserCanvasConfigToServer();
+            openConfigDialog(false);
+            message.success(t("config.importedDirectConfig"));
+        })();
+    }, [message, openConfigDialog, t]);
 
     return <>{children}</>;
 }

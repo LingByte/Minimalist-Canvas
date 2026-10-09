@@ -23,6 +23,8 @@ import { Eye, EyeOff } from 'lucide-react'
 import { useState, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { AdminUserSearchSelect } from '@/components/admin-user-search-select'
+
 import { LOG_TYPE_ALL_VALUE, LOG_TYPE_FILTERS } from '../constants'
 import { buildSearchParams } from '../lib/filter'
 import { getDefaultTimeRange } from '../lib/utils'
@@ -73,6 +75,7 @@ function buildSearchSourceKey(values: {
   token?: unknown
   group?: unknown
   username?: unknown
+  userId?: unknown
   requestId?: unknown
   upstreamRequestId?: unknown
   type?: unknown
@@ -85,6 +88,7 @@ function buildSearchSourceKey(values: {
     values.token,
     values.group,
     values.username,
+    values.userId,
     values.requestId,
     values.upstreamRequestId,
     Array.isArray(values.type) ? values.type.join(',') : values.type,
@@ -118,6 +122,7 @@ export function CommonLogsFilterBar<TData>(
       token: searchParams.token,
       group: searchParams.group,
       username: searchParams.username,
+      userId: searchParams.userId,
       requestId: searchParams.requestId,
       upstreamRequestId: searchParams.upstreamRequestId,
       type: searchParams.type,
@@ -132,6 +137,10 @@ export function CommonLogsFilterBar<TData>(
       token: searchParams.token || undefined,
       group: searchParams.group || undefined,
       username: searchParams.username || undefined,
+      userId:
+        typeof searchParams.userId === 'number'
+          ? searchParams.userId
+          : undefined,
       requestId: searchParams.requestId || undefined,
       upstreamRequestId: searchParams.upstreamRequestId || undefined,
     }
@@ -148,6 +157,7 @@ export function CommonLogsFilterBar<TData>(
     searchParams.token,
     searchParams.group,
     searchParams.username,
+    searchParams.userId,
     searchParams.requestId,
     searchParams.upstreamRequestId,
     searchParams.type,
@@ -159,13 +169,32 @@ export function CommonLogsFilterBar<TData>(
   const logType = activeDraft.logType
 
   const handleChange = useCallback(
-    (field: keyof CommonLogFilters, value: Date | string | undefined) => {
+    (field: keyof CommonLogFilters, value: Date | string | number | undefined) => {
       setDraft((current) => {
         const base =
           current.sourceKey === searchState.sourceKey ? current : searchState
         return {
           sourceKey: searchState.sourceKey,
           filters: { ...base.filters, [field]: value },
+          logType: base.logType,
+        }
+      })
+    },
+    [searchState]
+  )
+
+  const handleUserChange = useCallback(
+    (nextUserId: number | undefined) => {
+      setDraft((current) => {
+        const base =
+          current.sourceKey === searchState.sourceKey ? current : searchState
+        return {
+          sourceKey: searchState.sourceKey,
+          filters: {
+            ...base.filters,
+            userId: nextUserId,
+            username: undefined,
+          },
           logType: base.logType,
         }
       })
@@ -346,12 +375,12 @@ export function CommonLogsFilterBar<TData>(
       </LogsFilterField>
       {isAdmin && (
         <LogsFilterField>
-          <LogsFilterInput
-            placeholder={t('Username')}
-            className={sensitiveInputClass}
-            value={filters.username || ''}
-            onChange={(e) => handleChange('username', e.target.value)}
-            onKeyDown={handleKeyDown}
+          <AdminUserSearchSelect
+            className='w-full max-w-full'
+            size='small'
+            placeholder={t('Select user')}
+            value={filters.userId}
+            onChange={handleUserChange}
           />
         </LogsFilterField>
       )}
@@ -367,7 +396,7 @@ export function CommonLogsFilterBar<TData>(
       )}
       <LogsFilterField>
         <LogsFilterInput
-          placeholder={t('Request ID')}
+          placeholder={t('x-simplefuture-request-id')}
           value={filters.requestId || ''}
           onChange={(e) => handleChange('requestId', e.target.value)}
           onKeyDown={handleKeyDown}

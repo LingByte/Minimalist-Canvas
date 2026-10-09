@@ -27,9 +27,14 @@ export const loginFormSchema = z.object({
   password: z.string().min(1, 'Please enter your password'),
 })
 
+export const USERNAME_MAX_LENGTH = 20
+
 export const registerFormSchema = z
   .object({
-    username: z.string().min(1, 'Please enter your username'),
+    username: z
+      .string()
+      .min(1, 'Please enter your username')
+      .max(USERNAME_MAX_LENGTH, 'Username must be at most 20 characters'),
     email: z.string().optional(),
     password: z
       .string()

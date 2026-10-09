@@ -215,6 +215,9 @@ export function buildApiParams(config: {
     ...(isAdmin && searchParams.username
       ? { username: String(searchParams.username) }
       : {}),
+    ...(isAdmin && searchParams.userId != null && searchParams.userId !== ''
+      ? { user_id: Number(searchParams.userId) }
+      : {}),
     ...(searchParams.requestId
       ? { request_id: String(searchParams.requestId) }
       : {}),
@@ -295,9 +298,16 @@ export async function fetchLogsByCategory(
     ...(logCategory === 'task'
       ? {
           task_id: searchParams.filter as string | undefined,
+          upstream_task_id: searchParams.upstreamTaskId as string | undefined,
           status: searchParams.status as string | undefined,
           ...(searchParams.missingResult === '1'
             ? { missing_result: '1' }
+            : {}),
+          ...(typeof searchParams.tokenId === 'number'
+            ? { token_id: searchParams.tokenId }
+            : {}),
+          ...(searchParams.token
+            ? { token_name: String(searchParams.token) }
             : {}),
         }
       : {}),

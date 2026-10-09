@@ -29,9 +29,10 @@ import { GroupBadge } from '@/components/group-badge'
 import { getPerfMetrics } from '@/features/performance-metrics/api'
 import {
   formatLatency,
+  formatSuccessRateLabel,
   formatThroughput,
-  formatUptimePct,
   getSuccessRateTextClass,
+  isSparseSuccessRate,
 } from '@/features/performance-metrics/lib/format'
 import type { PerformanceGroup } from '@/features/performance-metrics/types'
 import { cn } from '@/lib/utils'
@@ -236,15 +237,21 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
         <StatCard
           icon={HeartPulse}
           label={t('Success rate')}
-          value={formatUptimePct(successRate)}
+          value={t(formatSuccessRateLabel(successRate))}
           hint={
-            incidentCount > 0
-              ? t('{{count}} incidents in the last 24 hours', {
-                  count: incidentCount,
-                })
-              : t('No incidents in the last 24 hours')
+            isSparseSuccessRate(successRate)
+              ? undefined
+              : incidentCount > 0
+                ? t('{{count}} incidents in the last 24 hours', {
+                    count: incidentCount,
+                  })
+                : t('No incidents in the last 24 hours')
           }
-          valueClassName={getSuccessRateTextClass(successRate)}
+          valueClassName={cn(
+            getSuccessRateTextClass(successRate),
+            isSparseSuccessRate(successRate) &&
+              'font-sans text-base font-medium tracking-normal'
+          )}
         />
       </div>
 

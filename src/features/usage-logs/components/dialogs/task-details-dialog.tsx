@@ -476,7 +476,7 @@ export function TaskDetailsDialog({
               value={formatTs(view?.updated_at ?? log.updated_at)}
             />
             {isAdmin && view?.request_id ? (
-              <Field label={t('Request ID')} value={view.request_id} />
+              <Field label={t('x-simplefuture-request-id')} value={view.request_id} />
             ) : null}
             {isAdmin && view?.client_ip ? (
               <Field label={t('IP')} value={view.client_ip} />

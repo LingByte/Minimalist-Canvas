@@ -54,7 +54,6 @@ export function buildSearchParams(
         ...(commonFilters.model && { model: commonFilters.model }),
         ...(commonFilters.token && { token: commonFilters.token }),
         ...(commonFilters.group && { group: commonFilters.group }),
-        ...(commonFilters.username && { username: commonFilters.username }),
         ...(commonFilters.requestId && { requestId: commonFilters.requestId }),
         ...(commonFilters.upstreamRequestId && {
           upstreamRequestId: commonFilters.upstreamRequestId,
@@ -73,8 +72,13 @@ export function buildSearchParams(
       return {
         ...baseParams,
         ...(taskFilters.taskId && { filter: taskFilters.taskId }),
+        ...(taskFilters.upstreamTaskId && {
+          upstreamTaskId: taskFilters.upstreamTaskId,
+        }),
         ...(taskFilters.status && { status: taskFilters.status }),
         ...(taskFilters.missingResult ? { missingResult: '1' } : {}),
+        ...(taskFilters.tokenId != null ? { tokenId: taskFilters.tokenId } : {}),
+        ...(taskFilters.tokenName ? { token: taskFilters.tokenName } : {}),
       }
     }
     default:

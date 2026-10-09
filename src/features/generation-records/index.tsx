@@ -63,7 +63,7 @@ const STATUS_COLOR: Record<string, string> = {
 function statusLabel(status: string) {
   if (status === 'success') return 'Success'
   if (status === 'failed') return 'Failed'
-  if (status === 'pending') return 'Pending'
+  if (status === 'pending') return 'In Progress'
   return status || 'Pending'
 }
 
@@ -434,7 +434,7 @@ export function GenerationRecords() {
               className='w-28'
               options={[
                 { value: 'success', label: t('Success') },
-                { value: 'pending', label: t('Pending') },
+                { value: 'pending', label: t('In Progress') },
                 { value: 'failed', label: t('Failed') },
               ]}
               onChange={(value) => {

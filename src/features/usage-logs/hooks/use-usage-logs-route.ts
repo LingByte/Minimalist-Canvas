@@ -29,6 +29,7 @@ const NUMBER_KEYS = new Set([
   'startTime',
   'endTime',
   'userId',
+  'tokenId',
 ])
 
 function parseSearchParam(key: string, value: string): unknown {
@@ -54,7 +55,9 @@ export type UsageLogsSearch = {
   pageSize?: number
   type?: string | string[]
   filter?: string
+  upstreamTaskId?: string
   status?: string
+  tokenId?: number
   missingResult?: string
   model?: string
   token?: string

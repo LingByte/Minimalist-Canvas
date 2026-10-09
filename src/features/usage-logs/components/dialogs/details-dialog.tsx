@@ -662,7 +662,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
         <div className='min-w-0 space-y-1'>
           {props.log.request_id && (
             <DetailRow
-              label={t('Request ID')}
+              label={t('x-simplefuture-request-id')}
               value={props.log.request_id}
               mono
             />

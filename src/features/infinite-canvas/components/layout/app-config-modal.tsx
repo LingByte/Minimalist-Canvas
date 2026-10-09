@@ -1,15 +1,15 @@
 import { App, Button, Form, Input, Modal, Select, Tabs } from "antd";
-import { Download, Pencil, Plus, Trash2, Upload } from "lucide-react";
+import { Download, Pencil, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ModelPicker } from "@canvas/components/model-picker";
 import { ChannelEditorDrawer } from "@canvas/components/layout/channel-editor-drawer";
 import { ConfigLocalStorage } from "@canvas/components/layout/config-local-storage";
-import { SITE_BASE_URL } from "@/lib/open-external";
 import { exportAppConfig, importAppConfig } from "@canvas/services/config-file";
+import { flushUserCanvasConfigToServer } from "@canvas/services/user-canvas-config-sync";
 import { audioFormatOptions, audioVoiceOptions, normalizeAudioSpeedValue } from "@canvas/lib/audio-generation";
-import { createModelChannel, modelOptionsFromChannels, normalizeModelOptionValue, selectableModelsByCapability, useConfigStore, type AiConfig, type ApiCallFormat, type ConfigTabKey, type ModelCapability, type ModelChannel } from "@canvas/stores/use-config-store";
+import { modelOptionsFromChannels, normalizeModelOptionValue, selectableModelsByCapability, useConfigStore, type AiConfig, type ConfigTabKey, type ModelCapability, type ModelChannel } from "@canvas/stores/use-config-store";
 import { useConfigOnboardingStore, clearConfigOnboardingSeen } from "@canvas/stores/use-config-onboarding-store";
 
 type ModelGroup = {
@@ -63,8 +63,14 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
         const ready = config.channels.some((channel) => channel.baseUrl.trim() && channel.apiKey.trim() && channel.models.length);
         setConfigDialogOpen(false);
         if (!ready) return;
-        message.success(t(shouldPromptContinue ? "config.savedContinue" : "config.saved"));
-        clearPromptContinue();
+        void flushUserCanvasConfigToServer().then((ok) => {
+            if (!ok) {
+                message.error(t("config.saveFailed"));
+                return;
+            }
+            message.success(t(shouldPromptContinue ? "config.savedContinue" : "config.saved"));
+            clearPromptContinue();
+        });
     };
 
     const loadConfigFile = async (file: File) => {
@@ -79,20 +85,6 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
     };
 
     const updateChannels = (channels: ModelChannel[]) => saveConfig(withChannels(config, channels));
-
-    const addChannel = () => {
-        const channel = createModelChannel({ name: t("config.channels.numberedName", { count: config.channels.length + 1 }) });
-        updateChannels([...config.channels, channel]);
-        setEditingChannelId(channel.id);
-    };
-
-    const deleteChannel = (id: string) => {
-        if (config.channels.length <= 1) {
-            message.warning(t("config.channels.keepOne"));
-            return;
-        }
-        updateChannels(config.channels.filter((channel) => channel.id !== id));
-    };
 
     const saveChannel = (channel: ModelChannel) => {
         updateChannels(config.channels.map((item) => (item.id === channel.id ? channel : item)));
@@ -134,39 +126,23 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                         label: <span data-tour="config-tab-channels">{t("config.tabs.channels")}</span>,
                         children: (
                             <div data-tour="config-channels-panel">
-                                <div className="mb-4 rounded-lg border border-stone-200 p-4 dark:border-stone-800">
-                                    <div className="mb-1 text-sm font-semibold">{t("config.serverUrl.title")}</div>
-                                    <div className="mb-2 text-xs text-stone-500">{t("config.serverUrl.description")}</div>
-                                    <div className="rounded-md bg-stone-50 px-3 py-2 font-mono text-sm text-stone-700 dark:bg-stone-900 dark:text-stone-300">
-                                        {`${SITE_BASE_URL}/`}
-                                    </div>
-                                </div>
                                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                                    <div className="text-xs text-stone-500">{t("config.channels.description")}</div>
-                                    <Button type="primary" icon={<Plus className="size-4" />} onClick={addChannel}>
-                                        {t("config.channels.add")}
-                                    </Button>
+                                    <div className="text-xs text-stone-500">{t("config.channels.embeddedDescription")}</div>
                                 </div>
                                 <div className="space-y-2">
-                                    {config.channels.map((channel) => (
+                                    {config.channels.slice(0, 1).map((channel) => (
                                         <div key={channel.id} className="flex items-center justify-between gap-3 rounded-lg border border-stone-200 px-4 py-3 dark:border-stone-800">
-                                            <div className="min-w-0">
-                                                <div className="truncate text-sm font-semibold">{channel.name || t("config.channels.unnamed")}</div>
-                                                <div className="mt-1 truncate text-xs text-stone-500">
-                                                    {apiFormatLabel(channel.apiFormat)} · {t("config.channels.modelCount", { count: channel.models.length })} · {channel.baseUrl || t("config.channels.missingUrl")}
-                                                </div>
+                                            <div className="min-w-0 truncate text-sm text-stone-600 dark:text-stone-300">
+                                                {`${t(channel.apiKey?.trim() ? "config.channels.apiKeyReady" : "config.channels.apiKeyMissing")} · ${t("config.channels.modelCount", { count: channel.models.length })}`}
                                             </div>
-                                            <div className="flex shrink-0 gap-2">
-                                                <Button
-                                                    size="small"
-                                                    icon={<Pencil className="size-3.5" />}
-                                                    data-tour={channel.id === config.channels[0]?.id ? "config-channel-edit" : undefined}
-                                                    onClick={() => setEditingChannelId(channel.id)}
-                                                >
-                                                    {t("common.edit")}
-                                                </Button>
-                                                <Button size="small" danger icon={<Trash2 className="size-3.5" />} onClick={() => deleteChannel(channel.id)} />
-                                            </div>
+                                            <Button
+                                                size="small"
+                                                icon={<Pencil className="size-3.5" />}
+                                                data-tour="config-channel-edit"
+                                                onClick={() => setEditingChannelId(channel.id)}
+                                            >
+                                                {t("common.edit")}
+                                            </Button>
                                         </div>
                                     ))}
                                 </div>
@@ -301,12 +277,6 @@ function pickDefaultModel(config: AiConfig, capability: ModelCapability, current
 function normalizeImageCount(value: string) {
     return String(Math.max(1, Math.min(15, Math.floor(Math.abs(Number(value)) || 3))));
 }
-
-function apiFormatLabel(apiFormat: ApiCallFormat) {
-    if (apiFormat === "gemini") return "Gemini";
-    return "OpenAI";
-}
-
 
 function formatBytes(bytes: number) {
     if (bytes < 1024) return `${bytes}B`;
