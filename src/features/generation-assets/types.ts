@@ -23,5 +23,79 @@ export type GenerationAssetFile = {
   mirror_error?: string
   backup_url?: string
   upstream_url?: string
-  [key: string]: unknown
+  storage_key?: string
+  mime_type?: string
+  width?: number
+  height?: number
+  bytes?: number
+  duration_ms?: number
+  bitrate_kbps?: number
+  video_codec?: string
+  frame_rate?: string
+  media?: GenerationAssetMedia
+  poster_url?: string
+}
+
+export type GenerationAssetMedia = {
+  format?: GenerationAssetMediaFormat
+  video?: GenerationAssetMediaStream
+  audio?: GenerationAssetMediaStream
+}
+
+export type GenerationAssetMediaFormat = {
+  name?: string
+  long_name?: string
+  duration?: number
+  size?: number
+  bit_rate?: number
+  nb_streams?: number
+  encoder?: string
+}
+
+export type GenerationAssetMediaStream = {
+  codec_name?: string
+  profile?: string
+  width?: number
+  height?: number
+  coded_width?: number
+  coded_height?: number
+  display_aspect_ratio?: string
+  pix_fmt?: string
+  level?: number
+  frame_rate?: string
+  avg_frame_rate?: string
+  duration?: number
+  bit_rate?: number
+  nb_frames?: number
+  sample_rate?: number
+  channels?: number
+  channel_layout?: string
+  sample_fmt?: string
+  encoder?: string
+  has_b_frames?: number
+}
+
+export type GenerationAssetAdminItem = {
+  id: number
+  user_id: number
+  username?: string
+  kind: string
+  source: string
+  title: string
+  prompt: string
+  model: string
+  status: string
+  task_id?: string
+  error?: string
+  config: Record<string, unknown>
+  assets: GenerationAssetFile[]
+  created_at: number
+  updated_at: number
+}
+
+export type GenerationAssetAdminPage = {
+  page: number
+  page_size: number
+  total: number
+  items: GenerationAssetAdminItem[]
 }

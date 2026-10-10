@@ -193,16 +193,13 @@ export function CreativeCirclePage({
     onSuccess: (payload) => {
       storeCircleRemake(payload)
       window.location.href =
-        payload.kind === 'video' ? '/canvas/video' : '/canvas/image'
+        payload.kind === 'video' ? '/video' : '/image'
     },
     onError: (err: Error) => toast.error(err.message || t('Remake failed')),
   })
 
   const openPost = (id: number) => {
-    void navigate({
-      to: '/creative-circle/$postId',
-      params: { postId: String(id) },
-    })
+    void navigate(`/creative-circle/${id}`)
   }
 
   return (

@@ -18,7 +18,10 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
 
-import type { GenerationAssetFile } from './types'
+import type {
+  GenerationAssetAdminPage,
+  GenerationAssetFile,
+} from './types'
 
 type ApiEnvelope<T> = {
   success: boolean
@@ -66,6 +69,41 @@ function unwrap<T>(res: { data: ApiEnvelope<T> }, fallback: string): T {
     throw new Error(res.data?.message || fallback)
   }
   return res.data.data
+}
+
+export async function listAdminGenerationAssets(params?: {
+  page?: number
+  pageSize?: number
+  kind?: string
+  source?: string
+  status?: string
+  model?: string
+  userId?: number
+  assetId?: number
+  startTimestamp?: number
+  endTimestamp?: number
+}): Promise<GenerationAssetAdminPage> {
+  const query = new URLSearchParams()
+  if (params?.page) query.set('p', String(params.page))
+  if (params?.pageSize) query.set('page_size', String(params.pageSize))
+  if (params?.kind) query.set('kind', params.kind)
+  if (params?.source) query.set('source', params.source)
+  if (params?.status) query.set('status', params.status)
+  if (params?.model) query.set('model', params.model)
+  if (params?.userId) query.set('user_id', String(params.userId))
+  if (params?.assetId) query.set('id', String(params.assetId))
+  if (params?.startTimestamp) query.set('start_timestamp', String(params.startTimestamp))
+  if (params?.endTimestamp) query.set('end_timestamp', String(params.endTimestamp))
+  const res = await api.get<ApiEnvelope<GenerationAssetAdminPage>>(
+    `/api/generation-assets/admin/?${query.toString()}`
+  )
+  const data = unwrap(res, 'failed to load generation assets')
+  return {
+    page: data.page || params?.page || 1,
+    page_size: data.page_size || params?.pageSize || 20,
+    total: data.total || 0,
+    items: data.items || [],
+  }
 }
 
 export async function adminGetTaskDetail(

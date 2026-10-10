@@ -140,14 +140,11 @@ export function CreativeCirclePostPage({ postId }: { postId: number }) {
       navigate(-1)
       return
     }
-    void navigate({ to: '/creative-circle' })
+    void navigate('/creative-circle')
   }
 
   const goPost = (id: number) => {
-    void navigate({
-      to: '/creative-circle/$postId',
-      params: { postId: String(id) },
-    })
+    void navigate(`/creative-circle/${id}`)
   }
 
   const reactionMutation = useMutation({
@@ -171,7 +168,7 @@ export function CreativeCirclePostPage({ postId }: { postId: number }) {
     onSuccess: (payload) => {
       storeCircleRemake(payload)
       window.location.href =
-        payload.kind === 'video' ? '/canvas/video' : '/canvas/image'
+        payload.kind === 'video' ? '/video' : '/image'
     },
     onError: (err: Error) => toast.error(err.message || t('Remake failed')),
   })
@@ -223,7 +220,7 @@ export function CreativeCirclePostPage({ postId }: { postId: number }) {
     mutationFn: () => adminHideCirclePost(postId),
     onSuccess: () => {
       toast.success(t('Post hidden'))
-      void navigate({ to: '/creative-circle' })
+      void navigate('/creative-circle')
     },
     onError: (err: Error) => toast.error(err.message || t('Action failed')),
   })
@@ -233,7 +230,7 @@ export function CreativeCirclePostPage({ postId }: { postId: number }) {
     onSuccess: () => {
       toast.success(t('Post deleted'))
       setDeleteOpen(false)
-      void navigate({ to: '/creative-circle' })
+      void navigate('/creative-circle')
     },
     onError: (err: Error) => toast.error(err.message || t('Delete failed')),
   })
@@ -271,10 +268,7 @@ export function CreativeCirclePostPage({ postId }: { postId: number }) {
   const requireAuth = (message: string) => {
     if (isAuthed) return true
     toast.message(message)
-    void navigate({
-      to: '/sign-in',
-      search: { redirect: window.location.href },
-    })
+    void navigate(`/sign-in?redirect=${encodeURIComponent(window.location.href)}`)
     return false
   }
 
@@ -283,7 +277,7 @@ export function CreativeCirclePostPage({ postId }: { postId: number }) {
       <div className='fixed inset-0 z-50 flex items-center justify-center bg-black'>
         <ErrorState
           title={t('This post is no longer available')}
-          onRetry={() => void navigate({ to: '/creative-circle' })}
+          onRetry={() => void navigate('/creative-circle')}
         />
       </div>
     )

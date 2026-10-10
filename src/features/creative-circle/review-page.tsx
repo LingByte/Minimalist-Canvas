@@ -118,10 +118,7 @@ export function CreativeCircleReviewPage() {
                   <button
                     type='button'
                     onClick={() =>
-                      void navigate({
-                        to: '/creative-circle/$postId',
-                        params: { postId: String(post.id) },
-                      })
+                      void navigate(`/creative-circle/${post.id}`)
                     }
                     className='relative block aspect-[3/4] w-full overflow-hidden bg-black'
                   >

@@ -1,6 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button, message } from "antd";
-import { isRouteErrorResponse, useRouteError } from "react-router-dom";
+import { isRouteErrorResponse, useNavigate, useRouteError } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 export function formatCrashReport(error: unknown): string {
@@ -20,7 +20,7 @@ export function formatCrashReport(error: unknown): string {
     return lines.join("\n");
 }
 
-export function CanvasCrashScreen({ error, onReset }: { error: unknown; onReset?: () => void }) {
+export function CanvasCrashScreen({ error, onReset, onHome }: { error: unknown; onReset?: () => void; onHome?: () => void }) {
     const { t } = useTranslation();
     const report = formatCrashReport(error);
 
@@ -34,18 +34,24 @@ export function CanvasCrashScreen({ error, onReset }: { error: unknown; onReset?
     };
 
     return (
-        <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-6 text-center">
+        <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-6 py-10 text-center">
             <h1 className="text-2xl font-semibold">{t("canvas.error.title")}</h1>
             <p className="max-w-md text-sm opacity-70">{t("canvas.error.description")}</p>
-            <div className="w-full max-w-md">
-                <pre className="max-h-36 overflow-auto rounded-lg bg-black/5 p-3 text-left font-mono text-[11px] leading-relaxed whitespace-pre-wrap dark:bg-white/8">
+            <details className="w-full max-w-md text-left">
+                <summary className="cursor-pointer text-xs opacity-60">{t("canvas.error.details")}</summary>
+                <pre className="mt-2 max-h-36 overflow-auto rounded-lg bg-black/5 p-3 text-left font-mono text-[11px] leading-relaxed whitespace-pre-wrap dark:bg-white/8">
                     {report}
                 </pre>
-            </div>
-            <div className="flex gap-2">
+            </details>
+            <div className="flex flex-wrap justify-center gap-2">
                 <Button type="primary" size="large" onClick={() => window.location.reload()}>
                     {t("canvas.error.refresh")}
                 </Button>
+                {onHome ? (
+                    <Button size="large" onClick={onHome}>
+                        {t("canvas.error.home")}
+                    </Button>
+                ) : null}
                 <Button size="large" onClick={copyReport}>
                     {t("canvas.error.copy")}
                 </Button>
@@ -93,5 +99,6 @@ export class CanvasErrorBoundary extends Component<CanvasErrorBoundaryProps, Can
 
 export function CanvasRouteError() {
     const error = useRouteError();
-    return <CanvasCrashScreen error={error} />;
+    const navigate = useNavigate();
+    return <CanvasCrashScreen error={error} onHome={() => navigate("/home")} />;
 }

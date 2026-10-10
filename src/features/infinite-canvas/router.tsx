@@ -1,6 +1,7 @@
 import { Outlet, createBrowserRouter, type RouteObject } from "react-router-dom";
 
 import { AnalyticsTracker } from "@canvas/components/layout/analytics-tracker";
+import { CanvasErrorBoundary, CanvasRouteError } from "@canvas/components/layout/canvas-error-boundary";
 import UserLayout from "@canvas/layouts/user-layout";
 import AssetsPage from "@canvas/pages/assets";
 import CanvasPage from "@canvas/pages/canvas";
@@ -40,53 +41,68 @@ import {
     SiteUsageLogsPage,
 } from "./pages/site";
 
+const appPages: RouteObject[] = [
+    { index: true, element: <HomePage /> },
+    { path: "home", element: <WorkspaceHome /> },
+    { path: "image", element: <ImagePage /> },
+    { path: "video", element: <VideoPage /> },
+    { path: "assets", element: <AssetsPage /> },
+    { path: "prompts", element: <PromptsPage /> },
+    { path: "canvas", element: <CanvasPage /> },
+    { path: "canvas/:id", element: <CanvasProjectPage /> },
+    { path: "generation-logs", element: <GenerationLogsPage /> },
+    { path: "config", element: <ConfigPage /> },
+    { path: "profile", element: <ProfilePage /> },
+    { path: "keys", element: <ApiKeys /> },
+    { path: "usage-logs", element: <SiteUsageLogsIndexPage /> },
+    { path: "usage-logs/:section", element: <SiteUsageLogsPage /> },
+    { path: "dashboard", element: <SiteDashboardPage /> },
+    { path: "dashboard/:section", element: <SiteDashboardPage /> },
+    { path: "docs", element: <SiteDocsPage /> },
+    { path: "docs/:section", element: <SiteDocsPage /> },
+    { path: "faq", element: <SiteFaqPage /> },
+    { path: "faq/:faqId", element: <SiteFaqDetailPage /> },
+    { path: "pricing", element: <SitePricingPage /> },
+    { path: "pricing/:modelId", element: <SitePricingModelPage /> },
+    { path: "creative-circle", element: <SiteCreativeCirclePage /> },
+    { path: "creative-circle/:postId", element: <SiteCreativeCirclePostPage /> },
+    { path: "prompt-library", element: <SitePromptLibraryPage /> },
+    { path: "campaigns/:slug", element: <SiteCampaignPage /> },
+];
+
 const canvasRoutes: RouteObject[] = [
-    { path: "sign-in", element: <SignIn /> },
-    { path: "sign-up", element: <SignUp /> },
-    { path: "register", element: <SignUp /> },
-    { path: "forgot-password", element: <ForgotPassword /> },
-    { path: "otp", element: <Otp /> },
-    { path: "reset", element: <ResetPasswordPage /> },
-    { path: "oauth/:provider", element: <OAuthCallbackPage /> },
     {
-        element: (
-            <RequireAuth>
-                <UserLayout>
-                    <AnalyticsTracker />
-                    <Outlet />
-                </UserLayout>
-            </RequireAuth>
-        ),
+        errorElement: <CanvasRouteError />,
         children: [
-            { index: true, element: <HomePage /> },
-            { path: "home", element: <WorkspaceHome /> },
-            { path: "image", element: <ImagePage /> },
-            { path: "video", element: <VideoPage /> },
-            { path: "assets", element: <AssetsPage /> },
-            { path: "prompts", element: <PromptsPage /> },
-            { path: "canvas", element: <CanvasPage /> },
-            { path: "canvas/:id", element: <CanvasProjectPage /> },
-            { path: "generation-logs", element: <GenerationLogsPage /> },
-            { path: "config", element: <ConfigPage /> },
-            { path: "profile", element: <ProfilePage /> },
-            { path: "keys", element: <ApiKeys /> },
-            { path: "usage-logs", element: <SiteUsageLogsIndexPage /> },
-            { path: "usage-logs/:section", element: <SiteUsageLogsPage /> },
-            { path: "dashboard", element: <SiteDashboardPage /> },
-            { path: "dashboard/:section", element: <SiteDashboardPage /> },
-            { path: "docs", element: <SiteDocsPage /> },
-            { path: "docs/:section", element: <SiteDocsPage /> },
-            { path: "faq", element: <SiteFaqPage /> },
-            { path: "faq/:faqId", element: <SiteFaqDetailPage /> },
-            { path: "pricing", element: <SitePricingPage /> },
-            { path: "pricing/:modelId", element: <SitePricingModelPage /> },
-            { path: "creative-circle", element: <SiteCreativeCirclePage /> },
-            { path: "creative-circle/:postId", element: <SiteCreativeCirclePostPage /> },
-            { path: "prompt-library", element: <SitePromptLibraryPage /> },
-            { path: "campaigns/:slug", element: <SiteCampaignPage /> },
+            { path: "sign-in", element: <SignIn /> },
+            { path: "sign-up", element: <SignUp /> },
+            { path: "register", element: <SignUp /> },
+            { path: "forgot-password", element: <ForgotPassword /> },
+            { path: "otp", element: <Otp /> },
+            { path: "reset", element: <ResetPasswordPage /> },
+            { path: "oauth/:provider", element: <OAuthCallbackPage /> },
+            {
+                element: (
+                    <RequireAuth>
+                        <UserLayout>
+                            <AnalyticsTracker />
+                            <CanvasErrorBoundary>
+                                <Outlet />
+                            </CanvasErrorBoundary>
+                        </UserLayout>
+                    </RequireAuth>
+                ),
+                errorElement: <CanvasRouteError />,
+                children: [
+                    {
+                        errorElement: <CanvasRouteError />,
+                        children: appPages,
+                    },
+                ],
+            },
+            { path: "*", element: <NotFound /> },
         ],
     },
-    { path: "*", element: <NotFound /> },
 ];
 
 /** @deprecated Standalone entry; embedded host should call createCanvasRouter(). */

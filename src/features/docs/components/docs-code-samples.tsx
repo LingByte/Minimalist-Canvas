@@ -51,7 +51,7 @@ const SAMPLE_ICONS: Record<string, IconType> = {
   java: SiOpenjdk,
 }
 
-const SAMPLE_HIGHLIGHT: Record<string, BundledLanguage> = {
+const SAMPLE_HIGHLIGHT: Record<string, BundledLanguage | string> = {
   curl: 'bash',
   python: 'python',
   javascript: 'javascript',

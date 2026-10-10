@@ -90,7 +90,7 @@ function toUptimePct(value: number): number {
 function toLatencySeries(groups: PerformanceGroup[]) {
   const byTs = new Map<number, number[]>()
   for (const group of groups) {
-    for (const point of group.series) {
+    for (const point of group.series ?? []) {
       if (point.avg_ttft_ms <= 0) continue
       const current = byTs.get(point.ts) ?? []
       current.push(point.avg_ttft_ms)
@@ -112,7 +112,7 @@ function toLatencySeries(groups: PerformanceGroup[]) {
 function toUptimeSeries(groups: PerformanceGroup[]): UptimeDayPoint[] {
   const byTs = new Map<number, { rates: number[]; incidents: number }>()
   for (const group of groups) {
-    for (const point of group.series) {
+    for (const point of group.series ?? []) {
       const current = byTs.get(point.ts) ?? { rates: [], incidents: 0 }
       if (Number.isFinite(point.success_rate)) {
         const successRate = toUptimePct(point.success_rate)
@@ -140,7 +140,7 @@ function toUptimeSeries(groups: PerformanceGroup[]): UptimeDayPoint[] {
 }
 
 function toGroupUptimeSeries(group: PerformanceGroup): UptimeDayPoint[] {
-  return group.series.map((point) => {
+  return (group.series ?? []).map((point) => {
     const successRate = toUptimePct(point.success_rate)
     return {
       date: new Date(point.ts * 1000).toISOString(),
@@ -170,7 +170,7 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
     staleTime: 60 * 1000,
   })
   const groups = useMemo(
-    () => metricsQuery.data?.data.groups ?? [],
+    () => metricsQuery.data?.data?.groups ?? [],
     [metricsQuery.data]
   )
   const performances = useMemo<PerformanceRow[]>(

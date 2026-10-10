@@ -213,7 +213,7 @@ export function CirclePostGrid(props: {
     onSuccess: (payload) => {
       storeCircleRemake(payload)
       window.location.href =
-        payload.kind === 'video' ? '/canvas/video' : '/canvas/image'
+        payload.kind === 'video' ? '/video' : '/image'
     },
     onError: (err: Error) => toast.error(err.message || t('Remake failed')),
   })
@@ -277,10 +277,7 @@ export function CirclePostGrid(props: {
                 props.onOpenPost(item)
                 return
               }
-              void navigate({
-                to: '/creative-circle/$postId',
-                params: { postId: String(item.id) },
-              })
+              void navigate(`/creative-circle/${item.id}`)
             }}
             onLike={(item) => {
               if (!requireAuth(t('Sign in to like posts'))) return
