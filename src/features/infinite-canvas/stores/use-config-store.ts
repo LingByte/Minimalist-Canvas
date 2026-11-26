@@ -5,6 +5,13 @@ import { nanoid } from "nanoid";
 
 import i18n from "@canvas/i18n";
 import { localForageStorage } from "@canvas/lib/localforage-storage";
+import {
+    defaultObjectStorageConfig,
+    type ObjectStorageConfig,
+} from "@canvas/lib/object-storage/types";
+
+export type { ObjectStorageConfig, ObjectStorageProvider } from "@canvas/lib/object-storage/types";
+export { defaultObjectStorageConfig, OBJECT_STORAGE_PROVIDERS, isObjectStorageConfigured } from "@canvas/lib/object-storage/types";
 
 export type ApiCallFormat = "openai" | "gemini";
 export type ModelCapability = "image" | "video" | "text" | "audio";
@@ -66,7 +73,7 @@ export type WebdavSyncConfig = {
     directory: string;
     lastSyncedAt: string;
 };
-export type ConfigTabKey = "channels" | "preferences" | "prompt-sources" | "webdav" | "local-storage";
+export type ConfigTabKey = "channels" | "preferences" | "prompt-sources" | "local-storage" | "object-storage" | "webdav";
 
 const CHANNEL_MODEL_SEPARATOR = "::";
 const CONFIG_STORE_KEY = "minimalist-canvas:ai_config_store";
@@ -124,11 +131,14 @@ export const defaultWebdavSyncConfig: WebdavSyncConfig = {
 type ConfigStore = {
     config: AiConfig;
     webdav: WebdavSyncConfig;
+    objectStorage: ObjectStorageConfig;
     isConfigOpen: boolean;
     configTab: ConfigTabKey;
     shouldPromptContinue: boolean;
     updateConfig: <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
     updateWebdavConfig: <K extends keyof WebdavSyncConfig>(key: K, value: WebdavSyncConfig[K]) => void;
+    updateObjectStorageConfig: <K extends keyof ObjectStorageConfig>(key: K, value: ObjectStorageConfig[K]) => void;
+    setObjectStorageConfig: (value: ObjectStorageConfig) => void;
     isAiConfigReady: (config: AiConfig, model: string) => boolean;
     openConfigDialog: (shouldPromptContinue?: boolean, tab?: ConfigTabKey) => void;
     setConfigDialogOpen: (isOpen: boolean) => void;
@@ -212,6 +222,7 @@ export const useConfigStore = create<ConfigStore>()(
         (set) => ({
             config: defaultConfig,
             webdav: defaultWebdavSyncConfig,
+            objectStorage: defaultObjectStorageConfig,
             isConfigOpen: false,
             configTab: "channels",
             shouldPromptContinue: false,
@@ -229,6 +240,14 @@ export const useConfigStore = create<ConfigStore>()(
                         [key]: value,
                     },
                 })),
+            updateObjectStorageConfig: (key, value) =>
+                set((state) => ({
+                    objectStorage: {
+                        ...state.objectStorage,
+                        [key]: value,
+                    },
+                })),
+            setObjectStorageConfig: (objectStorage) => set({ objectStorage }),
             isAiConfigReady: (config, model) => isAiConfigReady(config, model),
             openConfigDialog: (shouldPromptContinue = false, configTab = "channels") =>
                 set({ isConfigOpen: true, shouldPromptContinue, configTab }),
@@ -241,7 +260,18 @@ export const useConfigStore = create<ConfigStore>()(
             partialize: (state) => ({
                 config: state.config,
                 webdav: state.webdav,
+                objectStorage: state.objectStorage,
             }),
+            merge: (persisted, current) => {
+                const partial = (persisted || {}) as Partial<ConfigStore>;
+                return {
+                    ...current,
+                    ...partial,
+                    config: { ...current.config, ...(partial.config || {}) },
+                    webdav: { ...current.webdav, ...(partial.webdav || {}) },
+                    objectStorage: { ...defaultObjectStorageConfig, ...(partial.objectStorage || {}) },
+                };
+            },
         },
     ),
 );

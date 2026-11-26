@@ -53,10 +53,16 @@
           "url": "https://cdn.jsdelivr.net/*"
         },
         {
-          "url": "http://localhost:3000/*"
+          "url": "http://localhost:*/*"
         },
         {
-          "url": "http://127.0.0.1:3000/*"
+          "url": "http://127.0.0.1:*/*"
+        },
+        {
+          "url": "https://localhost:*/*"
+        },
+        {
+          "url": "https://127.0.0.1:*/*"
         },
         {
           "url": "http://1.14.99.158:9000/*"
@@ -81,6 +87,54 @@
         },
         {
           "url": "https://*.zhongzhuan.chat/*"
+        },
+        {
+          "url": "https://*.amazonaws.com/*"
+        },
+        {
+          "url": "https://*.amazonaws.com.cn/*"
+        },
+        {
+          "url": "https://*.myqcloud.com/*"
+        },
+        {
+          "url": "https://*.aliyuncs.com/*"
+        },
+        {
+          "url": "https://*.aliyun.com/*"
+        },
+        {
+          "url": "https://*.qiniucs.com/*"
+        },
+        {
+          "url": "https://*.qiniu.com/*"
+        },
+        {
+          "url": "https://*.qiniudn.com/*"
+        },
+        {
+          "url": "https://*.volces.com/*"
+        },
+        {
+          "url": "https://*.volcengineapi.com/*"
+        },
+        {
+          "url": "https://*.myhuaweicloud.com/*"
+        },
+        {
+          "url": "https://*.huaweicloud.com/*"
+        },
+        {
+          "url": "https://*.ksyun.com/*"
+        },
+        {
+          "url": "https://*.ksyuncs.com/*"
+        },
+        {
+          "url": "http://*/*"
+        },
+        {
+          "url": "https://*/*"
         }
       ]
     },

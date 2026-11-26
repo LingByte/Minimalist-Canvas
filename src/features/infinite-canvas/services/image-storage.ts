@@ -3,7 +3,12 @@ import i18n from "@canvas/i18n";
 import { readImageMeta } from "@canvas/lib/image-utils";
 import { publishCloudMediaUrl } from "@canvas/services/cloud-upload-progress";
 import { blobStore, isTauri, kvStore } from "@canvas/services/fs-store";
-import { uploadCanvasMedia, assertCanvasMediaUploadSize } from "@canvas/services/object-storage";
+import {
+    uploadCanvasMedia,
+    assertCanvasMediaUploadSize,
+    MAX_CANVAS_UPLOAD_BYTES,
+} from "@canvas/services/object-storage";
+import { isObjectStorageConfigured, useConfigStore } from "@canvas/stores/use-config-store";
 
 export type UploadedImage = {
     url: string;
@@ -52,7 +57,13 @@ export async function uploadImage(
     }
 
     const blob = typeof input === "string" ? await (await fetch(input)).blob() : input;
-    assertCanvasMediaUploadSize(blob.size, blob.type, input instanceof File ? input.name : "");
+    const byoConfigured = isObjectStorageConfigured(useConfigStore.getState().objectStorage);
+    assertCanvasMediaUploadSize(
+        blob.size,
+        blob.type,
+        input instanceof File ? input.name : "",
+        byoConfigured ? MAX_CANVAS_UPLOAD_BYTES : 0,
+    );
     const storageKey = `image:${nanoid()}`;
     await store.setItem(storageKey, blob);
     const localUrl = URL.createObjectURL(blob);
@@ -75,6 +86,8 @@ export async function uploadImage(
         })
         .catch((error) => {
             if (isAbortError(error) || resolvedOptions?.signal?.aborted) throw error;
+            // BYO object storage is required for public reference URLs — don't hide failures.
+            if (byoConfigured && !resolvedOptions?.background) throw error;
             return null;
         });
 
@@ -88,6 +101,9 @@ export async function uploadImage(
         throw error;
     }
     if (uploaded?.accessUrl) return { ...local, url: uploaded.accessUrl };
+    if (byoConfigured) {
+        throw new Error("Object storage upload returned no public URL");
+    }
     return local;
 }
 

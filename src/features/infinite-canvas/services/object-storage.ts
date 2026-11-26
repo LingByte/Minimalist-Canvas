@@ -1,7 +1,11 @@
 import { api } from '@/lib/api'
 import { SITE_BASE_URL } from '@/lib/open-external'
 import i18n from '@canvas/i18n'
+import { uploadToConfiguredObjectStorage } from '@canvas/lib/object-storage/client'
+import { resolveObjectStoragePublicBase } from '@canvas/lib/object-storage/providers'
+import { isObjectStorageConfigured } from '@canvas/lib/object-storage/types'
 import { beginCloudUpload } from '@canvas/services/cloud-upload-progress'
+import { useConfigStore } from '@canvas/stores/use-config-store'
 
 /** 七猴公开图床：画布参考图/视频直传，不经本站 presign。 */
 const QIHUO_UPLOAD_URL = 'https://imageproxy.zhongzhuan.chat/api/upload'
@@ -36,7 +40,7 @@ export function assertCanvasUploadSize(size: number, backendLimit = 0): void {
   )
 }
 
-/** Throws with an image-specific hint when over 8MB, videos over 50MB, audio over 20MB, otherwise the generic cap. */
+/** Throws with an image-specific hint when over 8MB (七猴) or the BYO backend limit, videos over 50MB, audio over 20MB. */
 export function assertCanvasMediaUploadSize(
   size: number,
   mimeType: string,
@@ -45,11 +49,16 @@ export function assertCanvasMediaUploadSize(
 ): void {
   const mime = canonicalizeContentType(mimeType, filename)
   if (mime.startsWith('image/')) {
-    if (size <= QIHUO_MAX_IMAGE_UPLOAD_BYTES) return
+    // BYO object storage can take larger images; 七猴 fallback stays at 8MB.
+    const limit =
+      backendLimit > 0
+        ? Math.min(backendLimit, MAX_CANVAS_UPLOAD_BYTES)
+        : QIHUO_MAX_IMAGE_UPLOAD_BYTES
+    if (size <= limit) return
     throw new Error(
       i18n.t('common.uploadImageTooLarge', {
         sizeMb: bytesToMb(size),
-        limitMb: bytesToMb(QIHUO_MAX_IMAGE_UPLOAD_BYTES),
+        limitMb: bytesToMb(limit),
       })
     )
   }
@@ -121,24 +130,60 @@ type ApiEnvelope<T> = {
 let statusCache: { value: ObjectStorageStatus; at: number } | null = null
 const STATUS_TTL_MS = 30_000
 
+export function invalidateObjectStorageStatusCache() {
+  statusCache = null
+}
+
+function localObjectStorageStatus(): ObjectStorageStatus | null {
+  const config = useConfigStore.getState().objectStorage
+  if (!isObjectStorageConfigured(config)) return null
+  return {
+    enabled: true,
+    provider: config.provider,
+    source: 'local',
+    supports_direct: true,
+    max_upload_bytes: MAX_CANVAS_UPLOAD_BYTES,
+    public_base: resolveObjectStoragePublicBase(config),
+  }
+}
+
 export async function getObjectStorageStatus(force = false): Promise<ObjectStorageStatus> {
+  const local = localObjectStorageStatus()
+  if (local) {
+    statusCache = { value: local, at: Date.now() }
+    return local
+  }
+
   if (!force && statusCache && Date.now() - statusCache.at < STATUS_TTL_MS) {
     return statusCache.value
   }
-  const res = await api.get<ApiEnvelope<ObjectStorageStatus>>('/api/storage/status', {
-    skipErrorHandler: true,
-  })
-  const data = res.data?.data
-  const status: ObjectStorageStatus = {
-    enabled: Boolean(data?.enabled),
-    provider: data?.provider || '',
-    source: data?.source,
-    supports_direct: Boolean(data?.supports_direct),
-    max_upload_bytes: Number(data?.max_upload_bytes) || 0,
-    public_base: typeof data?.public_base === 'string' ? data.public_base : '',
+
+  try {
+    const res = await api.get<ApiEnvelope<ObjectStorageStatus>>('/api/storage/status', {
+      skipErrorHandler: true,
+    })
+    const data = res.data?.data
+    const status: ObjectStorageStatus = {
+      enabled: Boolean(data?.enabled),
+      provider: data?.provider || '',
+      source: data?.source,
+      supports_direct: Boolean(data?.supports_direct),
+      max_upload_bytes: Number(data?.max_upload_bytes) || 0,
+      public_base: typeof data?.public_base === 'string' ? data.public_base : '',
+    }
+    statusCache = { value: status, at: Date.now() }
+    return status
+  } catch {
+    const disabled: ObjectStorageStatus = {
+      enabled: false,
+      provider: '',
+      supports_direct: false,
+      max_upload_bytes: 0,
+      public_base: '',
+    }
+    statusCache = { value: disabled, at: Date.now() }
+    return disabled
   }
-  statusCache = { value: status, at: Date.now() }
-  return status
 }
 
 export type CanvasMediaUploadOptions = {
@@ -267,9 +312,7 @@ export async function uploadToObjectStorage(
   input: Blob | File,
   options?: CanvasMediaUploadOptions
 ): Promise<ObjectStorageUploadResult | null> {
-  const status = await getObjectStorageStatus()
-  if (!status.enabled) return null
-
+  const localConfig = useConfigStore.getState().objectStorage
   const filename =
     options?.filename ||
     (input instanceof File && input.name) ||
@@ -279,11 +322,30 @@ export async function uploadToObjectStorage(
     filename
   )
   const resolvedFilename = filename || guessFilename(mimeType)
-  const purpose = options?.purpose || 'canvas'
-  // Keep Blob.type aligned with the presigned mimeLimit (Qiniu rejects mismatches).
   const blob =
     input.type === mimeType ? input : new Blob([input], { type: mimeType })
 
+  // Prefer BYO object storage configured in Settings → Canvas object storage.
+  if (isObjectStorageConfigured(localConfig)) {
+    assertCanvasMediaUploadSize(blob.size, mimeType, resolvedFilename, MAX_CANVAS_UPLOAD_BYTES)
+    const uploaded = await uploadToConfiguredObjectStorage(localConfig, blob, {
+      filename: resolvedFilename,
+      contentType: mimeType,
+      onProgress: options?.onProgress,
+      signal: options?.signal,
+    })
+    return {
+      key: uploaded.key,
+      accessUrl: uploaded.accessUrl,
+      bytes: uploaded.bytes,
+      mimeType: uploaded.mimeType,
+    }
+  }
+
+  const status = await getObjectStorageStatus()
+  if (!status.enabled || status.source === 'local') return null
+
+  const purpose = options?.purpose || 'canvas'
   assertCanvasMediaUploadSize(blob.size, mimeType, resolvedFilename, status.max_upload_bytes)
 
   const presignRes = await api.post<ApiEnvelope<PresignResult>>(
@@ -341,11 +403,25 @@ export async function uploadToObjectStorage(
   }
 }
 
-/** Server-side remirror of an upstream media URL onto ailingecho/ (adds hotlink Referer). */
+/** Remirror an upstream media URL onto configured object storage. */
 export async function mirrorRemoteToObjectStorage(
   url: string,
   kind: 'video' | 'image' = 'video'
 ): Promise<ObjectStorageUploadResult | null> {
+  const localConfig = useConfigStore.getState().objectStorage
+  if (isObjectStorageConfigured(localConfig)) {
+    const { isTauri } = await import('@canvas/services/fs-store')
+    const blob = isTauri()
+      ? await (await import('@tauri-apps/plugin-http')).fetch(url).then((res) => res.blob())
+      : await (await fetch(url)).blob()
+    if (!blob.size) throw new Error('failed to download remote media')
+    return uploadToObjectStorage(blob, {
+      filename: kind === 'video' ? 'mirrored.mp4' : 'mirrored.png',
+      contentType: blob.type || (kind === 'video' ? 'video/mp4' : 'image/png'),
+      purpose: 'canvas',
+    })
+  }
+
   const status = await getObjectStorageStatus()
   if (!status.enabled) return null
   const res = await api.post<

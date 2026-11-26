@@ -2,7 +2,13 @@ import { nanoid } from "nanoid";
 
 import { publishCloudMediaUrl } from "@canvas/services/cloud-upload-progress";
 import { blobStore, isTauri } from "@canvas/services/fs-store";
-import { uploadCanvasMedia, assertCanvasMediaUploadSize } from "@canvas/services/object-storage";
+import {
+    uploadCanvasMedia,
+    assertCanvasMediaUploadSize,
+    isPubliclyReachableMediaUrl,
+    MAX_CANVAS_UPLOAD_BYTES,
+} from "@canvas/services/object-storage";
+import { isObjectStorageConfigured, useConfigStore } from "@canvas/stores/use-config-store";
 
 export type UploadedFile = {
     url: string;
@@ -35,7 +41,13 @@ export async function uploadMediaFile(
     const resolvedOptions: UploadMediaOptions | undefined =
         typeof options === "function" ? { onProgress: options } : options;
     const blob = typeof input === "string" ? await fetchBlob(input) : input;
-    assertCanvasMediaUploadSize(blob.size, blob.type, input instanceof File ? input.name : "");
+    const byoConfigured = isObjectStorageConfigured(useConfigStore.getState().objectStorage);
+    assertCanvasMediaUploadSize(
+        blob.size,
+        blob.type,
+        input instanceof File ? input.name : "",
+        byoConfigured ? MAX_CANVAS_UPLOAD_BYTES : 0,
+    );
     const storageKey = `${prefix}:${nanoid()}`;
     await store.setItem(storageKey, blob);
     const localUrl = URL.createObjectURL(blob);
@@ -66,10 +78,16 @@ export async function uploadMediaFile(
                 publishCloudMediaUrl(storageKey, uploaded.accessUrl);
                 return uploaded;
             }
+            // BYO storage may return LAN/custom domains that still work for model fetch via CDN mapping.
+            if (byoConfigured && uploaded?.accessUrl) {
+                publishCloudMediaUrl(storageKey, uploaded.accessUrl);
+                return uploaded;
+            }
             return null;
         })
         .catch((error) => {
             if (isAbortError(error) || resolvedOptions?.signal?.aborted) throw error;
+            if (byoConfigured && !resolvedOptions?.background) throw error;
             return null;
         });
 
@@ -85,6 +103,9 @@ export async function uploadMediaFile(
     if (uploaded?.accessUrl) {
         return { ...base, url: uploaded.accessUrl, bytes: uploaded.bytes || base.bytes, mimeType: uploaded.mimeType || base.mimeType };
     }
+    if (byoConfigured) {
+        throw new Error("Object storage upload returned no public URL");
+    }
     return base;
 }
 
@@ -99,19 +120,6 @@ async function fetchBlob(url: string): Promise<Blob> {
         return (await tauriFetch(url)).blob();
     }
     return (await fetch(url)).blob();
-}
-
-function isPubliclyReachableMediaUrl(value: string) {
-    if (!/^https?:\/\//i.test(value || "")) return false;
-    try {
-        const host = new URL(value).hostname.toLowerCase();
-        if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "0.0.0.0") return false;
-        if (host.endsWith(".local") || host.endsWith(".internal")) return false;
-        if (/^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)) return false;
-        return true;
-    } catch {
-        return false;
-    }
 }
 
 export async function resolveMediaUrl(storageKey?: string, fallback = "") {

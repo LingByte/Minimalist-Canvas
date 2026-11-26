@@ -1,6 +1,6 @@
-import { Alert, App, Button, Progress, Spin } from "antd";
+import { Alert, App, Button, Progress, Spin, Tooltip } from "antd";
 import type { TFunction } from "i18next";
-import { Database, FolderOpen, HardDrive, Layers3, RefreshCw, Trash2, FolderCog } from "lucide-react";
+import { CircleHelp, Database, FolderOpen, HardDrive, Layers3, RefreshCw, Trash2, FolderCog } from "lucide-react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -80,9 +80,21 @@ export function ConfigLocalStorage({ active }: { active: boolean }) {
             <section className="rounded-lg border border-stone-200 p-4 dark:border-stone-800">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                        <div className="flex items-center gap-2 text-sm font-semibold">
-                            <Database className="size-4" />
-                            {t("config.localStorage.title")}
+                        <div className="flex items-center gap-1.5 text-sm font-semibold">
+                            <Database className="size-4 shrink-0" />
+                            <span>{t("config.localStorage.title")}</span>
+                            <Tooltip
+                                title={<div className="text-xs leading-relaxed">{t("config.localStorage.syncedHint")}</div>}
+                                styles={{ root: { maxWidth: 360 } }}
+                            >
+                                <button
+                                    type="button"
+                                    className="inline-flex size-5 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-600 dark:hover:bg-stone-800 dark:hover:text-stone-300"
+                                    aria-label={t("config.localStorage.syncedHint")}
+                                >
+                                    <CircleHelp className="size-3.5" />
+                                </button>
+                            </Tooltip>
                         </div>
                         <div className="mt-1 text-xs text-stone-500">{t("config.localStorage.description")}</div>
                     </div>
@@ -95,12 +107,6 @@ export function ConfigLocalStorage({ active }: { active: boolean }) {
                         </Button>
                     </div>
                 </div>
-                <Alert
-                    className="mt-4 !border-stone-300/80 !bg-stone-100/80 [&_.ant-alert-icon]:!text-stone-500 dark:!border-stone-700 dark:!bg-stone-900/70 dark:[&_.ant-alert-icon]:!text-stone-400"
-                    type="info"
-                    showIcon
-                    title={<span className="text-stone-700 dark:text-stone-200">{t("config.localStorage.syncedHint")}</span>}
-                />
                 {usage?.dataPath ? (
                     <div className="mt-4 rounded-lg bg-stone-100/70 p-3 dark:bg-stone-900/70">
                         <div className="flex items-center gap-2 text-xs text-stone-500">

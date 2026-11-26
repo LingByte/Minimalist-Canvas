@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { ModelPicker } from "@canvas/components/model-picker";
 import { ChannelEditorDrawer } from "@canvas/components/layout/channel-editor-drawer";
 import { ConfigLocalStorage } from "@canvas/components/layout/config-local-storage";
+import { ConfigObjectStorage } from "@canvas/components/layout/config-object-storage";
 import { ConfigPromptSources } from "@canvas/components/layout/config-prompt-sources";
 import { exportAppConfig, importAppConfig } from "@canvas/services/config-file";
 import { audioFormatOptions, audioVoiceOptions, normalizeAudioSpeedValue } from "@canvas/lib/audio-generation";
@@ -245,6 +246,11 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                         key: "local-storage",
                         label: t("config.tabs.localStorage"),
                         children: <ConfigLocalStorage active={activeTab === "local-storage"} />,
+                    },
+                    {
+                        key: "object-storage",
+                        label: t("config.tabs.objectStorage"),
+                        children: <ConfigObjectStorage />,
                     },
                 ]}
             />
