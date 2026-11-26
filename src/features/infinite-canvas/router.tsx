@@ -18,6 +18,8 @@ import { CANVAS_BASENAME } from "./integration/constants";
 
 const appPages: RouteObject[] = [
     { index: true, element: <HomePage /> },
+    // Alias for older “/home” links from the canvas chrome.
+    { path: "home", element: <HomePage /> },
     { path: "image", element: <ImagePage /> },
     { path: "video", element: <VideoPage /> },
     { path: "assets", element: <AssetsPage /> },

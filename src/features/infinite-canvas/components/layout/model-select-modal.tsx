@@ -12,8 +12,7 @@ export type ModelSelectResult = {
     description?: string;
 };
 
-// Channel model selector: for the site gateway use /api/canvas/models (with
-// capability). External Base URLs (e.g. simplefuture.zone) use upstream /v1/models.
+// Channel model selector: pull OpenAI-compatible /models (or Gemini models) from the channel Base URL.
 export function ModelSelectModal({
     open,
     channel,

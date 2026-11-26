@@ -1283,7 +1283,7 @@ function InfiniteCanvasPage() {
     const deleteCurrentProject = useCallback(async () => {
         try {
             cleanupAssetImages();
-            navigate("/home");
+            navigate("/");
         } catch (error) {
             console.error(error);
             message.error(t("canvas.project.deleteFailed"));
@@ -4650,9 +4650,9 @@ function InfiniteCanvasPage() {
                             window.location.assign(homeHref);
                             return;
                         }
-                        navigate("/home");
+                        navigate("/");
                     }}
-                    onProjects={() => navigate("/home")}
+                    onProjects={() => navigate("/")}
                     onCreateProject={createAndOpenProject}
                     onDeleteProject={deleteCurrentProject}
                     onExportProject={exportCurrentProject}

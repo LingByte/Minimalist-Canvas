@@ -1281,24 +1281,13 @@ export async function requestAgentChatCompletion(
 }
 
 export async function fetchImageModels(config: Pick<AiConfig, "baseUrl" | "apiKey" | "apiFormat">) {
-    // Fetch via same-origin proxy — third-party Base URLs (api.openai.com, etc.) cannot
-    // be called from the browser due to CORS.
+    // Local-first: call the channel Base URL directly (no site /api/canvas/fetch-models proxy).
+    if (!config.baseUrl.trim()) throw new Error(apiText("baseUrlRequired"));
+    if (!config.apiKey.trim()) throw new Error(apiText("apiKeyRequired"));
     try {
-        const { api } = await import("@/lib/api");
-        type ApiEnvelope<T> = { success?: boolean; message?: string; data?: T };
-        const proxied = await api.post<ApiEnvelope<string[]>>(
-            "/api/canvas/fetch-models",
-            {
-                base_url: config.baseUrl,
-                api_key: config.apiKey,
-                api_format: config.apiFormat,
-            },
-            { skipErrorHandler: true },
-        );
-        if (proxied.data?.success && Array.isArray(proxied.data.data)) {
-            return proxied.data.data.filter((id): id is string => Boolean(id)).sort((a, b) => a.localeCompare(b));
-        }
-        throw new Error(proxied.data?.message || apiText("modelReadFailed"));
+        const models =
+            config.apiFormat === "gemini" ? await fetchGeminiModelIds(config) : await fetchOpenAIModelIds(config);
+        return models.sort((a, b) => a.localeCompare(b));
     } catch (error) {
         throw new Error(readAxiosError(error, apiText("modelReadFailed")));
     }
@@ -1306,6 +1295,65 @@ export async function fetchImageModels(config: Pick<AiConfig, "baseUrl" | "apiKe
 
 export async function fetchChannelModels(channel: ModelChannel) {
     return fetchImageModels({ baseUrl: channel.baseUrl, apiKey: channel.apiKey, apiFormat: channel.apiFormat });
+}
+
+async function fetchOpenAIModelIds(config: Pick<AiConfig, "baseUrl" | "apiKey">) {
+    const payload = await fetchUpstreamJson(buildApiUrl(config.baseUrl, "/models"), {
+        Authorization: `Bearer ${config.apiKey}`,
+    });
+    return parseOpenAIModelIds(payload);
+}
+
+async function fetchGeminiModelIds(config: Pick<AiConfig, "baseUrl" | "apiKey">) {
+    const payload = await fetchUpstreamJson(geminiApiUrl(config), geminiHeaders(config));
+    return parseGeminiModelIds(payload);
+}
+
+async function fetchUpstreamJson(url: string, headers: Record<string, string>) {
+    const { isTauri } = await import("@canvas/services/fs-store");
+    // Desktop: plugin-http bypasses webview CORS against arbitrary provider hosts.
+    if (isTauri()) {
+        const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
+        const response = await tauriFetch(url, { method: "GET", headers });
+        if (!response.ok) {
+            const text = await response.text().catch(() => "");
+            throw new Error(readStatusError(response.status, text.slice(0, 200) || apiText("modelReadFailed")));
+        }
+        return response.json();
+    }
+
+    const response = await axios.get(url, { headers });
+    return response.data;
+}
+
+function parseOpenAIModelIds(payload: unknown) {
+    if (!payload || typeof payload !== "object") return [] as string[];
+    const data = (payload as { data?: unknown }).data;
+    if (!Array.isArray(data)) return [] as string[];
+    return data
+        .map((item) => {
+            if (typeof item === "string") return item.trim();
+            if (item && typeof item === "object" && typeof (item as { id?: unknown }).id === "string") {
+                return (item as { id: string }).id.trim();
+            }
+            return "";
+        })
+        .filter(Boolean);
+}
+
+function parseGeminiModelIds(payload: unknown) {
+    if (!payload || typeof payload !== "object") return [] as string[];
+    const models = (payload as { models?: unknown }).models;
+    if (!Array.isArray(models)) return [] as string[];
+    return models
+        .map((item) => {
+            if (typeof item === "string") return geminiModelName(item);
+            if (item && typeof item === "object" && typeof (item as { name?: unknown }).name === "string") {
+                return geminiModelName((item as { name: string }).name);
+            }
+            return "";
+        })
+        .filter(Boolean);
 }
 
 const defaultGeminiConfig: Pick<AiConfig, "baseUrl" | "apiKey" | "apiFormat" | "model" | "systemPrompt"> = {

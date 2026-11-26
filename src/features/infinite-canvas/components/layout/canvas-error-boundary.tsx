@@ -100,5 +100,5 @@ export class CanvasErrorBoundary extends Component<CanvasErrorBoundaryProps, Can
 export function CanvasRouteError() {
     const error = useRouteError();
     const navigate = useNavigate();
-    return <CanvasCrashScreen error={error} onHome={() => navigate("/home")} />;
+    return <CanvasCrashScreen error={error} onHome={() => navigate("/")} />;
 }
