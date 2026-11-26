@@ -1,6 +1,6 @@
 import { ArrowLeft, ArrowRight, BookOpen, CheckSquare, ClipboardPaste, Download, FolderPlus, History, ImagePlus, LoaderCircle, PenLine, Plus, SlidersHorizontal, Sparkles, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { App, Button, Checkbox, Drawer, Empty, Image, Input, Modal, Tag, Tooltip, Typography } from "antd";
+import { App, Button, Checkbox, Drawer, Empty, Input, Modal, Tag, Tooltip, Typography } from "antd";
 import { useTranslation } from "react-i18next";
 import { toIntlLocale } from "@/i18n/languages";
 
@@ -32,13 +32,22 @@ import { useConfirmGenerationQuota } from "@canvas/lib/use-confirm-generation-qu
 import { useModelUnitPrice } from "@canvas/lib/use-model-unit-price";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { nanoid } from "nanoid";
-import { formatBytes, formatDuration, getDataUrlByteSize, readImageMeta } from "@canvas/lib/image-utils";
-import { requestEdit, requestGeneration } from "@canvas/services/api/image";
-import { deleteGenerationAssetsByClientIds, listGenerationAssets, upsertGenerationAsset, type GenerationAsset } from "@canvas/services/api/generation-assets";
+import { formatBytes, formatDuration } from "@canvas/lib/image-utils";
+import { deleteGenerationAssetsByClientIds, listGenerationAssets, type GenerationAsset } from "@canvas/services/api/generation-assets";
 import { onCloudMediaUrl } from "@canvas/services/cloud-upload-progress";
 import { isPubliclyReachableMediaUrl } from "@canvas/services/ensure-public-media";
-import { deleteStoredImages, uploadImage } from "@canvas/services/image-storage";
+import { deleteStoredImages, resolveImageUrl, uploadImage } from "@canvas/services/image-storage";
+import { isTauri } from "@canvas/services/fs-store";
 import { saveBlobAs } from "@canvas/lib/save-file";
+import {
+    failStalePendingImageLogs,
+    getActiveImageBatch,
+    isAnyImageBatchRunning,
+    listActiveImageBatches,
+    startWorkbenchImageBatch,
+    subscribeImageBatches,
+    type WorkbenchImageBatchProgress,
+} from "@canvas/services/workbench-image-generation";
 import { useAssetStore } from "@canvas/stores/use-asset-store";
 import { useWorkbenchAgentStore } from "@canvas/stores/use-workbench-agent-store";
 import type { ReferenceImage } from "@canvas/types/image";
@@ -81,13 +90,15 @@ type GenerationLog = {
     status: "pending" | "success" | "failed";
     images: GeneratedImage[];
     thumbnails: string[];
+    error?: string;
 };
 
 type GenerationLogConfig = Pick<AiConfig, "model" | "imageModel" | "quality" | "size" | "count">;
 
 type UpdateAiConfig = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
 
-const RESULT_ACTION_BUTTON_CLASS = "min-w-0 px-1.5 [&_.ant-btn-icon]:shrink-0 [&>span:last-child]:min-w-0 [&>span:last-child]:truncate";
+const RESULT_ACTION_BUTTON_CLASS =
+    "!h-8 min-w-0 flex-1 !px-2 text-xs [&_.ant-btn-icon]:shrink-0 [&>span:last-child]:whitespace-nowrap";
 export default function ImagePage() {
     const { message } = App.useApp();
     const { t } = useTranslation();
@@ -126,6 +137,12 @@ export default function ImagePage() {
     const updateAgentTask = useWorkbenchAgentStore((state) => state.updateTask);
     const processedCommandRef = useRef(0);
     const agentTaskIdRef = useRef<string | undefined>(undefined);
+    const activeBatchIdRef = useRef<string | null>(null);
+    const previewLogIdRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        previewLogIdRef.current = previewLog?.id || null;
+    }, [previewLog?.id]);
 
     useEffect(() => {
         return onCloudMediaUrl((storageKey, url) => {
@@ -161,8 +178,61 @@ export default function ImagePage() {
         return () => window.clearInterval(timer);
     }, [running, startedAt]);
 
+    const applyBatchProgress = (progress: WorkbenchImageBatchProgress, options?: { force?: boolean; quiet?: boolean }) => {
+        const followBatch =
+            options?.force ||
+            activeBatchIdRef.current === progress.batchId ||
+            previewLogIdRef.current === progress.batchId ||
+            (!activeBatchIdRef.current && !previewLogIdRef.current);
+        if (followBatch) {
+            activeBatchIdRef.current = progress.running ? progress.batchId : activeBatchIdRef.current === progress.batchId ? null : activeBatchIdRef.current;
+            setResults(
+                progress.results.map((item) =>
+                    item.status === "success" && item.image
+                        ? { id: item.id, status: "success" as const, image: item.image }
+                        : item.status === "failed"
+                          ? { id: item.id, status: "failed" as const, error: item.error || t("workbench.generationFailed") }
+                          : { id: item.id, status: "pending" as const },
+                ),
+            );
+            if (progress.running) {
+                setRunning(true);
+                setStartedAt((value) => value || performance.now() - progress.durationMs);
+            }
+        }
+        if (!progress.running) {
+            if (activeBatchIdRef.current === progress.batchId) activeBatchIdRef.current = null;
+            if (!isAnyImageBatchRunning()) {
+                setRunning(false);
+                setStartedAt(0);
+            }
+            if (!options?.quiet && followBatch) {
+                progress.successCount
+                    ? message.success(t("imageWorkbench.generated"))
+                    : message.error(progress.results.find((item) => item.error)?.error || t("workbench.generationFailed"));
+            }
+            void refreshLogs(false);
+        } else {
+            void refreshLogs(false);
+        }
+    };
+
     useEffect(() => {
-        void refreshLogs();
+        const active = listActiveImageBatches();
+        if (active[0]) {
+            activeBatchIdRef.current = active[0].batchId;
+            applyBatchProgress(active[0], { force: true, quiet: true });
+            setRunning(true);
+            setStartedAt(performance.now() - active[0].durationMs);
+            if (!active[0].durationMs) setElapsedMs(0);
+            message.info(t("imageWorkbench.backgroundRunning"));
+        }
+        const unsubscribe = subscribeImageBatches((progress) => {
+            applyBatchProgress(progress, { quiet: false });
+        });
+        void refreshLogs(true);
+        return unsubscribe;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const addReferences = async (files?: FileList | null) => {
@@ -329,48 +399,36 @@ export default function ImagePage() {
             return;
         }
 
+        const batchId = nanoid();
+        const slotIds = Array.from({ length: generationCount }, () => nanoid());
+        activeBatchIdRef.current = batchId;
         setElapsedMs(0);
         setRunning(true);
-        if (agentTaskId) updateAgentTask(agentTaskId, { status: "running", error: undefined });
+        setStartedAt(performance.now());
         setPreviewLog(null);
-        setResults(Array.from({ length: generationCount }, () => ({ id: nanoid(), status: "pending" })));
-        const batchStartedAt = performance.now();
-        setStartedAt(batchStartedAt);
+        setResults(slotIds.map((id) => ({ id, status: "pending" as const })));
+        if (agentTaskId) updateAgentTask(agentTaskId, { status: "running", error: undefined });
 
-        const tasks = Array.from({ length: generationCount }, (_, index) => runGenerationSlot(index, snapshot));
+        const { promise } = startWorkbenchImageBatch({
+            batchId,
+            slotIds,
+            prompt: snapshot.text,
+            model,
+            config: snapshot.config,
+            references: snapshot.references,
+            count: generationCount,
+        });
 
-        const result = await Promise.allSettled(tasks);
-        const successImages = result.filter((item): item is PromiseFulfilledResult<GeneratedImage> => item.status === "fulfilled").map((item) => item.value);
-        const successCount = successImages.length;
-        const failCount = generationCount - successCount;
-        const failed = result.find((item): item is PromiseRejectedResult => item.status === "rejected");
-        const error = failed?.reason instanceof Error ? failed.reason.message : failCount ? t("workbench.generationFailed") : undefined;
-        if (agentTaskId) updateAgentTask(agentTaskId, { status: successCount ? "succeeded" : "failed", successCount, failCount, error: successCount ? undefined : error });
-
-        try {
-            const logImages = await Promise.all(
-                successImages.map(async (image) => {
-                    const stored = await uploadImage(image.dataUrl);
-                    return { ...image, dataUrl: stored.url, storageKey: stored.storageKey, width: stored.width, height: stored.height, bytes: stored.bytes, mimeType: stored.mimeType };
-                }),
-            );
-            saveLog(
-                buildLog({
-                    prompt: text,
-                    model,
-                    config: { ...snapshot.config, count: String(generationCount) },
-                    references: snapshot.references,
-                    durationMs: performance.now() - batchStartedAt,
-                    successCount,
-                    failCount,
-                    status: successCount ? "success" : "failed",
-                    images: logImages,
-                }),
-            );
-            successCount ? message.success(t("imageWorkbench.generated")) : message.error(failed?.reason instanceof Error ? failed.reason.message : t("workbench.generationFailed"));
-        } finally {
-            setRunning(false);
-        }
+        void promise.then((progress) => {
+            if (agentTaskId) {
+                updateAgentTask(agentTaskId, {
+                    status: progress.successCount ? "succeeded" : "failed",
+                    successCount: progress.successCount,
+                    failCount: progress.failCount,
+                    error: progress.successCount ? undefined : progress.results.find((item) => item.error)?.error || t("workbench.generationFailed"),
+                });
+            }
+        });
     };
 
     // Handle image-generation commands from the Agent panel by setting the prompt and optionally starting generation.
@@ -395,25 +453,67 @@ export default function ImagePage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [autoRunToken]);
 
-    const downloadImage = (image: GeneratedImage, index: number) => {
-        void saveBlobAs(image.dataUrl, `image-${index + 1}.png`);
+    const downloadImage = async (image: GeneratedImage, index: number) => {
+        const url = (await resolveImageUrl(image.storageKey, image.dataUrl)) || image.dataUrl;
+        const path = await saveBlobAs(url, `image-${index + 1}.png`);
+        if (isTauri() && !path) {
+            message.info(t("common.downloadCanceled"));
+            return;
+        }
+        message.success(t("common.downloaded"));
     };
 
     const addResultToReferences = async (image: GeneratedImage, index: number) => {
-        const stored = await uploadImage(image.dataUrl);
-        setReferences((value) => [...value, { id: nanoid(), name: `result-${index + 1}.png`, type: stored.mimeType, dataUrl: stored.url, storageKey: stored.storageKey }]);
+        const displayUrl = (await resolveImageUrl(image.storageKey, image.dataUrl)) || image.dataUrl;
+        const stored = image.storageKey
+            ? {
+                  url: displayUrl,
+                  storageKey: image.storageKey,
+                  mimeType: image.mimeType || "image/png",
+                  width: image.width,
+                  height: image.height,
+                  bytes: image.bytes,
+              }
+            : await uploadImage(displayUrl, { background: true });
+        setReferences((value) => [
+            ...value,
+            {
+                id: nanoid(),
+                name: `result-${index + 1}.png`,
+                type: stored.mimeType,
+                dataUrl: stored.url,
+                storageKey: stored.storageKey,
+            },
+        ]);
         message.success(t("imageWorkbench.addedReference"));
     };
 
     const saveResultToAssets = async (image: GeneratedImage, index: number) => {
-        const stored = await uploadImage(image.dataUrl);
+        const displayUrl = (await resolveImageUrl(image.storageKey, image.dataUrl)) || image.dataUrl;
+        const stored = image.storageKey
+            ? {
+                  url: displayUrl,
+                  storageKey: image.storageKey,
+                  mimeType: image.mimeType || "image/png",
+                  width: image.width,
+                  height: image.height,
+                  bytes: image.bytes,
+              }
+            : await uploadImage(displayUrl, { background: true });
         addAsset({
             kind: "image",
             title: t("imageWorkbench.resultTitle", { count: index + 1 }),
             coverUrl: stored.url,
             tags: [],
             source: t("imageWorkbench.source"),
-            data: { dataUrl: stored.url, storageKey: stored.storageKey, width: stored.width, height: stored.height, bytes: stored.bytes, mimeType: stored.mimeType },
+            data: {
+                dataUrl: stored.url,
+                storageKey: stored.storageKey,
+                width: stored.width,
+                height: stored.height,
+                bytes: stored.bytes,
+                mimeType: stored.mimeType,
+            },
             metadata: { source: "image-page", prompt },
         });
         message.success(t("common.addedToAssets"));
@@ -468,15 +568,13 @@ export default function ImagePage() {
         setDeleteConfirmOpen(false);
     };
 
-    const saveLog = (log: GenerationLog) => {
-        void syncGenerationAsset(log).then(() => refreshLogs());
-    };
-
-    const refreshLogs = async () => {
+    const refreshLogs = async (resumePending = true) => {
         const page = await readMergedImageLogs();
         setLogs(page.logs);
         setImageLogCursor(page.nextCursor);
         setImageLogHasMore(page.hasMore);
+        if (resumePending) resumePendingLogs(page.logs);
+        return page.logs;
     };
 
     const loadMoreImageLogs = async () => {
@@ -490,6 +588,25 @@ export default function ImagePage() {
         setImageLogHasMore(page.hasMore);
     };
 
+    const resumePendingLogs = (items: GenerationLog[]) => {
+        const staleIds: string[] = [];
+        for (const log of items) {
+            if (log.status !== "pending") continue;
+            const active = getActiveImageBatch(log.id);
+            if (active) {
+                if (!activeBatchIdRef.current) {
+                    activeBatchIdRef.current = log.id;
+                    applyBatchProgress(active, { force: true, quiet: true });
+                }
+                continue;
+            }
+            staleIds.push(log.id);
+        }
+        if (staleIds.length) {
+            void failStalePendingImageLogs(staleIds, t("imageWorkbench.interrupted")).then(() => refreshLogs(false));
+        }
+    };
+
     const previewGenerationLog = async (log: GenerationLog) => {
         setPreviewLog(log);
         setLogsOpen(false);
@@ -499,7 +616,53 @@ export default function ImagePage() {
         if (log.config.quality) updateConfig("quality", log.config.quality);
         if (log.config.size) updateConfig("size", log.config.size);
         if (log.config.count) updateConfig("count", log.config.count);
-        setResults(log.images.map((image) => ({ id: image.id, status: "success", image })));
+
+        const active = getActiveImageBatch(log.id);
+        if (active || log.status === "pending") {
+            activeBatchIdRef.current = log.id;
+            if (active) {
+                applyBatchProgress(active, { force: true, quiet: true });
+            } else {
+                const count = Math.max(1, Number(log.config.count) || log.imageCount || 1);
+                setResults(Array.from({ length: count }, () => ({ id: nanoid(), status: "pending" as const })));
+                setRunning(isAnyImageBatchRunning());
+            }
+            return;
+        }
+
+        if (log.status === "failed" && !log.images.length) {
+            const count = Math.max(1, Number(log.config.count) || log.imageCount || 1);
+            const reason = log.error || t("workbench.generationFailed");
+            setResults(
+                Array.from({ length: count }, (_, index) => ({
+                    id: `${log.id}-${index}`,
+                    status: "failed" as const,
+                    error: reason,
+                })),
+            );
+            return;
+        }
+
+        const images = await Promise.all(
+            log.images.map(async (image) => ({
+                ...image,
+                dataUrl: (await resolveImageUrl(image.storageKey, image.dataUrl)) || image.dataUrl,
+            })),
+        );
+        if (log.status === "failed" && images.length < Math.max(1, Number(log.config.count) || 0)) {
+            const count = Math.max(images.length, Number(log.config.count) || images.length || 1);
+            const reason = log.error || t("workbench.generationFailed");
+            setResults(
+                Array.from({ length: count }, (_, index) => {
+                    const image = images[index];
+                    return image
+                        ? { id: image.id, status: "success" as const, image }
+                        : { id: `${log.id}-${index}`, status: "failed" as const, error: reason };
+                }),
+            );
+            return;
+        }
+        setResults(images.map((image) => ({ id: image.id, status: "success" as const, image })));
     };
 
     const buildRequestSnapshot = () => {
@@ -516,50 +679,74 @@ export default function ImagePage() {
         return { text, config: { ...effectiveConfig, model, count: "1" }, references: [...references] };
     };
 
-    const runGenerationSlot = async (index: number, snapshot: { text: string; config: AiConfig; references: ReferenceImage[] }) => {
-        const itemStartedAt = performance.now();
-        try {
-            const result = snapshot.references.length ? await requestEdit(snapshot.config, snapshot.text, snapshot.references) : await requestGeneration(snapshot.config, snapshot.text);
-            const image = result[0];
-            if (!image) throw new Error(t("imageWorkbench.missingResult"));
-            const meta = await readImageMeta(image.dataUrl);
-            const nextImage = { id: image.id, dataUrl: image.dataUrl, durationMs: performance.now() - itemStartedAt, width: meta.width, height: meta.height, bytes: getDataUrlByteSize(image.dataUrl) };
-            setResults((value) => updateResultAt(value, index, { status: "success", image: nextImage }));
-            return nextImage;
-        } catch (error) {
-            setResults((value) => updateResultAt(value, index, { status: "failed", error: error instanceof Error ? error.message : t("workbench.generationFailed") }));
-            throw error;
-        }
-    };
-
     const retryResult = async (index: number) => {
         const snapshot = buildRequestSnapshot();
         if (!snapshot) return;
-        setPreviewLog(null);
-        setResults((value) => updateResultAt(value, index, { status: "pending", error: undefined, image: undefined }));
-        const retryStartedAt = performance.now();
-        try {
-            const image = await runGenerationSlot(index, snapshot);
-            const stored = await uploadImage(image.dataUrl);
-            const logImage = { ...image, dataUrl: stored.url, storageKey: stored.storageKey, width: stored.width, height: stored.height, bytes: stored.bytes, mimeType: stored.mimeType };
-            setResults((value) => updateResultAt(value, index, { image: { ...image, dataUrl: stored.url, storageKey: stored.storageKey } }));
-            saveLog(
-                buildLog({
-                    prompt: snapshot.text,
-                    model,
-                    config: { ...snapshot.config, count: "1" },
-                    references: snapshot.references,
-                    durationMs: performance.now() - retryStartedAt,
-                    successCount: 1,
-                    failCount: 0,
-                    status: "success",
-                    images: [logImage],
-                }),
-            );
-            message.success(t("workbench.retrySuccess"));
-        } catch {
-            // runGenerationSlot has already marked the result as failed.
+        if (running) {
+            message.warning(t("imageWorkbench.busy"));
+            return;
         }
+
+        const batchId = previewLog?.id || activeBatchIdRef.current || nanoid();
+        const currentResults = results.length
+            ? results
+            : [{ id: `${batchId}-0`, status: "failed" as const, error: previewLog?.error }];
+        const slotIds = currentResults.map((item, itemIndex) => item.id || `${batchId}-${itemIndex}`);
+        const seedResults: WorkbenchImageBatchProgress["results"] = currentResults.map((item, itemIndex) =>
+            itemIndex === index
+                ? { id: slotIds[itemIndex], status: "pending" }
+                : item.status === "success" && item.image
+                  ? { id: slotIds[itemIndex], status: "success", image: item.image }
+                  : { id: slotIds[itemIndex], status: "failed", error: item.error },
+        );
+
+        activeBatchIdRef.current = batchId;
+        if (!previewLog || previewLog.id !== batchId) {
+            setPreviewLog({
+                id: batchId,
+                createdAt: previewLog?.createdAt || Date.now(),
+                title: snapshot.text.slice(0, 12) || t("workbench.untitled"),
+                prompt: snapshot.text,
+                time: previewLog?.time || new Date().toLocaleString(toIntlLocale(i18n.resolvedLanguage), { hour12: false }),
+                model,
+                config: {
+                    model,
+                    imageModel: model,
+                    quality: snapshot.config.quality,
+                    size: snapshot.config.size,
+                    count: String(seedResults.length),
+                },
+                references: snapshot.references,
+                durationMs: previewLog?.durationMs || 0,
+                successCount: 0,
+                failCount: 0,
+                imageCount: seedResults.length,
+                size: snapshot.config.size || "",
+                quality: snapshot.config.quality || "",
+                status: "pending",
+                images: [],
+                thumbnails: [],
+                error: undefined,
+            });
+        } else {
+            setPreviewLog({ ...previewLog, status: "pending", error: undefined });
+        }
+        setResults(seedResults.map((item) => ({ id: item.id, status: item.status, image: item.image, error: item.error })));
+        setRunning(true);
+        setStartedAt(performance.now());
+        setElapsedMs(0);
+
+        startWorkbenchImageBatch({
+            batchId,
+            slotIds,
+            onlyIndexes: [index],
+            seedResults,
+            prompt: snapshot.text,
+            model,
+            config: snapshot.config,
+            references: snapshot.references,
+            count: seedResults.length,
+        });
     };
 
     return (
@@ -824,14 +1011,71 @@ function ResultImageCard({
 }: {
     image: GeneratedImage;
     index: number;
-    onEdit: (image: GeneratedImage, index: number) => void;
-    onDownload: (image: GeneratedImage, index: number) => void;
-    onSaveAsset: (image: GeneratedImage, index: number) => void;
+    onEdit: (image: GeneratedImage, index: number) => void | Promise<void>;
+    onDownload: (image: GeneratedImage, index: number) => void | Promise<void>;
+    onSaveAsset: (image: GeneratedImage, index: number) => void | Promise<void>;
 }) {
     const { t } = useTranslation();
+    const [src, setSrc] = useState(image.dataUrl);
+    const [previewOpen, setPreviewOpen] = useState(false);
+    const [busyAction, setBusyAction] = useState<"save" | "reference" | "download" | null>(null);
+
+    useEffect(() => {
+        let active = true;
+        setSrc(image.dataUrl);
+        void resolveImageUrl(image.storageKey, image.dataUrl).then((url) => {
+            if (active && url) setSrc(url);
+        });
+        return () => {
+            active = false;
+        };
+    }, [image.storageKey, image.dataUrl]);
+
+    const runAction = async (kind: "save" | "reference" | "download", action: () => void | Promise<void>) => {
+        if (busyAction) return;
+        setBusyAction(kind);
+        try {
+            await action();
+        } finally {
+            setBusyAction(null);
+        }
+    };
+
     return (
         <div className="overflow-hidden rounded-lg border border-stone-200 bg-background dark:border-stone-800">
-            <Image src={image.dataUrl} alt={t("imageWorkbench.resultAlt", { count: index + 1 })} className="aspect-square object-cover" />
+            <button
+                type="button"
+                className="group relative block w-full cursor-zoom-in overflow-hidden bg-stone-50 dark:bg-stone-900"
+                onClick={() => src && setPreviewOpen(true)}
+                aria-label={t("common.view")}
+            >
+                <SmartImage
+                    src={src}
+                    alt={t("imageWorkbench.resultAlt", { count: index + 1 })}
+                    className="aspect-square w-full object-cover transition group-hover:opacity-95"
+                    loading="eager"
+                />
+                <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/45 to-transparent px-3 py-2 text-left text-xs text-white opacity-0 transition group-hover:opacity-100">
+                    {t("common.view")}
+                </span>
+            </button>
+            <Modal
+                open={previewOpen}
+                footer={null}
+                onCancel={() => setPreviewOpen(false)}
+                width="min(96vw, 1100px)"
+                centered
+                destroyOnHidden
+                title={t("imageWorkbench.resultTitle", { count: index + 1 })}
+                styles={{ body: { paddingTop: 12 } }}
+            >
+                <SmartImage
+                    src={src}
+                    alt={t("imageWorkbench.resultAlt", { count: index + 1 })}
+                    className="mx-auto max-h-[78vh] w-auto max-w-full object-contain"
+                    loading="eager"
+                />
+            </Modal>
             <div className="space-y-2 border-t border-stone-200 px-3 py-2.5 dark:border-stone-800">
                 <div className="flex min-w-0 gap-x-2 gap-y-1 text-xs text-stone-500 dark:text-stone-400">
                     <span>
@@ -840,19 +1084,40 @@ function ResultImageCard({
                     <span>{formatBytes(image.bytes)}</span>
                     <span>{formatDuration(image.durationMs)}</span>
                 </div>
-                <div className="grid min-w-0 grid-cols-3 gap-2">
+                <div className="flex min-w-0 gap-1.5">
                     <Tooltip title={t("common.addToAssets")}>
-                        <Button className={RESULT_ACTION_BUTTON_CLASS} size="small" icon={<FolderPlus className="size-3.5" />} onClick={() => void onSaveAsset(image, index)}>
-                            {t("common.addToAssets")}
+                        <Button
+                            className={RESULT_ACTION_BUTTON_CLASS}
+                            size="small"
+                            loading={busyAction === "save"}
+                            disabled={Boolean(busyAction) && busyAction !== "save"}
+                            icon={<FolderPlus className="size-3.5" />}
+                            onClick={() => void runAction("save", () => onSaveAsset(image, index))}
+                        >
+                            {t("imageWorkbench.resultSaveAsset")}
                         </Button>
                     </Tooltip>
                     <Tooltip title={t("imageWorkbench.addReference")}>
-                        <Button className={RESULT_ACTION_BUTTON_CLASS} size="small" icon={<PenLine className="size-3.5" />} onClick={() => void onEdit(image, index)}>
-                            {t("imageWorkbench.addReference")}
+                        <Button
+                            className={RESULT_ACTION_BUTTON_CLASS}
+                            size="small"
+                            loading={busyAction === "reference"}
+                            disabled={Boolean(busyAction) && busyAction !== "reference"}
+                            icon={<PenLine className="size-3.5" />}
+                            onClick={() => void runAction("reference", () => onEdit(image, index))}
+                        >
+                            {t("imageWorkbench.resultAddReference")}
                         </Button>
                     </Tooltip>
                     <Tooltip title={t("common.download")}>
-                        <Button className={RESULT_ACTION_BUTTON_CLASS} size="small" icon={<Download className="size-3.5" />} onClick={() => onDownload(image, index)}>
+                        <Button
+                            className={RESULT_ACTION_BUTTON_CLASS}
+                            size="small"
+                            loading={busyAction === "download"}
+                            disabled={Boolean(busyAction) && busyAction !== "download"}
+                            icon={<Download className="size-3.5" />}
+                            onClick={() => void runAction("download", () => onDownload(image, index))}
+                        >
                             {t("common.download")}
                         </Button>
                     </Tooltip>
@@ -980,11 +1245,26 @@ function LogCard({
     onDelete: () => void;
 }) {
     const { t } = useTranslation();
-    const thumbnails = (log.thumbnails || []).filter(Boolean).slice(0, 4);
+    const [thumbnails, setThumbnails] = useState(() => (log.thumbnails || []).filter(Boolean).slice(0, 4));
     const failed = log.status === "failed" || ((log.failCount ?? 0) > 0 && (log.successCount ?? log.imageCount ?? 0) === 0);
     const pending = log.status === "pending";
     const statusLabel = pending ? t("workbench.generating") : failed ? t("workbench.failed") : t("workbench.success");
     const statusColor = pending ? "processing" : failed ? "red" : "blue";
+
+    useEffect(() => {
+        let activeResolve = true;
+        const sources = log.images?.length
+            ? log.images.slice(0, 4)
+            : (log.thumbnails || []).slice(0, 4).map((dataUrl) => ({ dataUrl, storageKey: undefined as string | undefined }));
+        void Promise.all(
+            sources.map(async (image) => (await resolveImageUrl(image.storageKey, image.dataUrl)) || image.dataUrl),
+        ).then((urls) => {
+            if (activeResolve) setThumbnails(urls.filter(Boolean));
+        });
+        return () => {
+            activeResolve = false;
+        };
+    }, [log.id, log.images, log.thumbnails]);
 
     return (
         <div
@@ -1003,6 +1283,11 @@ function LogCard({
                         {thumbnails.map((image, index) => (
                             <SmartImage key={`${log.id}-${index}`} src={image} alt="" className="size-8 shrink-0 rounded-md object-cover" fallbackIconClassName="size-3" />
                         ))}
+                    </div>
+                ) : null}
+                {failed && log.error ? (
+                    <div className="mt-1.5 line-clamp-2 text-[11px] leading-4 text-red-500 dark:text-red-400" title={log.error}>
+                        {log.error}
                     </div>
                 ) : null}
                 <div className="mt-2 flex min-w-0 flex-wrap gap-1">
@@ -1046,7 +1331,7 @@ async function readMergedImageLogs(cursor = "") {
 function remoteImageAssetToLog(asset: GenerationAsset): GenerationLog {
     const createdAtMs = asset.created_at > 1e12 ? asset.created_at : asset.created_at * 1000;
     const images = (asset.assets || []).map((item, index) => ({
-        id: `${asset.id}-${index}`,
+        id: `${asset.client_id || asset.id}-${index}`,
         dataUrl: item.url || "",
         storageKey: item.storage_key,
         durationMs: item.duration_ms || 0,
@@ -1055,13 +1340,15 @@ function remoteImageAssetToLog(asset: GenerationAsset): GenerationLog {
         bytes: item.bytes || 0,
         mimeType: item.mime_type,
     }));
+    const expectedCount = Number(asset.config?.count || 0);
     const config = {
         model: asset.model || "",
         imageModel: asset.model || "",
         quality: String(asset.config?.quality || ""),
         size: String(asset.config?.size || ""),
-        count: String(images.length || 1),
+        count: String(expectedCount || images.length || 1),
     };
+    const status: GenerationLog["status"] = asset.status === "pending" ? "pending" : asset.status === "failed" ? "failed" : "success";
     return {
         id: asset.client_id || `remote:${asset.id}`,
         createdAt: createdAtMs,
@@ -1072,71 +1359,16 @@ function remoteImageAssetToLog(asset: GenerationAsset): GenerationLog {
         config,
         references: [],
         durationMs: Number(asset.config?.duration_ms || 0),
-        successCount: images.length,
-        failCount: asset.status === "failed" ? 1 : 0,
-        imageCount: images.length,
+        successCount: status === "success" ? images.length : Number(asset.config?.success_count || images.length || 0),
+        failCount: status === "failed" ? Math.max(1, Number(asset.config?.fail_count || 1)) : Number(asset.config?.fail_count || 0),
+        imageCount: images.length || expectedCount || Number(asset.config?.count || 0),
         size: config.size,
         quality: config.quality,
-        status: asset.status === "failed" ? "failed" : "success",
+        status,
         images,
         thumbnails: images.map((image) => image.dataUrl).filter(Boolean),
+        error: asset.error || undefined,
     };
-}
-
-
-
-async function syncGenerationAsset(log: GenerationLog) {
-    const referenceUrls = workbenchImageReferenceUrls(log.references);
-    await upsertGenerationAsset({
-        client_id: log.id,
-        kind: "image",
-        source: "workbench",
-        title: log.title,
-        prompt: log.prompt,
-        model: log.model,
-        status: log.status,
-        config: {
-            ...log.config,
-            size: log.size,
-            quality: log.quality,
-            success_count: log.successCount,
-            fail_count: log.failCount,
-            duration_ms: log.durationMs,
-            ...(referenceUrls.length ? { images: referenceUrls } : {}),
-        },
-        assets: log.images.map((image) => ({
-            url: image.dataUrl,
-            storage_key: image.storageKey,
-            mime_type: image.mimeType,
-            width: image.width,
-            height: image.height,
-            bytes: image.bytes,
-            duration_ms: image.durationMs,
-        })),
-    });
-}
-
-function workbenchImageReferenceUrls(references: ReferenceImage[] | undefined) {
-    if (!references?.length) return [];
-    const urls: string[] = [];
-    const seen = new Set<string>();
-    for (const item of references) {
-        for (const candidate of [item.url, item.storageKey, item.dataUrl && !item.dataUrl.startsWith("data:") ? item.dataUrl : undefined]) {
-            const value = candidate?.trim();
-            if (!value || /^(image|video|audio):/i.test(value) || value.startsWith("data:") || value.startsWith("blob:")) continue;
-            let key = value.toLowerCase();
-            try {
-                const parsed = new URL(value);
-                key = `${parsed.origin}${parsed.pathname}`.toLowerCase();
-            } catch {
-                // keep lowercased raw
-            }
-            if (seen.has(key)) continue;
-            seen.add(key);
-            urls.push(value);
-        }
-    }
-    return urls;
 }
 
 
@@ -1156,55 +1388,6 @@ function ReferenceOrderButtons({ index, total, onMove }: { index: number; total:
             <Button size="small" className="!h-6 !w-6 !min-w-6 !rounded-full !bg-white/85 !p-0 !shadow-sm" icon={<ArrowRight className="size-3" />} disabled={index >= total - 1} onClick={() => onMove(1)} />
         </div>
     );
-}
-
-function buildLog({
-    prompt,
-    model,
-    config,
-    references,
-    durationMs,
-    successCount,
-    failCount,
-    status,
-    images,
-}: {
-    prompt: string;
-    model: string;
-    config: GenerationLogConfig;
-    references: ReferenceImage[];
-    durationMs: number;
-    successCount: number;
-    failCount: number;
-    status: GenerationLog["status"];
-    images: GeneratedImage[];
-}): GenerationLog {
-    const logConfig = {
-        model: config.model,
-        imageModel: config.imageModel,
-        quality: config.quality,
-        size: config.size,
-        count: config.count,
-    };
-    return {
-        id: nanoid(),
-        createdAt: Date.now(),
-        title: prompt.slice(0, 12) || i18n.t("workbench.untitled"),
-        prompt,
-        time: new Date().toLocaleString(toIntlLocale(i18n.resolvedLanguage), { hour12: false }),
-        model,
-        config: logConfig,
-        references,
-        durationMs,
-        successCount,
-        failCount,
-        imageCount: Number(logConfig.count) || successCount,
-        size: logConfig.size,
-        quality: logConfig.quality,
-        status,
-        images,
-        thumbnails: images.map((image) => image.dataUrl).filter(Boolean),
-    };
 }
 
 function isUploadAbortError(error: unknown) {

@@ -39,20 +39,22 @@ export async function uploadImage(
 ): Promise<UploadedImage> {
     const resolvedOptions: UploadImageOptions | undefined =
         typeof options === "function" ? { onProgress: options } : options;
-    // Mirrored / public HTTPS urls: keep the URL as-is. Browser fetch would hit CORS
-    // on third-party CDNs; <img> + naturalWidth still works without CORS.
+    // Mirrored / public HTTPS urls: keep the URL as durable fallback. Browser fetch can
+    // hit CORS on third-party CDNs; Tauri HTTP bypasses that for the local backup.
     if (typeof input === "string" && /^https?:\/\//i.test(input)) {
         const meta = await readImageMeta(input);
         const storageKey = `image:${nanoid()}`;
-        // Remote URLs (CDN / signed object-storage links) expire — keep a local copy.
-        void cacheRemoteImageLocally(storageKey, input);
+        // Remote URLs (CDN / signed object-storage links) expire — keep a local copy first
+        // so workbench preview can resolve storageKey even when the upstream link dies.
+        await cacheRemoteImageLocally(storageKey, input);
+        const localBlob = await store.getItem<Blob>(storageKey);
         return {
             url: input,
             storageKey,
             width: meta.width,
             height: meta.height,
-            bytes: 0,
-            mimeType: meta.mimeType || "image/png",
+            bytes: localBlob?.size || 0,
+            mimeType: meta.mimeType || localBlob?.type || "image/png",
         };
     }
 

@@ -153,7 +153,7 @@ function localEntryToAsset(entry: LocalGenerationLogEntry): GenerationAsset {
       prompt: entry.prompt || "",
       model: entry.model || "",
       status: entry.status === "pending" ? "pending" : entry.status === "failed" ? "failed" : "success",
-      error: undefined,
+      error: entry.error,
       config: {
         ...entry.config,
         size: entry.size,
@@ -296,6 +296,7 @@ export async function upsertGenerationAsset(input: UpsertGenerationAssetInput): 
       status: status === "pending" ? "pending" : status === "failed" ? "failed" : "success",
       images,
       thumbnails: images.map((item) => item.dataUrl).filter(Boolean),
+      error: status === "failed" ? input.error || undefined : undefined,
       origin,
     };
     await upsertLocalImageGenerationLog(log);
