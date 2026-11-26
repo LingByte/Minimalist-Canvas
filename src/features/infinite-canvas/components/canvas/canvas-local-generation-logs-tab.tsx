@@ -9,6 +9,7 @@ import { cn } from "@canvas/lib/utils";
 import { resolveMediaUrl } from "@canvas/services/file-storage";
 import { resolveImageUrl } from "@canvas/services/image-storage";
 import { saveBlobAs } from "@canvas/lib/save-file";
+import { subscribeGenerationAssetChanges } from "@canvas/services/api/generation-assets";
 import {
     listLocalGenerationLogs,
     type LocalGenerationLogEntry,
@@ -79,6 +80,12 @@ export const CanvasLocalGenerationLogsTab = memo(function CanvasLocalGenerationL
 
     useEffect(() => {
         void refresh();
+        const unsubscribe = subscribeGenerationAssetChanges(() => {
+            void refresh();
+        });
+        return () => {
+            unsubscribe();
+        };
     }, [refresh]);
 
     const filtered = useMemo(() => {

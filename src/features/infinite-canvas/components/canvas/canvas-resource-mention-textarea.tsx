@@ -68,7 +68,7 @@ export const CanvasResourceMentionTextarea = forwardRef<HTMLTextAreaElement, Pro
 
     const insertReference = (reference: CanvasResourceReference) => {
         if (!mention) return;
-        if (!reference.active) onConnectResource?.(reference);
+        onConnectResource?.(reference);
         const textarea = textareaRef.current;
         const end = textarea?.selectionStart ?? value.length;
         const insertText = `${reference.label} `;

@@ -43,14 +43,6 @@ type AssetStore = {
 
 const ASSET_STORE_KEY = "minimalist-canvas:asset_store";
 
-function queueSyncUserAsset(asset: Asset) {
-    void import("@canvas/services/user-asset-sync").then(({ syncUserAsset }) => syncUserAsset(asset));
-}
-
-function queueRemoveUserAssets(clientIds: string[]) {
-    void import("@canvas/services/user-asset-sync").then(({ syncRemoveUserAssets }) => syncRemoveUserAssets(clientIds));
-}
-
 const assetStorage: PersistStorage<AssetStore> = {
     getItem: async (name) => {
         const value = await localForageStorage.getItem(name);
@@ -87,7 +79,6 @@ export const useAssetStore = create<AssetStore>()(
                 const id = nanoid();
                 const next = { ...asset, id, createdAt: now, updatedAt: now } as Asset;
                 set((state) => ({ assets: [next, ...state.assets] }));
-                queueSyncUserAsset(next);
                 return id;
             },
             updateAsset: (id, patch) => {
@@ -99,13 +90,11 @@ export const useAssetStore = create<AssetStore>()(
                         return updated;
                     }),
                 }));
-                if (updated) queueSyncUserAsset(updated);
             },
             removeAsset: (id) =>
                 set((state) => {
                     const assets = state.assets.filter((asset) => asset.id !== id);
                     get().cleanupImages({ assets });
-                    queueRemoveUserAssets([id]);
                     return { assets };
                 }),
             replaceAssets: (assets) => set({ assets }),

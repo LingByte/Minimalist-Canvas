@@ -1,4 +1,5 @@
 import axios from "axios";
+import { nanoid } from "nanoid";
 import { defaultConfig, resolveModelForCapability, type AiConfig } from "@canvas/stores/use-config-store";
 import i18n from "@canvas/i18n";
 import { resolveImageUrl, uploadImage } from "@canvas/services/image-storage";
@@ -318,6 +319,60 @@ export function findRetrySourceNode(nodeId: string, nodes: CanvasNodeData[], con
         connections.filter((connection) => connection.toNodeId === id).forEach((connection) => queue.push(connection.fromNodeId));
     }
     return null;
+}
+
+/**
+ * When spawning a result child from a media node that already has inbound
+ * reference edges, mirror those resource edges onto the child instead of only
+ * wiring `source → child` (so edit/animate children keep the same refs).
+ */
+export function buildSpawnedResultConnections(options: {
+    sourceNodeId: string;
+    childNodeId: string;
+    sourceNode: CanvasNodeData | undefined;
+    nodes: CanvasNodeData[];
+    connections: CanvasConnection[];
+}): CanvasConnection[] {
+    const { sourceNodeId, childNodeId, sourceNode, nodes, connections } = options;
+    if (!sourceNodeId || !childNodeId || sourceNodeId === childNodeId) return [];
+
+    const nodesById = new Map(nodes.map((node) => [node.id, node]));
+    const next: CanvasConnection[] = [];
+    const seen = new Set<string>();
+
+    const add = (fromNodeId: string) => {
+        if (!fromNodeId || fromNodeId === childNodeId) return;
+        const key = `${fromNodeId}->${childNodeId}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        next.push({ id: nanoid(), fromNodeId, toNodeId: childNodeId });
+    };
+
+    for (const connection of connections) {
+        if (connection.toNodeId !== sourceNodeId) continue;
+        const from = nodesById.get(connection.fromNodeId);
+        if (!from || !isSpawnableReferenceNode(from)) continue;
+        add(from.id);
+    }
+
+    const sourceIsMediaResult =
+        sourceNode?.type === CanvasNodeType.Image ||
+        sourceNode?.type === CanvasNodeType.Video ||
+        sourceNode?.type === CanvasNodeType.Audio;
+
+    if (!sourceIsMediaResult || next.length === 0) {
+        add(sourceNodeId);
+    }
+
+    return next;
+}
+
+function isSpawnableReferenceNode(node: CanvasNodeData) {
+    if (node.type === CanvasNodeType.Image) return Boolean(node.metadata?.content);
+    if (node.type === CanvasNodeType.Video) return Boolean(node.metadata?.content);
+    if (node.type === CanvasNodeType.Audio) return Boolean(node.metadata?.content);
+    if (node.type === CanvasNodeType.Text) return Boolean(node.metadata?.content || node.metadata?.prompt);
+    return false;
 }
 
 export function sourceNodeReferenceImages(node: CanvasNodeData | null) {

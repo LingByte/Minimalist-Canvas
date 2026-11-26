@@ -7,10 +7,8 @@ import {
 import { requestEdit, requestGeneration } from "@canvas/services/api/image";
 import { ensurePublicImageUrls } from "@canvas/services/ensure-public-media";
 import { uploadImage, type UploadedImage } from "@canvas/services/image-storage";
-import { isContractImageModel } from "@canvas/lib/contract-image";
 import {
   resolveModelRequestConfig,
-  resolveModelScript,
   type AiConfig,
 } from "@canvas/stores/use-config-store";
 import type { ReferenceImage } from "@canvas/types/image";
@@ -18,13 +16,9 @@ import type { ReferenceImage } from "@canvas/types/image";
 export const IMAGE_JOB_POLL_INTERVAL_MS = 2000;
 export const IMAGE_JOB_POLL_MAX_ATTEMPTS = 300; // ~10 minutes
 
-export function canUseServerImageJob(config: AiConfig, model = config.model || config.imageModel) {
-  const requestConfig = resolveModelRequestConfig(config, model);
-  if (resolveModelScript(config, model)) return false;
-  if (requestConfig.apiFormat === "gemini") return false;
-  if (isContractImageModel(requestConfig.model)) return false;
-  if (!requestConfig.baseUrl?.trim() || !requestConfig.apiKey?.trim()) return false;
-  return true;
+/** Local-first build: never offload image jobs to a cloud recovery endpoint. */
+export function canUseServerImageJob(_config: AiConfig, _model?: string) {
+  return false;
 }
 
 async function durableReferenceUrls(references: ReferenceImage[]) {

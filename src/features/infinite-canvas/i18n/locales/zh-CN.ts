@@ -365,7 +365,7 @@ export default {
         },
         nodeTypes: { image: "图片", text: "文本", config: "生成配置", video: "视频", audio: "音频", group: "组", director: "导演台", script: "分镜脚本" },
         toolbar: {
-            select: "选择", pan: "移动", text: "文本", image: "图片", video: "视频", audio: "音频", config: "生成配置", group: "组", director: "导演台", script: "分镜脚本", extensions: "扩展节点", upload: "上传资产", assets: "资产管理", appearance: "画布外观", clear: "清空画布",
+            select: "选择", pan: "移动", text: "文本", image: "图片", video: "视频", audio: "音频", config: "生成配置", group: "组", director: "导演台", script: "分镜脚本", extensions: "扩展节点", upload: "上传资产", assets: "资产管理", prompts: "提示词库", logs: "生成记录", appearance: "画布外观", clear: "清空画布",
             themeMode: "主题模式", light: "浅色", dark: "深色", gridStyle: "网格样式", dots: "点", lines: "线", blank: "空白", imageInfo: "图片信息",
         },
         project: {
@@ -511,11 +511,11 @@ export default {
         },
     },
     navigation: {
-        canvas: "我的画布",
-        image: "生成",
-        video: "视频创作台",
-        prompts: "提示词库",
-        assets: "我的资产",
+        canvas: "画布",
+        image: "图片",
+        video: "视频",
+        prompts: "提示词",
+        assets: "资产",
         config: "配置",
     },
     topNav: {
@@ -607,12 +607,12 @@ export default {
             records: "{{count}} 条",
             refresh: "刷新统计",
             readFailed: "读取本地存储失败",
-            syncedHint: "生图/视频历史和「我的资产」已同步到云端数据库。可清理本机副本释放空间；画布项目、配置和媒体文件仍会保留。",
-            clearSynced: "清理已同步本地数据",
-            clearSyncedTitle: "清理已同步本地数据？",
-            clearSyncedDescription: "将删除本地的生图/视频历史记录，以及本地「我的资产」缓存。服务端数据保留，资产会从云端重新加载。画布项目与媒体文件不会删除。",
+            syncedHint: "生图/视频历史和「我的资产」保存在本机。可清理历史与资产缓存释放空间；画布项目、配置和媒体文件仍会保留。",
+            clearSynced: "清理本地历史与资产缓存",
+            clearSyncedTitle: "清理本地历史与资产缓存？",
+            clearSyncedDescription: "将删除本机的生图/视频历史记录，以及「我的资产」缓存。画布项目与媒体文件不会删除。",
             clearSyncedDone: "已清理 {{imageLogs}} 条生图记录、{{videoLogs}} 条视频记录、{{assets}} 个本地资产",
-            clearSyncedFailed: "清理已同步本地数据失败",
+            clearSyncedFailed: "清理本地历史与资产缓存失败",
             stores: { appState: "应用状态", images: "图片文件", media: "音视频文件", imageLogs: "生图记录", videoLogs: "视频记录", agentMessages: "Agent 消息", promptCache: "提示词缓存", plugins: "插件数据", exports: "导出文件" },
         },
         promptSources: {
@@ -721,8 +721,8 @@ export default {
                     body: "我们的画布素材图片仅保存 2 天哦，有需要的可以也备份下载一份到本地。左侧边栏底部也会一直显示这条提示。",
                 },
                 generationLogs: {
-                    title: "以「生成记录」为准",
-                    body: "左侧栏的「生成记录」会同步生图/视频结果。请以生成记录为准；画布偶发网络波动可能导致节点失败，结果仍以生成记录为准。有 pending 或新完成时，Tab 上也会出现角标提醒。",
+                    title: "本机「生成记录」",
+                    body: "左侧栏的「生成记录」保存在本机，会收录画布与工作台的生图/视频结果。有进行中或新完成的任务时，Tab 上也会出现角标提醒。",
                 },
                 done: {
                     title: "可以开始了",
@@ -732,7 +732,7 @@ export default {
         },
         channels: {
             description: "每个渠道选择一个协议并拉取模型，为每个模型指定能力（生图/视频/文本/音频），并可自定义调用脚本。",
-            embeddedDescription: "接口地址已固定为产品网关，不用填写。只需粘贴 API Key，并选择模型。",
+            embeddedDescription: "可添加多个供应商渠道，每个渠道独立填写 Base URL、API Key 与模型列表。",
             apiKeyReady: "已填写 API Key",
             apiKeyMissing: "未填写 API Key",
             add: "新增渠道",
@@ -770,7 +770,8 @@ export default {
             name: "渠道名称",
             protocol: "协议",
             baseUrl: "接口地址",
-            embeddedGatewayHint: "请求会发到固定网关 {{url}}，这里不用再填接口地址。",
+            embeddedGatewayHint: "填写该渠道的接口地址，例如 OpenAI、NewAPI、自建网关等。",
+            baseUrlPlaceholder: "https://api.openai.com 或 https://your-gateway.example.com",
             models: "渠道模型",
             modelDescription: "已选 {{count}} 个；为每个模型指定能力并可自定义调用脚本。",
             selectModels: "选择模型",

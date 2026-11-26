@@ -31,7 +31,8 @@ export function PromptSourceEditorDrawer({ open, source, onSave, onClose }: { op
             open={open}
             title={t(source?.name ? "config.promptSources.editor.editTitle" : "config.promptSources.editor.addTitle")}
             onClose={onClose}
-            styles={{ section: { width: 560 }, body: { paddingTop: 16 } }}
+            size={560}
+            styles={{ body: { paddingTop: 16 } }}
             extra={
                 <Space>
                     <Button onClick={onClose}>{t("common.cancel")}</Button>

@@ -106,7 +106,7 @@ export function CanvasPromptChipInput({ value, references, onChange, onConnectRe
     const insertReference = (reference: CanvasResourceReference) => {
         const editor = editorRef.current;
         if (!editor) return;
-        if (!reference.active) onConnectResource?.(reference);
+        onConnectResource?.(reference);
         removeActiveMention();
         const chip = createReferenceChip(reference, theme, setImagePreview);
         const space = document.createTextNode(" ");

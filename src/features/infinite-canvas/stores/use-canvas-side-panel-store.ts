@@ -5,30 +5,20 @@ export const CANVAS_SIDE_PANEL_MIN_WIDTH = 220;
 export const CANVAS_SIDE_PANEL_MAX_WIDTH = 480;
 export const CANVAS_SIDE_PANEL_DEFAULT_WIDTH = 280;
 
-export type CanvasSidePanelTab = "canvas" | "assets" | "prompts" | "logs";
+/** Elements drawer only — prompts/logs open as separate drawers from the toolbar. */
+export type CanvasSidePanelTab = "canvas" | "prompts" | "logs";
 
-const WIDTH_KEY = "canvas-side-panel-width";
 const OPEN_KEY = "canvas-side-panel-open";
 
-function initialWidth() {
-    if (typeof window === "undefined") return CANVAS_SIDE_PANEL_DEFAULT_WIDTH;
-    const stored = Number(localStorage.getItem(WIDTH_KEY));
-    if (!stored) return CANVAS_SIDE_PANEL_DEFAULT_WIDTH;
-    return Math.min(CANVAS_SIDE_PANEL_MAX_WIDTH, Math.max(CANVAS_SIDE_PANEL_MIN_WIDTH, stored));
-}
-
+/** Elements drawer starts closed; opened from the top-left chip button. */
 function initialOpen() {
-    if (typeof window === "undefined") return true;
-    return localStorage.getItem(OPEN_KEY) !== "0";
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem(OPEN_KEY) === "1";
 }
 
 type CanvasSidePanelStore = {
-    width: number;
     panelOpen: boolean;
-    panelMounted: boolean;
-    panelClosing: boolean;
     requestedTab: CanvasSidePanelTab | null;
-    setWidth: (width: number) => void;
     openPanel: () => void;
     closePanel: () => void;
     togglePanel: () => void;
@@ -37,23 +27,15 @@ type CanvasSidePanelStore = {
 };
 
 export const useCanvasSidePanelStore = create<CanvasSidePanelStore>((set, get) => ({
-    width: initialWidth(),
     panelOpen: initialOpen(),
-    panelMounted: initialOpen(),
-    panelClosing: false,
     requestedTab: null,
-    setWidth: (width) => set({ width }),
     openPanel: () => {
         if (typeof window !== "undefined") localStorage.setItem(OPEN_KEY, "1");
-        set({ panelOpen: true, panelMounted: true, panelClosing: false });
+        set({ panelOpen: true });
     },
     closePanel: () => {
-        if (!get().panelMounted || get().panelClosing) return;
         if (typeof window !== "undefined") localStorage.setItem(OPEN_KEY, "0");
-        set({ panelOpen: false, panelClosing: true });
-        setTimeout(() => {
-            if (get().panelClosing) set({ panelMounted: false, panelClosing: false });
-        }, CANVAS_SIDE_PANEL_MOTION_MS);
+        set({ panelOpen: false });
     },
     togglePanel: () => (get().panelOpen ? get().closePanel() : get().openPanel()),
     requestTab: (tab) => set({ requestedTab: tab }),

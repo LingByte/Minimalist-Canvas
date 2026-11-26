@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
-import { Compass, Focus, HelpCircle, LayoutGrid } from "lucide-react";
+import { Compass, Focus, HelpCircle, Layers3, LayoutGrid } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, Drawer, Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
 
 import { canvasThemes } from "@canvas/lib/canvas-theme";
+import { useCanvasSidePanelStore } from "@canvas/stores/use-canvas-side-panel-store";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 
 type CanvasZoomControlsProps = {
@@ -31,6 +32,8 @@ export function CanvasZoomControls({ scale, onScaleChange, onReset, onFit, onArr
     const { t } = useTranslation();
     const colorTheme = useThemeStore((state) => state.theme);
     const theme = canvasThemes[colorTheme];
+    const elementsOpen = useCanvasSidePanelStore((state) => state.panelOpen);
+    const toggleElements = useCanvasSidePanelStore((state) => state.togglePanel);
     const dockStyle = { background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.toolbar.item, boxShadow: colorTheme === "dark" ? "0 18px 45px rgba(0,0,0,.32)" : "0 16px 40px rgba(15,23,42,.12)" };
     const activeStyle = { background: theme.toolbar.activeBg, color: theme.toolbar.activeText };
     const percent = Math.round(scale * 100);
@@ -55,6 +58,18 @@ export function CanvasZoomControls({ scale, onScaleChange, onReset, onFit, onArr
     return (
         <div className="absolute bottom-5 left-5 z-50" onMouseDown={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
             <div className="flex h-14 items-center gap-1 rounded-xl border px-2 shadow-lg backdrop-blur" style={dockStyle}>
+                <Tooltip title={t("canvas.sidePanel.elements")}>
+                    <Button
+                        type="text"
+                        className="!h-8 !w-8 !min-w-8 !p-0"
+                        style={elementsOpen ? activeStyle : { color: theme.toolbar.item }}
+                        icon={<Layers3 className="size-4" />}
+                        onClick={toggleElements}
+                        aria-label={t("canvas.sidePanel.elements")}
+                        aria-pressed={elementsOpen}
+                        data-tour="canvas-elements-button"
+                    />
+                </Tooltip>
                 <Tooltip title={isMiniMapOpen ? t("canvas.miniMapClose") : t("canvas.miniMapOpen")}>
                     <Button
                         type="text"

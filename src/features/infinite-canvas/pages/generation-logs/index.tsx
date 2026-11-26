@@ -226,7 +226,7 @@ export default function GenerationLogsPage() {
                 open={Boolean(preview)}
                 title={preview?.title || preview?.model || t("Generation Records")}
                 onClose={() => setPreview(null)}
-                width={560}
+                size={560}
                 destroyOnHidden
             >
                 {preview ? <GenerationLogPreview asset={preview} locale={i18n.resolvedLanguage} downloading={downloading} onDownload={() => void handleDownload(preview)} statusTag={statusTag(preview)} t={t} /> : null}

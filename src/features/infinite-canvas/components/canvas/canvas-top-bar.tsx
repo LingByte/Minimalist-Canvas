@@ -1,14 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, Download, FolderOpen, History, Home, Images, Menu, PanelLeftClose, PanelLeftOpen, Plus, Redo2, Save, Trash2, Undo2, Upload } from "lucide-react";
+import { Bot, Download, FolderOpen, History, Home, Images, Menu, Plus, Redo2, Save, Trash2, Undo2, Upload } from "lucide-react";
 import { Button, Dropdown, Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
 
 import { CanvasVersionHistoryDrawer } from "@canvas/components/canvas/canvas-version-history-drawer";
-import { CanvasWalletChip } from "@canvas/components/layout/canvas-wallet-chip";
 import { UserStatusActions } from "@canvas/components/layout/user-status-actions";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
 import type { CanvasProject } from "@canvas/stores/canvas/use-canvas-store";
-import { useCanvasSidePanelStore } from "@canvas/stores/use-canvas-side-panel-store";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 
 export function CanvasTopBar({
@@ -32,7 +30,6 @@ export function CanvasTopBar({
     onExportProject,
     onOpenFolder,
     onImportImage,
-    onOpenPlugins,
     onUndo,
     onRedo,
     onVersionRestored,
@@ -59,7 +56,6 @@ export function CanvasTopBar({
     onExportProject: () => void;
     onOpenFolder?: () => void;
     onImportImage: () => void;
-    onOpenPlugins: () => void;
     onUndo: () => void;
     onRedo: () => void;
     onVersionRestored: (project: CanvasProject) => void;
@@ -71,8 +67,6 @@ export function CanvasTopBar({
     const theme = canvasThemes[colorTheme];
     const titleRef = useRef<HTMLDivElement>(null);
     const [versionsOpen, setVersionsOpen] = useState(false);
-    const sidePanelOpen = useCanvasSidePanelStore((state) => state.panelOpen);
-    const toggleSidePanel = useCanvasSidePanelStore((state) => state.togglePanel);
     const saveLabel = saveSaving ? t("canvas.saving") : saveDirty ? t("canvas.saveNow") : t("canvas.saved");
     const saveHint = saveDirty ? t("canvas.saveHintDirty") : t("canvas.saveHint");
 
@@ -89,17 +83,6 @@ export function CanvasTopBar({
         <>
             <div className="pointer-events-none absolute inset-x-0 top-0 z-50 flex h-12 items-center gap-2 overflow-hidden px-1 md:h-16 md:px-3 md:pr-4">
                 <div className="pointer-events-auto flex min-w-0 flex-1 items-center gap-1 overflow-hidden md:gap-2">
-                    <Tooltip title={sidePanelOpen ? t("canvas.collapsePanel") : t("canvas.expandPanel")}>
-                        <button
-                            type="button"
-                            onClick={toggleSidePanel}
-                            aria-label={sidePanelOpen ? t("canvas.collapsePanel") : t("canvas.expandPanel")}
-                            className="grid size-8 shrink-0 place-items-center rounded-full transition hover:bg-black/5 dark:hover:bg-white/10"
-                            style={{ color: theme.node.text }}
-                        >
-                            {sidePanelOpen ? <PanelLeftClose className="size-4" /> : <PanelLeftOpen className="size-4" />}
-                        </button>
-                    </Tooltip>
                     <Dropdown
                         trigger={["click"]}
                         menu={{
@@ -183,7 +166,6 @@ export function CanvasTopBar({
                 </div>
 
                 <div className="pointer-events-auto flex shrink-0 items-center gap-0.5 md:gap-1.5">
-                    <CanvasWalletChip color={theme.node.text} />
                     <Tooltip title={t("canvas.versions.title")}>
                         <button
                             type="button"
@@ -198,7 +180,6 @@ export function CanvasTopBar({
                     <UserStatusActions
                         variant="canvas"
                         compactOnMobile
-                        onOpenPlugins={onOpenPlugins}
                     />
                     <span className="mx-0.5 hidden h-6 w-px md:block" style={{ background: theme.toolbar.border }} />
                     <Button

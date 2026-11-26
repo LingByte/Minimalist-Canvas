@@ -39,7 +39,6 @@ import {
 } from "@canvas/stores/use-config-store";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { getDefaultChannel } from "@canvas/integration/gateway-utils";
-import { syncGatewayModels } from "@canvas/integration/sync-gateway-models";
 
 /**
  * Built-in ReAct agent: Base URL + API Key, canvas tools, context, multi-turn local history.
@@ -58,8 +57,6 @@ export function BuiltinAgentPanel() {
     const setAgentState = useAgentStore((state) => state.setAgentState);
     const closePanel = useAgentStore((state) => state.closePanel);
     const abortRef = useRef<AbortController | null>(null);
-    const [syncingModels, setSyncingModels] = useState(false);
-    const didSyncModelsRef = useRef(false);
     const [threads, setThreads] = useState<BuiltinAgentThread[]>(() => loadBuiltinAgentThreads(projectId));
     const [activeThreadId, setActiveThreadId] = useState(() => {
         const loaded = loadBuiltinAgentThreads(projectId);
@@ -110,23 +107,6 @@ export function BuiltinAgentPanel() {
     }, [activeThreadId, messages, projectId, sending, t, waiting]);
 
     useEffect(() => {
-        if (textModels.length || didSyncModelsRef.current || syncingModels) return;
-        const apiKey = (channel?.apiKey || config.apiKey || "").trim();
-        if (!apiKey) return;
-        didSyncModelsRef.current = true;
-        let cancelled = false;
-        setSyncingModels(true);
-        void syncGatewayModels(apiKey, true)
-            .catch(() => false)
-            .finally(() => {
-                if (!cancelled) setSyncingModels(false);
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [channel?.apiKey, config.apiKey, syncingModels, textModels.length]);
-
-    useEffect(() => {
         if (!textModel) return;
         if (config.textModel === textModel) return;
         updateConfig("textModel", textModel);
@@ -160,9 +140,9 @@ export function BuiltinAgentPanel() {
     }, [ready, setAgentState, textModel]);
 
     const channelLabel = useMemo(() => {
-        if (!ready) return syncingModels ? t("agent.connect.syncingModels") : t("agent.connect.aiNotReady");
+        if (!ready) return t("agent.connect.aiNotReady");
         return modelOptionName(textModel) || t("agent.connect.aiReady");
-    }, [ready, syncingModels, t, textModel]);
+    }, [ready, t, textModel]);
 
     const stopTurn = () => {
         abortRef.current?.abort();
@@ -548,11 +528,7 @@ export function BuiltinAgentPanel() {
                             disabled={!ready}
                             sending={sending || waiting}
                             placeholder={
-                                ready
-                                    ? t("agent.panel.placeholderBuiltin")
-                                    : syncingModels
-                                      ? t("agent.connect.syncingModels")
-                                      : t("agent.connect.configureAiFirst")
+                                ready ? t("agent.panel.placeholderBuiltin") : t("agent.connect.configureAiFirst")
                             }
                             theme={theme}
                             models={composerModels}

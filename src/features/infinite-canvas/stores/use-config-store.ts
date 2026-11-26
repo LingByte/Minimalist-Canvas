@@ -1,8 +1,10 @@
 import { useMemo } from "react";
 import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
 import { nanoid } from "nanoid";
 
 import i18n from "@canvas/i18n";
+import { localForageStorage } from "@canvas/lib/localforage-storage";
 
 export type ApiCallFormat = "openai" | "gemini";
 export type ModelCapability = "image" | "video" | "text" | "audio";
@@ -64,28 +66,25 @@ export type WebdavSyncConfig = {
     directory: string;
     lastSyncedAt: string;
 };
-export type ConfigTabKey = "channels" | "preferences" | "webdav" | "local-storage" | "plugins";
+export type ConfigTabKey = "channels" | "preferences" | "prompt-sources" | "webdav" | "local-storage";
 
 const CHANNEL_MODEL_SEPARATOR = "::";
-const DEFAULT_OPENAI_BASE_URL = "https://canvas.soulmy.top";
+const CONFIG_STORE_KEY = "minimalist-canvas:ai_config_store";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
-/** Built-in relay key for this desktop build. */
-const BUILTIN_API_KEY = "sk-VsOmVvXFwhvpDeJSK5RFWYWo2xMtL37FIv6ju0goTUzOUPTA";
 
 export const defaultConfig: AiConfig = {
-    channelMode: "remote",
-    baseUrl: DEFAULT_OPENAI_BASE_URL,
-    apiKey: BUILTIN_API_KEY,
+    channelMode: "local",
+    baseUrl: "",
+    apiKey: "",
     apiFormat: "openai",
     serverUrl: "",
     channels: [
         {
             id: "default",
             name: i18n.t("config.channels.defaultName"),
-            baseUrl: DEFAULT_OPENAI_BASE_URL,
-            apiKey: BUILTIN_API_KEY,
+            baseUrl: "",
+            apiKey: "",
             apiFormat: "openai",
-            // No baked-in demo models — gateway sync / channel editor fills this.
             models: [],
         },
     ],
@@ -208,33 +207,44 @@ function isAiConfigReady(config: AiConfig, model: string) {
     return Boolean(model.trim() && channel.baseUrl.trim() && channel.apiKey.trim());
 }
 
-// Config lives in memory only — the server-side user-canvas-config record is
-// the single source of truth; nothing is read from or written to local storage.
-export const useConfigStore = create<ConfigStore>()((set) => ({
-    config: defaultConfig,
-    webdav: defaultWebdavSyncConfig,
-    isConfigOpen: false,
-    configTab: "channels",
-    shouldPromptContinue: false,
-    updateConfig: (key, value) =>
-        set((state) => ({
-            config: {
-                ...state.config,
-                [key]: value,
-            },
-        })),
-    updateWebdavConfig: (key, value) =>
-        set((state) => ({
-            webdav: {
-                ...state.webdav,
-                [key]: value,
-            },
-        })),
-    isAiConfigReady: (config, model) => isAiConfigReady(config, model),
-    openConfigDialog: (shouldPromptContinue = false, configTab = "channels") => set({ isConfigOpen: true, shouldPromptContinue, configTab }),
-    setConfigDialogOpen: (isConfigOpen) => set({ isConfigOpen }),
-    clearPromptContinue: () => set({ shouldPromptContinue: false }),
-}));
+export const useConfigStore = create<ConfigStore>()(
+    persist(
+        (set) => ({
+            config: defaultConfig,
+            webdav: defaultWebdavSyncConfig,
+            isConfigOpen: false,
+            configTab: "channels",
+            shouldPromptContinue: false,
+            updateConfig: (key, value) =>
+                set((state) => ({
+                    config: {
+                        ...state.config,
+                        [key]: value,
+                    },
+                })),
+            updateWebdavConfig: (key, value) =>
+                set((state) => ({
+                    webdav: {
+                        ...state.webdav,
+                        [key]: value,
+                    },
+                })),
+            isAiConfigReady: (config, model) => isAiConfigReady(config, model),
+            openConfigDialog: (shouldPromptContinue = false, configTab = "channels") =>
+                set({ isConfigOpen: true, shouldPromptContinue, configTab }),
+            setConfigDialogOpen: (isConfigOpen) => set({ isConfigOpen }),
+            clearPromptContinue: () => set({ shouldPromptContinue: false }),
+        }),
+        {
+            name: CONFIG_STORE_KEY,
+            storage: createJSONStorage(() => localForageStorage),
+            partialize: (state) => ({
+                config: state.config,
+                webdav: state.webdav,
+            }),
+        },
+    ),
+);
 
 export function useEffectiveConfig() {
     const config = useConfigStore((state) => state.config);
@@ -330,7 +340,8 @@ export function resolveModelRequestConfig(config: AiConfig, value: string) {
 
 export function defaultBaseUrlForApiFormat(apiFormat: ApiCallFormat) {
     if (apiFormat === "gemini") return GEMINI_BASE_URL;
-    return DEFAULT_OPENAI_BASE_URL;
+    // Empty by default so users explicitly choose provider endpoints.
+    return "";
 }
 
 function normalizeApiFormat(apiFormat: unknown): ApiCallFormat {

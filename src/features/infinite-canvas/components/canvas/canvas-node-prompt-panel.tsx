@@ -65,7 +65,9 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
 
     const submit = () => {
         const text = prompt.trim();
-        if (!text || isRunning) return;
+        if (isRunning) return;
+        // Video can generate from references alone (empty prompt → default animate/ref prompt).
+        if (!text && mode !== "video") return;
         onGenerate(node.id, mode, text);
     };
 

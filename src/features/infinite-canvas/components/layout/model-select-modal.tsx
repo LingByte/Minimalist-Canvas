@@ -3,8 +3,6 @@ import { RefreshCw, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { fetchGatewayModelCatalog } from "@canvas/integration/sync-gateway-models";
-import { isGatewayBaseUrl, isProductDefaultBaseUrl } from "@canvas/integration/gateway-utils";
 import { fetchChannelModels } from "@canvas/services/api/image";
 import { guessCapability, type ModelCapability, type ModelChannel } from "@canvas/stores/use-config-store";
 
@@ -102,37 +100,17 @@ export function ModelSelectModal({
 
     const fetchModels = async (options?: { silent?: boolean }) => {
         if (!channel) return;
-        // Site gateway and the product default host share the capability-aware catalog.
-        const useGatewayCatalog =
-            isGatewayBaseUrl(channel.baseUrl) || isProductDefaultBaseUrl(channel.baseUrl);
-        if (!useGatewayCatalog && (!channel.baseUrl.trim() || !channel.apiKey.trim())) {
+        if (!channel.baseUrl.trim() || !channel.apiKey.trim()) {
             if (!options?.silent) message.error(t("config.modelSelect.missingConfig"));
             return;
         }
         setLoading(true);
         try {
-            if (useGatewayCatalog) {
-                const catalog = await fetchGatewayModelCatalog(channel.apiKey);
-                setFetched(catalog.map((model) => model.name));
-                setCapabilityByName(new Map(catalog.map((model) => [model.name, model.capability])));
-                setDescriptionByName((current) => {
-                    const next = new Map(current);
-                    for (const model of catalog) {
-                        if (model.description?.trim()) next.set(model.name, model.description.trim());
-                    }
-                    return next;
-                });
-                setActiveTab("new");
-                if (!options?.silent) message.success(t("config.modelSelect.fetched", { count: catalog.length }));
-            } else {
-                const models = await fetchChannelModels(channel);
-                setFetched(models);
-                setCapabilityByName(
-                    new Map(models.map((name) => [name, guessCapability(name)])),
-                );
-                setActiveTab("new");
-                if (!options?.silent) message.success(t("config.modelSelect.fetched", { count: models.length }));
-            }
+            const models = await fetchChannelModels(channel);
+            setFetched(models);
+            setCapabilityByName(new Map(models.map((name) => [name, guessCapability(name)])));
+            setActiveTab("new");
+            if (!options?.silent) message.success(t("config.modelSelect.fetched", { count: models.length }));
         } catch (error) {
             if (!options?.silent) {
                 message.error(error instanceof Error ? error.message : t("config.modelSelect.fetchFailed"));

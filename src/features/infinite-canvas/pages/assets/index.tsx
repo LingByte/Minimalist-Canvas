@@ -478,7 +478,15 @@ function AssetDrawer({ asset, onClose, onCopy, onDownload }: { asset: Asset | nu
             {asset ? (
                 <div className="space-y-5">
                     {cover ? (
-                        <Image src={cover} alt={asset.title} className="rounded-lg" />
+                        <div className="flex justify-center overflow-hidden rounded-lg bg-stone-50 dark:bg-stone-900">
+                            <Image
+                                src={cover}
+                                alt={asset.title}
+                                className="!h-auto !max-h-[min(60vh,520px)] !w-auto max-w-full object-contain"
+                                style={{ maxHeight: "min(60vh, 520px)", width: "auto" }}
+                                rootClassName="[&_.ant-image-img]:!h-auto [&_.ant-image-img]:!max-h-[min(60vh,520px)] [&_.ant-image-img]:!w-auto [&_.ant-image-img]:object-contain"
+                            />
+                        </div>
                     ) : (
                         <div className="rounded-lg border border-stone-200 bg-stone-50 p-5 text-sm leading-6 text-stone-600 dark:border-stone-800 dark:bg-stone-900 dark:text-stone-300">{asset.kind === "text" ? asset.data.content : t("assets.noCover")}</div>
                     )}

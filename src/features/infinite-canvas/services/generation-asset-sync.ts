@@ -1,6 +1,4 @@
 import { upsertGenerationAsset } from "@canvas/services/api/generation-assets";
-import { useGenerationLogsBadgeStore } from "@canvas/stores/use-generation-logs-badge-store";
-import { isUnstableMediaUrl } from "@canvas/lib/signed-url";
 
 export type GenerationAssetConfigSnapshot = Record<string, unknown>;
 
@@ -31,13 +29,12 @@ type CanvasVideoAssetInput = {
   durationMs?: number;
   status?: "pending" | "success" | "failed";
   error?: string;
-  /** Reference media URLs that must not be persisted as the generation result. */
   excludeUrls?: string[];
   config?: GenerationAssetConfigSnapshot;
   attemptId?: string;
 };
 
-/** Compact request-param snapshot for generation_assets.config. */
+/** Compact request-param snapshot for local generation logs. */
 export function buildCanvasImageAssetConfig(input: {
   size?: string;
   quality?: string;
@@ -49,21 +46,17 @@ export function buildCanvasImageAssetConfig(input: {
   ratio?: string;
 }): GenerationAssetConfigSnapshot {
   const config: GenerationAssetConfigSnapshot = {};
-  putString(config, "size", input.size);
-  putString(config, "quality", input.quality);
-  putString(config, "background", input.background);
-  putString(config, "mode", input.mode);
-  putString(config, "resolution", input.resolution);
-  putString(config, "ratio", input.ratio);
-  if (input.count != null && String(input.count).trim() !== "") {
-    config.count = String(input.count);
-  }
-  const images = durableHttpUrls(input.images);
-  if (images?.length) config.images = images;
+  if (input.size?.trim()) config.size = input.size.trim();
+  if (input.quality?.trim()) config.quality = input.quality.trim();
+  if (input.background?.trim()) config.background = input.background.trim();
+  if (input.mode?.trim()) config.mode = input.mode.trim();
+  if (input.resolution?.trim()) config.resolution = input.resolution.trim();
+  if (input.ratio?.trim()) config.ratio = input.ratio.trim();
+  if (input.count != null && String(input.count).trim() !== "") config.count = String(input.count);
+  if (input.images?.length) config.images = input.images;
   return config;
 }
 
-/** Compact request-param snapshot for canvas/workbench video assets. */
 export function buildCanvasVideoAssetConfig(input: {
   size?: string;
   seconds?: string;
@@ -77,195 +70,104 @@ export function buildCanvasVideoAssetConfig(input: {
   taskProvider?: string;
 }): GenerationAssetConfigSnapshot {
   const config: GenerationAssetConfigSnapshot = {};
-  putString(config, "size", input.size);
-  putString(config, "seconds", input.seconds);
-  putString(config, "resolution", input.resolution);
-  putString(config, "quality", input.quality);
-  putString(config, "task_provider", input.taskProvider);
+  if (input.size?.trim()) config.size = input.size.trim();
+  if (input.seconds?.trim()) config.seconds = input.seconds.trim();
+  if (input.resolution?.trim()) config.resolution = input.resolution.trim();
+  if (input.quality?.trim()) config.quality = input.quality.trim();
+  if (input.taskProvider?.trim()) config.task_provider = input.taskProvider.trim();
   if (typeof input.generateAudio === "boolean") config.generate_audio = input.generateAudio;
   if (typeof input.watermark === "boolean") config.watermark = input.watermark;
-  const images = durableHttpUrls(input.images);
-  const videos = durableHttpUrls(input.videos);
-  const audios = durableHttpUrls(input.audios);
-  if (images?.length) config.images = images;
-  if (videos?.length) config.videos = videos;
-  if (audios?.length) config.audios = audios;
+  if (input.images?.length) config.images = input.images;
+  if (input.videos?.length) config.videos = input.videos;
+  if (input.audios?.length) config.audios = input.audios;
   return config;
 }
 
-/** Best-effort persist a canvas image generation for later download. */
-export function syncCanvasImageGenerationAsset(input: CanvasImageAssetInput) {
-  void upsertGenerationAsset({
-    client_id: input.clientId,
+/** Persist canvas image generation into local generation history. */
+export async function syncCanvasImageGenerationAsset(input: CanvasImageAssetInput): Promise<void> {
+  const clientId = input.clientId.trim();
+  if (!clientId) return;
+  const url = input.url?.trim();
+  const status = url || input.storageKey ? "success" : "failed";
+  await upsertGenerationAsset({
+    client_id: clientId,
     kind: "image",
     source: "canvas",
-    title: input.model || "image",
+    title: (input.prompt || "").trim().slice(0, 12) || input.model || "",
     prompt: input.prompt || "",
     model: input.model || "",
-    status: "success",
-    config: input.config && Object.keys(input.config).length ? input.config : undefined,
-    assets: [
-      {
-        url: input.url,
-        storage_key: input.storageKey,
-        mime_type: input.mimeType,
-        width: input.width,
-        height: input.height,
-        bytes: input.bytes,
-      },
-    ],
-  }).then((row) => {
-    if (row) void useGenerationLogsBadgeStore.getState().refresh();
+    status,
+    config: input.config || {},
+    assets:
+      url || input.storageKey
+        ? [
+            {
+              url,
+              storage_key: input.storageKey,
+              mime_type: input.mimeType,
+              width: input.width,
+              height: input.height,
+              bytes: input.bytes,
+            },
+          ]
+        : [],
   });
 }
 
-/** Best-effort persist a canvas video generation for later download. */
-export async function syncCanvasVideoGenerationAsset(input: CanvasVideoAssetInput) {
-  if (isExcludedAssetUrl(input.url, input.excludeUrls)) return;
-  // Never persist short-lived upstream hotlinks into generation_assets.
-  if (input.url && isUnstableMediaUrl(input.url)) return;
-  // Local config gaps and poll give-ups must not mark the generation record
-  // failed while the task log is still running.
+/** Persist canvas video generation into local generation history. */
+export async function syncCanvasVideoGenerationAsset(input: CanvasVideoAssetInput): Promise<void> {
+  const clientId = input.clientId.trim();
+  if (!clientId) return;
   if (shouldKeepVideoAssetPending(input.status, input.error)) return;
-  const row = await upsertGenerationAsset({
-    client_id: input.clientId,
+
+  const url = input.url?.trim();
+  const exclude = (input.excludeUrls || []).map((item) => item.trim()).filter(Boolean);
+  if (url && exclude.some((item) => item === url)) return;
+
+  await upsertGenerationAsset({
+    client_id: clientId,
     kind: "video",
     source: "canvas",
-    title: input.model || "video",
+    title: (input.prompt || "").trim().slice(0, 12) || input.model || "",
     prompt: input.prompt || "",
     model: input.model || "",
-    status: input.status || "success",
+    status: input.status || (url || input.storageKey ? "success" : "pending"),
     task_id: input.taskId,
     error: input.error,
     attempt_id: input.attemptId,
-    config: input.config && Object.keys(input.config).length ? input.config : undefined,
-    assets: input.url || input.storageKey
-      ? [
-          {
-            url: input.url,
-            storage_key: input.storageKey,
-            mime_type: input.mimeType,
-            width: input.width,
-            height: input.height,
-            bytes: input.bytes,
-            duration_ms: input.durationMs,
-          },
-        ]
-      : [],
+    config: input.config || {},
+    assets:
+      url || input.storageKey
+        ? [
+            {
+              url,
+              storage_key: input.storageKey,
+              mime_type: input.mimeType,
+              width: input.width,
+              height: input.height,
+              bytes: input.bytes,
+              duration_ms: input.durationMs,
+            },
+          ]
+        : [],
   });
-  if (row) void useGenerationLogsBadgeStore.getState().refresh();
 }
 
-/** True when a failed sync is only the browser giving up, not an upstream result. */
+/** When true, callers skip persisting a failed video to generation logs. */
 export function shouldKeepVideoAssetPending(status?: string, error?: string) {
-  return status === "failed" && (isClientConfigIncompleteError(error) || isClientPollGiveUp(error) || isClientRemirrorError(error));
-}
-
-/** Remirror / OSS upload failures must not mark generation_assets failed. */
-function isClientRemirrorError(message?: string) {
-  const msg = message?.trim() || "";
+  if (status !== "failed") return false;
+  const msg = error?.trim() || "";
   if (!msg) return false;
   const lower = msg.toLowerCase();
-  const needles = [
-    "object storage is required",
-    "画布媒体必须上传到对象存储",
-    "failed to download upstream video",
-    "upstream video download was empty",
-    "failed to presign upload",
-    "proxy upload failed",
-    "direct upload failed",
-    "failed to mirror remote media",
-    "failed to fetch",
-    "networkerror",
-    "network request failed",
-    "load failed",
-    "cors",
-  ];
-  return needles.some((needle) => msg.includes(needle) || lower.includes(needle));
-}
-
-function isClientPollGiveUp(message?: string) {
-  const msg = message?.trim() || "";
-  if (!msg) return false;
-  const lower = msg.toLowerCase();
-  const needles = [
-    "视频生成超时",
-    "video generation timed out",
-    "视频任务查询失败",
-    "failed to query video task",
-    "请求已取消",
-    "request canceled",
-    "画布媒体必须上传到对象存储",
-    "object storage is required",
-  ];
-  return needles.some((needle) => msg.includes(needle) || lower.includes(needle));
-}
-
-function isClientConfigIncompleteError(message?: string) {
-  const msg = message?.trim() || "";
-  if (!msg) return false;
   return (
-    msg.includes("请先配置 API Key") ||
-    msg.includes("Configure the API key first") ||
-    msg.includes("请先配置 Base URL") ||
-    msg.includes("Configure the Base URL first") ||
-    msg.includes("请先填写接口地址和 API Key") ||
-    msg.includes("Enter an API endpoint and API key first")
+    msg.includes("请先配置") ||
+    lower.includes("configure the api") ||
+    lower.includes("timed out") ||
+    lower.includes("object storage is required") ||
+    lower.includes("network")
   );
 }
 
-function putString(config: GenerationAssetConfigSnapshot, key: string, value?: string) {
-  const trimmed = value?.trim();
-  if (trimmed) config[key] = trimmed;
-}
-
-function durableHttpUrls(urls?: string[]) {
-  if (!urls?.length) return undefined;
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const raw of urls) {
-    const value = compactMediaRef(raw);
-    if (!value) continue;
-    const key = normalizeAssetUrlKey(value);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(value);
-  }
-  return out.length ? out : undefined;
-}
-
-const MAX_EMBEDDED_MEDIA_PREVIEW_CHARS = 48;
-
-/** Keep http(s); truncate data:/blob: to a short prefix for config storage. */
-function compactMediaRef(raw?: string) {
-  const value = raw?.trim();
-  if (!value) return "";
-  const lower = value.toLowerCase();
-  if (lower.startsWith("http://") || lower.startsWith("https://")) return value;
-  if (!lower.startsWith("data:") && !lower.startsWith("blob:")) return "";
-  if (value.length <= MAX_EMBEDDED_MEDIA_PREVIEW_CHARS) return value;
-  return `${value.slice(0, MAX_EMBEDDED_MEDIA_PREVIEW_CHARS - 1)}…`;
-}
-
-function normalizeAssetUrlKey(url: string) {
-  try {
-    const parsed = new URL(url);
-    return `${parsed.origin}${parsed.pathname}`.toLowerCase();
-  } catch {
-    return url.trim().toLowerCase();
-  }
-}
-
-function isExcludedAssetUrl(url: string | undefined, excludeUrls?: string[]) {
-  if (!url || !excludeUrls?.length) return false;
-  const key = normalizeAssetUrlKey(url);
-  return excludeUrls.some((candidate) => candidate && normalizeAssetUrlKey(candidate) === key);
-}
-
-/** Gateway returns this when canvas polls a missing/expired video task id. */
-export function isTaskNotExistError(message?: string) {
-  const msg = message?.trim() || "";
-  if (!msg) return false;
-  const lower = msg.toLowerCase();
-  return lower.includes("task_not_exist") || lower.includes("task_origin_not_exist");
+export function isTaskNotExistError(_message?: string) {
+  return false;
 }

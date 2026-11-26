@@ -26,12 +26,10 @@ import { canvasThemes, type CanvasBackgroundMode } from "@canvas/lib/canvas-them
 import { useConfirmGenerationQuota } from "@canvas/lib/use-confirm-generation-quota";
 import { useAssetStore } from "@canvas/stores/use-asset-store";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
-import { deleteCanvasProjectsFromCloud, getCanvasProjectSaveStatus, saveCanvasProjectNow, subscribeCanvasProjectSaveStatus } from "@canvas/services/user-canvas-project-sync";
 import { collectImageStorageKeys, getImageBlob } from "@canvas/services/image-storage";
 import { collectMediaStorageKeys, getMediaBlob } from "@canvas/services/file-storage";
 import { readClipboardImage, readClipboardText } from "@canvas/services/clipboard";
 import { canvasWorkspaceDir, isTauri, syncWorkspaceMedia, writeCanvasWorkspace } from "@canvas/services/fs-store";
-import { CanvasPluginManagerModal } from "@canvas/components/canvas/canvas-plugin-manager-modal";
 import { compressImageBlob } from "@canvas/lib/image-compress";
 import { cropDataUrl, splitDataUrl, upscaleDataUrl } from "@canvas/lib/canvas/canvas-image-data";
 import { fitNodeSize, imageNodeSizeFromUpload, layoutMultiFilePositions, nodeSizeFromRatio } from "@canvas/lib/canvas/canvas-node-size";
@@ -43,7 +41,7 @@ import {
     normalizeContractResolution,
     resolveContractPixelSize,
 } from "@canvas/lib/contract-image";
-import { App, Button, Modal } from "antd";
+import { App, Button, Drawer, Modal } from "antd";
 import { NODE_DEFAULT_SIZE, getNodeSpec } from "@canvas/constant/canvas";
 import { ActiveConnectionPath, ConnectionPath } from "@canvas/components/canvas/canvas-connections";
 import { CanvasConfigComposer } from "@canvas/components/canvas/canvas-config-composer";
@@ -65,8 +63,10 @@ import { CanvasNodePromptPanel, type CanvasNodeGenerationMode } from "@canvas/co
 import { CanvasToolbar } from "@canvas/components/canvas/canvas-toolbar";
 import type { InsertAssetPayload } from "@canvas/components/canvas/asset-picker-modal";
 import { CanvasAssetManagerModal } from "@canvas/components/canvas/canvas-asset-manager-modal";
-import { AssetFolderPickerHost } from "@/features/my-assets/pick-folder";
-import { CanvasSidePanel } from "@canvas/components/canvas/canvas-side-panel";
+import { CanvasPromptsTab, CanvasSidePanel } from "@canvas/components/canvas/canvas-side-panel";
+import { CanvasLocalGenerationLogsTab } from "@canvas/components/canvas/canvas-local-generation-logs-tab";
+import { useCanvasSidePanelStore } from "@canvas/stores/use-canvas-side-panel-store";
+import { useGenerationLogsBadgeStore } from "@canvas/stores/use-generation-logs-badge-store";
 import { CanvasZoomControls } from "@canvas/components/canvas/canvas-zoom-controls";
 import { CanvasToolsDrawer } from "@canvas/components/canvas/canvas-tools-drawer";
 import { useAgentStore } from "@canvas/stores/use-agent-store";
@@ -74,7 +74,12 @@ import { useCanvasStore, type CanvasProject } from "@canvas/stores/canvas/use-ca
 import { useAgentBridge } from "@canvas/pages/canvas/hooks/use-agent-bridge";
 import { usePluginHost } from "@canvas/pages/canvas/hooks/use-plugin-host";
 import { useCanvasHost } from "@canvas/integration/canvas-host-context";
-import { buildNodeMentionReferences, type CanvasResourceReference } from "@canvas/lib/canvas/canvas-resource-references";
+import {
+    buildNodeMentionReferences,
+    pruneRemovedMentionConnections,
+    resolveMentionConnectionTarget,
+    type CanvasResourceReference,
+} from "@canvas/lib/canvas/canvas-resource-references";
 import { exportCanvasProjects } from "@canvas/lib/canvas/canvas-export";
 import { applyNodeConfigPatch, audioMetadata, buildAudioGenerationMetadata, buildImageGenerationMetadata, createCanvasNode, imageMetadata, videoMetadata } from "@canvas/lib/canvas/canvas-node-factory";
 import { normalizeStoryboard } from "@canvas/lib/canvas/canvas-storyboard";
@@ -84,6 +89,7 @@ import {
     buildAngleLabel,
     buildAnglePrompt,
     buildGenerationConfig,
+    buildSpawnedResultConnections,
     findRetrySourceNode,
     generationReferenceUrls,
     splitGenerationReferenceUrls,
@@ -129,6 +135,7 @@ import type { ReferenceImage } from "@canvas/types/image";
 import type { ReferenceAudio } from "@canvas/types/media";
 
 const CanvasDirectorWorkbench = lazy(() => import("@canvas/components/canvas/director/canvas-director-workbench").then((module) => ({ default: module.CanvasDirectorWorkbench })));
+const AgentPanel = lazy(() => import("@canvas/components/agent/agent-panel").then((module) => ({ default: module.AgentPanel })));
 
 // Register built-in nodes in the shared registry once when the module loads.
 registerBuiltinNodes();
@@ -359,9 +366,26 @@ function InfiniteCanvasPage() {
     const [showImageInfo, setShowImageInfo] = useState(false);
     const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
     const [assetManagerOpen, setAssetManagerOpen] = useState(false);
-    const [pluginManagerOpen, setPluginManagerOpen] = useState(false);
+    const [promptsOpen, setPromptsOpen] = useState(false);
+    const [logsOpen, setLogsOpen] = useState(false);
+    const requestedTab = useCanvasSidePanelStore((state) => state.requestedTab);
+    const openElementsPanel = useCanvasSidePanelStore((state) => state.openPanel);
+    const clearRequestedTab = useCanvasSidePanelStore((state) => state.clearRequestedTab);
+    const markLogsSeen = useGenerationLogsBadgeStore((state) => state.markSeen);
+
+    useEffect(() => {
+        if (!requestedTab) return;
+        if (requestedTab === "canvas") openElementsPanel();
+        if (requestedTab === "prompts") setPromptsOpen(true);
+        if (requestedTab === "logs") {
+            markLogsSeen();
+            setLogsOpen(true);
+        }
+        clearRequestedTab();
+    }, [clearRequestedTab, markLogsSeen, openElementsPanel, requestedTab]);
+
     const [projectLoaded, setProjectLoaded] = useState(false);
-    const [saveStatus, setSaveStatus] = useState(() => getCanvasProjectSaveStatus(projectId));
+    const saveStatus = { dirty: false, saving: false };
     const [manualSaving, setManualSaving] = useState(false);
     const [toolbarNodeId, setToolbarNodeId] = useState<string | null>(null);
     const [nodeImageSettingsOpen, setNodeImageSettingsOpen] = useState(false);
@@ -506,13 +530,6 @@ function InfiniteCanvasPage() {
             },
         [],
     );
-
-    useEffect(() => {
-        setSaveStatus(getCanvasProjectSaveStatus(projectId));
-        return subscribeCanvasProjectSaveStatus(() => {
-            setSaveStatus(getCanvasProjectSaveStatus(projectId));
-        });
-    }, [projectId]);
 
     useEffect(() => {
         if (!hydrated || !cloudSynced) return;
@@ -724,6 +741,24 @@ function InfiniteCanvasPage() {
                 setConnections((prev) => [...prev, { id: `conn-${Date.now()}`, fromNodeId, toNodeId }]);
             }
             setContextMenu(null);
+        },
+        [message, t],
+    );
+
+    /** @ pick from the prompt panel: wire asset → consumer so generation can attach the media. */
+    const connectMentionReference = useCallback(
+        (consumerNodeId: string, resourceNodeId: string) => {
+            if (!consumerNodeId || !resourceNodeId || consumerNodeId === resourceNodeId) return;
+            const nodesSnapshot = nodesRef.current;
+            const targetId = resolveMentionConnectionTarget(consumerNodeId, nodesSnapshot, connectionsRef.current);
+            const connection = normalizeConnection(resourceNodeId, targetId, nodesSnapshot, "source");
+            if (!connection) {
+                message.warning(t("canvas.projectPage.configConnection"));
+                return;
+            }
+            const { fromNodeId, toNodeId } = connection;
+            if (connectionsRef.current.some((conn) => conn.fromNodeId === fromNodeId && conn.toNodeId === toNodeId)) return;
+            setConnections((prev) => [...prev, { id: `conn-${Date.now()}`, fromNodeId, toNodeId }]);
         },
         [message, t],
     );
@@ -1247,7 +1282,6 @@ function InfiniteCanvasPage() {
 
     const deleteCurrentProject = useCallback(async () => {
         try {
-            await deleteCanvasProjectsFromCloud([projectId]);
             cleanupAssetImages();
             navigate("/home");
         } catch (error) {
@@ -1272,7 +1306,7 @@ function InfiniteCanvasPage() {
         if (manualSaving) return;
         setManualSaving(true);
         try {
-            await saveCanvasProjectNow(projectId);
+            await Promise.resolve();
             message.success(t("canvas.saveSuccess"));
         } catch (error) {
             console.error(error);
@@ -2031,13 +2065,40 @@ function InfiniteCanvasPage() {
         setDialogNodeId(id);
     }, []);
 
-    const handleNodePromptChange = useCallback((nodeId: string, prompt: string) => {
-        setNodes((prev) => prev.map((node) => (node.id === nodeId ? { ...node, metadata: { ...node.metadata, prompt } } : node)));
+    const syncMentionConnectionsAfterPromptEdit = useCallback((consumerNodeId: string, previousPrompt: string, nextPrompt: string) => {
+        setConnections((prev) => {
+            const next = pruneRemovedMentionConnections(consumerNodeId, previousPrompt, nextPrompt, nodesRef.current, prev);
+            return next === prev ? prev : next;
+        });
     }, []);
 
-    const handleConfigNodeChange = useCallback((nodeId: string, patch: Partial<CanvasNodeData["metadata"]>) => {
-        setNodes((prev) => prev.map((node) => (node.id === nodeId ? applyNodeConfigPatch(node, patch) : node)));
-    }, []);
+    const handleNodePromptChange = useCallback(
+        (nodeId: string, prompt: string) => {
+            const previous = nodesRef.current.find((node) => node.id === nodeId)?.metadata?.prompt || "";
+            setNodes((prev) => prev.map((node) => (node.id === nodeId ? { ...node, metadata: { ...node.metadata, prompt } } : node)));
+            syncMentionConnectionsAfterPromptEdit(nodeId, previous, prompt);
+        },
+        [syncMentionConnectionsAfterPromptEdit],
+    );
+
+    const handleConfigNodeChange = useCallback(
+        (nodeId: string, patch: Partial<CanvasNodeData["metadata"]>) => {
+            const nextPatch = patch || {};
+            if (typeof nextPatch.composerContent === "string" || typeof nextPatch.prompt === "string") {
+                const current = nodesRef.current.find((node) => node.id === nodeId);
+                const previous = current?.metadata?.composerContent ?? current?.metadata?.prompt ?? "";
+                const next =
+                    typeof nextPatch.composerContent === "string"
+                        ? nextPatch.composerContent
+                        : typeof nextPatch.prompt === "string"
+                          ? nextPatch.prompt
+                          : previous;
+                syncMentionConnectionsAfterPromptEdit(nodeId, previous, next);
+            }
+            setNodes((prev) => prev.map((node) => (node.id === nodeId ? applyNodeConfigPatch(node, nextPatch) : node)));
+        },
+        [syncMentionConnectionsAfterPromptEdit],
+    );
 
     const downloadNodeImage = useCallback((node: CanvasNodeData) => {
         if ((node.type !== CanvasNodeType.Image && node.type !== CanvasNodeType.Video && node.type !== CanvasNodeType.Audio) || !node.metadata?.content) return;
@@ -2062,15 +2123,7 @@ function InfiniteCanvasPage() {
 
     const saveNodeAsset = useCallback(
         async (node: CanvasNodeData) => {
-            const { pickAssetFolder } = await import("@/features/my-assets/pick-folder");
-            const { applyFolderToAssetFields, DEFAULT_FOLDER_PATH } = await import("@/features/my-assets/folder-path");
-            const { registerFolder } = await import("@/features/my-assets/folder-registry");
-            const folder = await pickAssetFolder({
-                defaultFolder: DEFAULT_FOLDER_PATH,
-            });
-            if (folder == null) return;
-            const folderFields = applyFolderToAssetFields(folder);
-            registerFolder(folderFields.source);
+            const folderFields = { source: "local", metadata: { folder: "/" } };
 
             if (node.type === CanvasNodeType.Text) {
                 const content = node.metadata?.content?.trim();
@@ -2939,7 +2992,16 @@ function InfiniteCanvasPage() {
                         ),
                         ...(isEmptyImageNode ? [] : [rootNode]),
                     ]);
-                    if (!isEmptyImageNode) setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: nodeId, toNodeId: rootId }]);
+                    if (!isEmptyImageNode) {
+                        const spawned = buildSpawnedResultConnections({
+                            sourceNodeId: nodeId,
+                            childNodeId: rootId,
+                            sourceNode,
+                            nodes: nodesRef.current,
+                            connections: connectionsRef.current,
+                        });
+                        if (spawned.length) setConnections((prev) => [...prev, ...spawned]);
+                    }
                     setSelectedNodeIds(new Set([nodeId]));
                     setSelectedConnectionId(null);
                     setDialogNodeId(nodeId);
@@ -3087,7 +3149,16 @@ function InfiniteCanvasPage() {
                             ? prev.map((node) => (node.id === nodeId ? { ...node, ...videoNode } : node))
                             : [...prev.map((node) => (node.id === nodeId ? { ...node, metadata: { ...node.metadata, status: NODE_STATUS_SUCCESS } } : node)), videoNode],
                     );
-                    if (!isEmptyVideoNode) setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: nodeId, toNodeId: videoId }]);
+                    if (!isEmptyVideoNode) {
+                        const spawned = buildSpawnedResultConnections({
+                            sourceNodeId: nodeId,
+                            childNodeId: videoId,
+                            sourceNode,
+                            nodes: nodesRef.current,
+                            connections: connectionsRef.current,
+                        });
+                        if (spawned.length) setConnections((prev) => [...prev, ...spawned]);
+                    }
                     const controller = startGenerationRequest(videoId, nodeId, nodeId, runController);
                     try {
                         const task = await createVideoGenerationTask(
@@ -3226,7 +3297,16 @@ function InfiniteCanvasPage() {
                             ? prev.map((node) => (node.id === nodeId ? { ...node, ...audioNode } : node))
                             : [...prev.map((node) => (node.id === nodeId ? { ...node, metadata: { ...node.metadata, status: NODE_STATUS_SUCCESS } } : node)), audioNode],
                     );
-                    if (!isEmptyAudioNode) setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: nodeId, toNodeId: audioId }]);
+                    if (!isEmptyAudioNode) {
+                        const spawned = buildSpawnedResultConnections({
+                            sourceNodeId: nodeId,
+                            childNodeId: audioId,
+                            sourceNode,
+                            nodes: nodesRef.current,
+                            connections: connectionsRef.current,
+                        });
+                        if (spawned.length) setConnections((prev) => [...prev, ...spawned]);
+                    }
                     const controller = startGenerationRequest(audioId, nodeId, nodeId, runController);
                     try {
                         const audio = await storeGeneratedAudio(await requestAudioGeneration(generationConfig, effectivePrompt, { signal: controller.signal }), generationConfig.audioFormat);
@@ -4488,6 +4568,7 @@ function InfiniteCanvasPage() {
                     onPromptChange={handleNodePromptChange}
                     onConfigChange={handleConfigNodeChange}
                     onGenerate={handleGenerateNode}
+                    onConnectResource={(reference) => connectMentionReference(panelNode.id, reference.nodeId)}
                     modeOverride={getNodeDefinition(panelNode.type)?.useBuiltinPanel?.mode}
                     onImageSettingsOpenChange={(open) => {
                         setNodeImageSettingsOpen(open);
@@ -4495,7 +4576,7 @@ function InfiniteCanvasPage() {
                     }}
                 />
             ),
-        [configInputsById, handleConfigNodeChange, handleGenerateNode, handleNodePromptChange, mentionReferencesByNodeId, renderPluginPanel, runningNodeIds],
+        [configInputsById, connectMentionReference, handleConfigNodeChange, handleGenerateNode, handleNodePromptChange, mentionReferencesByNodeId, renderPluginPanel, runningNodeIds],
     );
 
     const renderNodeContentPanel = useCallback(
@@ -4548,7 +4629,7 @@ function InfiniteCanvasPage() {
 
     return (
         <main className="flex h-full min-h-0 overflow-hidden" style={{ background: theme.canvas.background, color: theme.node.text }}>
-            <CanvasSidePanel nodes={nodes} selectedNodeIds={selectedNodeIds} onFocusNode={focusNode} onPreviewNode={setPreviewNodeId} onInsertAsset={handleAssetInsert} />
+            <CanvasSidePanel nodes={nodes} selectedNodeIds={selectedNodeIds} onFocusNode={focusNode} onPreviewNode={setPreviewNodeId} />
             <section className="relative min-w-0 flex-1 overflow-hidden">
                 <CanvasTopBar
                     projectId={projectId}
@@ -4577,7 +4658,6 @@ function InfiniteCanvasPage() {
                     onExportProject={exportCurrentProject}
                     onOpenFolder={isTauri() ? openCanvasFolder : undefined}
                     onImportImage={() => handleUploadRequest()}
-                    onOpenPlugins={() => setPluginManagerOpen(true)}
                     onUndo={undoCanvas}
                     onRedo={redoCanvas}
                     onVersionRestored={(project) => void handleVersionRestored(project)}
@@ -4649,6 +4729,7 @@ function InfiniteCanvasPage() {
                             batchExpanded={expandedImageNodeIds.has(node.id)}
                             showImageInfo={showImageInfo}
                             mentionReferences={mentionReferencesByNodeId.get(node.id) || EMPTY_REFERENCES}
+                            onConnectResource={(reference) => connectMentionReference(node.id, reference.nodeId)}
                             pluginHost={pluginHost}
                             registryVersion={nodeRegistryVersion}
                             renderPanel={renderNodePanel}
@@ -4771,6 +4852,11 @@ function InfiniteCanvasPage() {
                     onUndo={undoCanvas}
                     onRedo={redoCanvas}
                     onOpenAssets={() => setAssetManagerOpen(true)}
+                    onOpenPrompts={() => setPromptsOpen(true)}
+                    onOpenLogs={() => {
+                        markLogsSeen();
+                        setLogsOpen(true);
+                    }}
                     onDelete={() => deleteNodes(new Set(selectedNodeIds))}
                     onClear={() => setClearConfirmOpen(true)}
                     onCanvasToolChange={setCanvasTool}
@@ -4871,8 +4957,32 @@ function InfiniteCanvasPage() {
                 </Modal>
 
                 <CanvasAssetManagerModal open={assetManagerOpen} onInsert={handleAssetInsert} onClose={() => setAssetManagerOpen(false)} />
-                <CanvasPluginManagerModal open={pluginManagerOpen} onClose={() => setPluginManagerOpen(false)} />
-                <AssetFolderPickerHost />
+                <Drawer
+                    open={promptsOpen}
+                    onClose={() => setPromptsOpen(false)}
+                    title={t("canvas.sidePanel.prompts")}
+                    placement="right"
+                    size={420}
+                    destroyOnHidden
+                    styles={{ body: { padding: 0, height: "100%", overflow: "hidden" } }}
+                >
+                    <div className="h-full min-h-0" style={{ color: theme.node.text }}>
+                        <CanvasPromptsTab onInsert={handleAssetInsert} theme={theme} />
+                    </div>
+                </Drawer>
+                <Drawer
+                    open={logsOpen}
+                    onClose={() => setLogsOpen(false)}
+                    title={t("canvas.sidePanel.logs")}
+                    placement="right"
+                    size={420}
+                    destroyOnHidden
+                    styles={{ body: { padding: 0, height: "100%", overflow: "hidden" } }}
+                >
+                    <div className="h-full min-h-0" style={{ color: theme.node.text }}>
+                        <CanvasLocalGenerationLogsTab onInsert={handleAssetInsert} theme={theme} />
+                    </div>
+                </Drawer>
                 {directorNodeId && directorScene ? (
                     <Suspense fallback={<div className="fixed inset-0 z-[80] grid place-items-center" style={{ background: theme.canvas.background, color: theme.node.text }}>{t("canvas.director.loading")}</div>}>
                         <CanvasDirectorWorkbench
@@ -4887,11 +4997,14 @@ function InfiniteCanvasPage() {
                             onShouldCaptureCover={shouldCaptureCover}
                             onCaptureCover={captureDirectorCover}
                             onDeleteImageNode={(nodeId) => deleteNodes(new Set([nodeId]))}
-                            onFlush={() => saveCanvasProjectNow(projectId)}
+                            onFlush={() => Promise.resolve()}
                         />
                     </Suspense>
                 ) : null}
             </section>
+            <Suspense fallback={null}>
+                <AgentPanel />
+            </Suspense>
         </main>
     );
 }

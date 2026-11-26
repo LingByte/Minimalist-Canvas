@@ -7,10 +7,9 @@ import { toIntlLocale } from "@/i18n/languages";
 
 import { PromptSourceEditorDrawer } from "./prompt-source-editor-drawer";
 import { PromptSourceContentModal } from "./prompt-source-content-modal";
-import { fetchPromptSourceStatuses } from "@canvas/services/api/prompts";
+import { fetchPromptSourceStatuses, refreshAllSources } from "@canvas/services/api/prompts";
 import { usePromptSourceStore } from "@canvas/stores/use-prompt-source-store";
 import type { PromptSource } from "@canvas/services/api/prompt-source-presets";
-import { useAuthStore } from "@/stores/auth-store";
 
 const STATUS_QUERY_KEY = ["prompt-source-statuses"];
 
@@ -23,9 +22,7 @@ export function ConfigPromptSources() {
     const saveSource = usePromptSourceStore((state) => state.saveSource);
     const removeSource = usePromptSourceStore((state) => state.removeSource);
     const toggleSource = usePromptSourceStore((state) => state.toggleSource);
-    const syncSources = usePromptSourceStore((state) => state.syncSources);
-    const isAuthenticated = useAuthStore((s) => Boolean(s.auth.user && s.auth.accessToken));
-    const statusQuery = useQuery({ queryKey: STATUS_QUERY_KEY, queryFn: fetchPromptSourceStatuses, enabled: isAuthenticated });
+    const statusQuery = useQuery({ queryKey: STATUS_QUERY_KEY, queryFn: fetchPromptSourceStatuses });
 
     const [editingSource, setEditingSource] = useState<PromptSource | null>(null);
     const [viewingId, setViewingId] = useState("");
@@ -43,9 +40,9 @@ export function ConfigPromptSources() {
     const handleSync = async () => {
         setSyncing(true);
         try {
-            const list = await syncSources();
+            const summary = await refreshAllSources();
             await invalidatePrompts();
-            message.success(t("config.promptSources.synced", { count: list.length }));
+            message.success(t("config.promptSources.synced", { count: summary.total }));
         } catch (error) {
             message.error(error instanceof Error ? error.message : t("config.promptSources.refreshFailed"));
         } finally {
@@ -80,7 +77,7 @@ export function ConfigPromptSources() {
     return (
         <div>
             <div className="mb-4 flex flex-wrap items-center justify-end gap-3">
-                <Button icon={<RefreshCw className="size-4" />} loading={syncing} disabled={!isAuthenticated} onClick={() => void handleSync()}>
+                <Button icon={<RefreshCw className="size-4" />} loading={syncing} onClick={() => void handleSync()}>
                     {t("config.promptSources.sync")}
                 </Button>
                 <Button type="primary" icon={<Plus className="size-4" />} onClick={() => setEditingSource(addSource())}>

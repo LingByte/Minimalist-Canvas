@@ -1,17 +1,25 @@
 import { App, Button, Form, Input, Modal, Select, Tabs } from "antd";
-import { Download, Pencil, Upload } from "lucide-react";
+import { Download, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ModelPicker } from "@canvas/components/model-picker";
 import { ChannelEditorDrawer } from "@canvas/components/layout/channel-editor-drawer";
 import { ConfigLocalStorage } from "@canvas/components/layout/config-local-storage";
+import { ConfigPromptSources } from "@canvas/components/layout/config-prompt-sources";
 import { exportAppConfig, importAppConfig } from "@canvas/services/config-file";
-import { flushUserCanvasConfigToServer } from "@canvas/services/user-canvas-config-sync";
 import { audioFormatOptions, audioVoiceOptions, normalizeAudioSpeedValue } from "@canvas/lib/audio-generation";
-import { modelOptionsFromChannels, normalizeModelOptionValue, selectableModelsByCapability, useConfigStore, type AiConfig, type ConfigTabKey, type ModelCapability, type ModelChannel } from "@canvas/stores/use-config-store";
-import { useConfigOnboardingStore, clearConfigOnboardingSeen } from "@canvas/stores/use-config-onboarding-store";
-
+import {
+    createModelChannel,
+    modelOptionsFromChannels,
+    normalizeModelOptionValue,
+    selectableModelsByCapability,
+    useConfigStore,
+    type AiConfig,
+    type ConfigTabKey,
+    type ModelCapability,
+    type ModelChannel,
+} from "@canvas/stores/use-config-store";
 type ModelGroup = {
     capability: ModelCapability;
     modelKey: "imageModel" | "videoModel" | "textModel" | "audioModel";
@@ -32,28 +40,20 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
     const configInputRef = useRef<HTMLInputElement>(null);
     const [activeTab, setActiveTab] = useState<ConfigTabKey>(initialTab);
     const [editingChannelId, setEditingChannelId] = useState("");
+    /** Draft channel for "Add" flow — not written to store until the user saves. */
+    const [draftChannel, setDraftChannel] = useState<ModelChannel | null>(null);
     const config = useConfigStore((state) => state.config);
     const updateConfig = useConfigStore((state) => state.updateConfig);
     const shouldPromptContinue = useConfigStore((state) => state.shouldPromptContinue);
     const setConfigDialogOpen = useConfigStore((state) => state.setConfigDialogOpen);
     const clearPromptContinue = useConfigStore((state) => state.clearPromptContinue);
-    const forceTab = useConfigOnboardingStore((state) => state.forceTab);
-    const forceEditingChannelId = useConfigOnboardingStore((state) => state.forceEditingChannelId);
-    const editingChannel = config.channels.find((channel) => channel.id === editingChannelId) || null;
+    const editingChannel =
+        draftChannel && draftChannel.id === editingChannelId
+            ? draftChannel
+            : config.channels.find((channel) => channel.id === editingChannelId) || null;
     useEffect(() => {
         setActiveTab(initialTab === "webdav" ? "channels" : initialTab);
     }, [initialTab]);
-    useEffect(() => {
-        if (!forceTab) return;
-        setActiveTab(forceTab === "webdav" ? "channels" : forceTab);
-    }, [forceTab]);
-    useEffect(() => {
-        if (forceEditingChannelId === null) {
-            setEditingChannelId("");
-            return;
-        }
-        if (forceEditingChannelId) setEditingChannelId(forceEditingChannelId);
-    }, [forceEditingChannelId]);
 
     const saveConfig = (nextConfig: AiConfig) => {
         (Object.keys(nextConfig) as Array<keyof AiConfig>).forEach((key) => updateConfig(key, nextConfig[key]));
@@ -63,14 +63,8 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
         const ready = config.channels.some((channel) => channel.baseUrl.trim() && channel.apiKey.trim() && channel.models.length);
         setConfigDialogOpen(false);
         if (!ready) return;
-        void flushUserCanvasConfigToServer().then((ok) => {
-            if (!ok) {
-                message.error(t("config.saveFailed"));
-                return;
-            }
-            message.success(t(shouldPromptContinue ? "config.savedContinue" : "config.saved"));
-            clearPromptContinue();
-        });
+        message.success(t(shouldPromptContinue ? "config.savedContinue" : "config.saved"));
+        clearPromptContinue();
     };
 
     const loadConfigFile = async (file: File) => {
@@ -86,27 +80,41 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
 
     const updateChannels = (channels: ModelChannel[]) => saveConfig(withChannels(config, channels));
 
-    const saveChannel = (channel: ModelChannel) => {
-        updateChannels(config.channels.map((item) => (item.id === channel.id ? channel : item)));
+    const closeChannelEditor = () => {
+        setEditingChannelId("");
+        setDraftChannel(null);
     };
 
+    const saveChannel = (channel: ModelChannel) => {
+        const exists = config.channels.some((item) => item.id === channel.id);
+        updateChannels(
+            exists
+                ? config.channels.map((item) => (item.id === channel.id ? channel : item))
+                : [...config.channels, channel],
+        );
+        closeChannelEditor();
+    };
+
+    const addChannel = () => {
+        const channel = createModelChannel({
+            name: t("config.channels.numberedName", { count: config.channels.length + 1 }),
+        });
+        setDraftChannel(channel);
+        setEditingChannelId(channel.id);
+    };
+
+    const removeChannel = (id: string) => {
+        if (config.channels.length <= 1) {
+            message.warning(t("config.channels.keepOne"));
+            return;
+        }
+        updateChannels(config.channels.filter((channel) => channel.id !== id));
+        if (editingChannelId === id) closeChannelEditor();
+    };
 
     return (
         <>
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 pb-3 dark:border-stone-800">
-                <div className="text-xs text-stone-500">
-                    {t("config.fileSecurity")}{" "}
-                    <button
-                        type="button"
-                        className="text-amber-700 underline-offset-2 transition hover:underline dark:text-amber-300"
-                        onClick={() => {
-                            clearConfigOnboardingSeen();
-                            useConfigOnboardingStore.getState().start();
-                        }}
-                    >
-                        {t("config.onboarding.replay")}
-                    </button>
-                </div>
+            <div className="flex flex-wrap items-center justify-end gap-3 border-b border-stone-200 pb-3 dark:border-stone-800">
                 <div className="flex gap-2">
                     <Button icon={<Upload className="size-4" />} onClick={() => configInputRef.current?.click()}>
                         {t("config.import")}
@@ -127,22 +135,47 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                         children: (
                             <div data-tour="config-channels-panel">
                                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                                    <div className="text-xs text-stone-500">{t("config.channels.embeddedDescription")}</div>
+                                    <div className="text-xs text-stone-500">{t("config.channels.description")}</div>
+                                    <Button type="primary" icon={<Plus className="size-3.5" />} onClick={addChannel}>
+                                        {t("config.channels.add")}
+                                    </Button>
                                 </div>
                                 <div className="space-y-2">
-                                    {config.channels.slice(0, 1).map((channel) => (
-                                        <div key={channel.id} className="flex items-center justify-between gap-3 rounded-lg border border-stone-200 px-4 py-3 dark:border-stone-800">
-                                            <div className="min-w-0 truncate text-sm text-stone-600 dark:text-stone-300">
-                                                {`${t(channel.apiKey?.trim() ? "config.channels.apiKeyReady" : "config.channels.apiKeyMissing")} · ${t("config.channels.modelCount", { count: channel.models.length })}`}
+                                    {config.channels.map((channel) => (
+                                        <div
+                                            key={channel.id}
+                                            className="flex items-center justify-between gap-3 rounded-lg border border-stone-200 px-4 py-3 dark:border-stone-800"
+                                        >
+                                            <div className="min-w-0">
+                                                <div className="truncate text-sm font-medium text-stone-900 dark:text-stone-100">
+                                                    {channel.name.trim() || t("config.channels.unnamed")}
+                                                </div>
+                                                <div className="mt-0.5 truncate text-xs text-stone-500">
+                                                    {channel.baseUrl.trim() || t("config.channels.missingUrl")}
+                                                    {" · "}
+                                                    {t(channel.apiKey?.trim() ? "config.channels.apiKeyReady" : "config.channels.apiKeyMissing")}
+                                                    {" · "}
+                                                    {t("config.channels.modelCount", { count: channel.models.length })}
+                                                </div>
                                             </div>
-                                            <Button
-                                                size="small"
-                                                icon={<Pencil className="size-3.5" />}
-                                                data-tour="config-channel-edit"
-                                                onClick={() => setEditingChannelId(channel.id)}
-                                            >
-                                                {t("common.edit")}
-                                            </Button>
+                                            <div className="flex shrink-0 items-center gap-1">
+                                                <Button
+                                                    size="small"
+                                                    icon={<Pencil className="size-3.5" />}
+                                                    data-tour="config-channel-edit"
+                                                    onClick={() => setEditingChannelId(channel.id)}
+                                                >
+                                                    {t("common.edit")}
+                                                </Button>
+                                                <Button
+                                                    size="small"
+                                                    danger
+                                                    type="text"
+                                                    icon={<Trash2 className="size-3.5" />}
+                                                    aria-label={t("common.delete")}
+                                                    onClick={() => removeChannel(channel.id)}
+                                                />
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
@@ -204,6 +237,11 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                         ),
                     },
                     {
+                        key: "prompt-sources",
+                        label: t("config.tabs.promptSources"),
+                        children: <ConfigPromptSources />,
+                    },
+                    {
                         key: "local-storage",
                         label: t("config.tabs.localStorage"),
                         children: <ConfigLocalStorage active={activeTab === "local-storage"} />,
@@ -217,7 +255,12 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                     </Button>
                 </div>
             ) : null}
-            <ChannelEditorDrawer open={Boolean(editingChannel)} channel={editingChannel} onSave={saveChannel} onClose={() => setEditingChannelId("")} />
+            <ChannelEditorDrawer
+                open={Boolean(editingChannel)}
+                channel={editingChannel}
+                onSave={saveChannel}
+                onClose={closeChannelEditor}
+            />
         </>
     );
 }
@@ -227,7 +270,6 @@ export function AppConfigModal() {
     const isConfigOpen = useConfigStore((state) => state.isConfigOpen);
     const configTab = useConfigStore((state) => state.configTab);
     const setConfigDialogOpen = useConfigStore((state) => state.setConfigDialogOpen);
-    const tourActive = useConfigOnboardingStore((state) => state.active);
     return (
         <Modal
             title={
@@ -239,8 +281,6 @@ export function AppConfigModal() {
             open={isConfigOpen}
             width={980}
             centered
-            mask={!tourActive}
-            zIndex={tourActive ? 10050 : undefined}
             onCancel={() => setConfigDialogOpen(false)}
             styles={{ body: { maxHeight: "72vh", overflowY: "auto", paddingRight: 12 } }}
             footer={null}

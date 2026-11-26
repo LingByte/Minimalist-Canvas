@@ -2,13 +2,10 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 import {
-  createPromptSourceRemote,
-  deletePromptSourceRemote,
-  fetchPromptSources,
-  setPromptSourceEnabled,
-  updatePromptSourceRemote,
-} from "@canvas/services/api/prompts";
-import { createPromptSource, type PromptSource } from "@canvas/services/api/prompt-source-presets";
+  createPromptSource,
+  DEFAULT_PROMPT_SOURCES,
+  type PromptSource,
+} from "@canvas/services/api/prompt-source-presets";
 import { localForageStorage } from "@canvas/lib/localforage-storage";
 
 type PromptSourceStore = {
@@ -16,6 +13,7 @@ type PromptSourceStore = {
   loaded: boolean;
   hydrated: boolean;
   loadSources: () => Promise<void>;
+  /** Refresh prompt JSON caches for all enabled sources. */
   syncSources: () => Promise<PromptSource[]>;
   addSource: () => PromptSource;
   saveSource: (source: PromptSource) => Promise<void>;
@@ -24,8 +22,28 @@ type PromptSourceStore = {
   setSources: (sources: PromptSource[]) => void;
 };
 
-let loadingPromise: Promise<void> | null = null;
-let syncingPromise: Promise<PromptSource[]> | null = null;
+function isHttpPromptSourceUrl(url: string) {
+  const value = url.trim().toLowerCase();
+  return value.startsWith("http://") || value.startsWith("https://");
+}
+
+function mergeWithDefaults(saved: PromptSource[]): PromptSource[] {
+  const enabledById = new Map(saved.map((source) => [source.id, source.enabled]));
+  const builtIn = DEFAULT_PROMPT_SOURCES.map((source) => ({
+    ...source,
+    enabled: enabledById.get(source.id) ?? source.enabled,
+  }));
+  // Drop legacy product sources (e.g. local://manual / 至简未来) that cannot be fetched.
+  const custom = saved
+    .filter(
+      (source) =>
+        !source.builtIn &&
+        !DEFAULT_PROMPT_SOURCES.some((item) => item.id === source.id) &&
+        isHttpPromptSourceUrl(source.url),
+    )
+    .map((source) => createPromptSource(source));
+  return [...builtIn, ...custom];
+}
 
 export function waitPromptSourceStoreHydrated(): Promise<void> {
   return new Promise((resolve) => {
@@ -44,77 +62,59 @@ export function waitPromptSourceStoreHydrated(): Promise<void> {
 export const usePromptSourceStore = create<PromptSourceStore>()(
   persist(
     (set, get) => ({
-      sources: [],
+      sources: DEFAULT_PROMPT_SOURCES,
       loaded: false,
       hydrated: false,
-      // Local-first: after hydration, keep using the persisted list and only
-      // hit the remote when nothing is stored (first run or emptied list).
       loadSources: async () => {
-        if (loadingPromise) return loadingPromise;
-        loadingPromise = (async () => {
-          try {
-            await waitPromptSourceStoreHydrated();
-            if (get().sources.length > 0) {
-              set({ loaded: true });
-              return;
-            }
-            const sources = await fetchPromptSources();
-            set({ sources, loaded: true });
-          } finally {
-            loadingPromise = null;
-          }
-        })();
-        return loadingPromise;
+        await waitPromptSourceStoreHydrated();
+        const sources = mergeWithDefaults(get().sources);
+        set({ sources, loaded: true });
       },
-      // Manual sync: always pulls the remote list and overwrites local state.
       syncSources: async () => {
-        if (syncingPromise) return syncingPromise;
-        syncingPromise = (async () => {
-          try {
-            const sources = await fetchPromptSources();
-            set({ sources, loaded: true });
-            return sources;
-          } finally {
-            syncingPromise = null;
-          }
-        })();
-        return syncingPromise;
+        await waitPromptSourceStoreHydrated();
+        const { refreshAllSources } = await import("@canvas/services/api/prompts");
+        const sources = mergeWithDefaults(get().sources);
+        set({ sources, loaded: true });
+        await refreshAllSources();
+        return get().sources;
       },
       addSource: () => createPromptSource(),
       saveSource: async (source) => {
-        const existing = get().sources.find((item) => item.id === source.id);
-        const saved =
-          existing && !existing.builtIn
-            ? await updatePromptSourceRemote(source)
-            : existing?.builtIn
-              ? existing
-              : await createPromptSourceRemote(source);
+        const next = createPromptSource(source);
         set((state) => ({
-          sources: state.sources.some((item) => item.id === saved.id)
-            ? state.sources.map((item) => (item.id === saved.id ? saved : item))
-            : [...state.sources, saved],
+          sources: state.sources.some((item) => item.id === next.id)
+            ? state.sources.map((item) =>
+                item.id === next.id ? (item.builtIn ? { ...item, enabled: next.enabled } : next) : item,
+              )
+            : [...state.sources, next],
         }));
       },
       removeSource: async (id) => {
         const target = get().sources.find((item) => item.id === id);
         if (!target || target.builtIn) return;
-        await deletePromptSourceRemote(id);
         set((state) => ({ sources: state.sources.filter((item) => item.id !== id) }));
       },
       toggleSource: async (id, enabled) => {
-        await setPromptSourceEnabled(id, enabled);
         set((state) => ({
           sources: state.sources.map((item) => (item.id === id ? { ...item, enabled } : item)),
         }));
       },
-      setSources: (sources) => set({ sources, loaded: true }),
+      setSources: (sources) => set({ sources: mergeWithDefaults(sources), loaded: true }),
     }),
     {
       name: "minimalist-canvas:prompt_source_store",
       storage: createJSONStorage(() => localForageStorage),
       partialize: (state) => ({ sources: state.sources }),
+      merge: (persisted, current) => {
+        const saved = (persisted as { sources?: PromptSource[] } | undefined)?.sources;
+        return {
+          ...current,
+          ...(persisted as object),
+          sources: mergeWithDefaults(Array.isArray(saved) ? saved : current.sources),
+        };
+      },
       onRehydrateStorage: () => () => {
-        usePromptSourceStore.setState({ hydrated: true });
+        usePromptSourceStore.setState({ hydrated: true, loaded: true });
       },
     },
   ),

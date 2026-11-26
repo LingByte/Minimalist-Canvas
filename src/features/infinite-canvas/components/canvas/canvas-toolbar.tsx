@@ -1,14 +1,14 @@
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode, RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Button, Segmented, Switch } from "antd";
-import { CircleDot, Clapperboard, Eraser, FolderOpen, Grid2x2, Group, Hand, Image as ImageIcon, Info, ListVideo, Moon, MousePointer2, Music2, Palette, Puzzle, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Video, Wand2 } from "lucide-react";
+import { BookOpen, CircleDot, Clapperboard, Eraser, FolderOpen, Grid2x2, Group, Hand, History, Image as ImageIcon, Info, ListVideo, Moon, MousePointer2, Music2, Palette, Puzzle, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Video, Wand2 } from "lucide-react";
 
 import { useTheme } from "@/context/theme-provider";
 
 import { canvasThemes, type CanvasBackgroundMode, type CanvasColorTheme, type CanvasTheme } from "@canvas/lib/canvas-theme";
 import { getNodePluginId, listNodeDefinitions, useNodeRegistryVersion } from "@canvas/lib/canvas/node-registry";
 import { useCanvasHost } from "@canvas/integration/canvas-host-context";
-import { useCanvasSidePanelStore } from "@canvas/stores/use-canvas-side-panel-store";
+import { useGenerationLogsBadgeStore } from "@canvas/stores/use-generation-logs-badge-store";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { AnimatedThemeToggler } from "@canvas/components/ui/animated-theme-toggler";
 import { useTranslation } from "react-i18next";
@@ -34,6 +34,8 @@ export function CanvasToolbar({
     onUndo,
     onRedo,
     onOpenAssets,
+    onOpenPrompts,
+    onOpenLogs,
     onDelete,
     onClear,
     onCanvasToolChange,
@@ -60,6 +62,8 @@ export function CanvasToolbar({
     onUndo: () => void;
     onRedo: () => void;
     onOpenAssets: () => void;
+    onOpenPrompts?: () => void;
+    onOpenLogs?: () => void;
     onDelete: () => void;
     onClear: () => void;
     onCanvasToolChange: (tool: "select" | "pan") => void;
@@ -72,8 +76,15 @@ export function CanvasToolbar({
     const rootRef = useRef<HTMLDivElement>(null);
     const { embedded } = useCanvasHost();
     const hostTheme = useTheme();
-    const sidePanelOpen = useCanvasSidePanelStore((state) => state.panelOpen);
     const colorTheme = useThemeStore((state) => state.theme);
+    const pendingCount = useGenerationLogsBadgeStore((state) => state.pendingCount);
+    const unreadCount = useGenerationLogsBadgeStore((state) => state.unreadCount);
+    const logsBadge =
+        pendingCount > 0
+            ? { count: pendingCount, tone: "pending" as const }
+            : unreadCount > 0
+              ? { count: unreadCount, tone: "new" as const }
+              : null;
     const setCanvasTheme = useThemeStore((state) => state.setTheme);
     const setTheme = (next: CanvasColorTheme) => {
         if (embedded) hostTheme.setTheme(next);
@@ -110,12 +121,7 @@ export function CanvasToolbar({
     return (
         <div
             ref={rootRef}
-            className={cn(
-                "pointer-events-none absolute bottom-3 z-50 flex justify-center sm:bottom-5",
-                sidePanelOpen
-                    ? "left-2 right-2 sm:left-[300px] sm:right-4"
-                    : "left-2 right-2 sm:left-4 sm:right-4"
-            )}
+            className="pointer-events-none absolute bottom-3 left-2 right-2 z-50 flex justify-center sm:bottom-5 sm:left-4 sm:right-4"
         >
             {tip ? <DockTip label={tip} x={tipX} theme={theme} /> : null}
             <div ref={wrapRef} className="thin-scrollbar pointer-events-auto flex h-12 max-w-full items-center gap-1 overflow-x-auto rounded-xl border px-1.5 shadow-lg backdrop-blur sm:h-14 sm:px-2 [&>*]:shrink-0" style={dockStyle}>
@@ -176,6 +182,39 @@ export function CanvasToolbar({
                 <ToolbarButton id="tool-assets" label={t("canvas.toolbar.assets")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onOpenAssets}>
                     <FolderOpen className="size-4.5" />
                 </ToolbarButton>
+                {onOpenPrompts ? (
+                    <ToolbarButton id="tool-prompts" label={t("canvas.toolbar.prompts")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onOpenPrompts}>
+                        <BookOpen className="size-4.5" />
+                    </ToolbarButton>
+                ) : null}
+                {onOpenLogs ? (
+                    <span className="relative inline-flex" data-tour="canvas-logs-guide">
+                        <ToolbarButton
+                            id="tool-logs"
+                            label={t("canvas.toolbar.logs")}
+                            hovered={hovered}
+                            hoverStyle={hoverStyle}
+                            wrapRef={wrapRef}
+                            onTipX={setTipX}
+                            onHover={setHovered}
+                            onClick={onOpenLogs}
+                            dataTour="canvas-logs-tab"
+                        >
+                            <History className="size-4.5" />
+                        </ToolbarButton>
+                        {logsBadge ? (
+                            <span
+                                className={cn(
+                                    "pointer-events-none absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full px-1 text-[10px] font-bold leading-4 text-white",
+                                    logsBadge.tone === "pending" ? "bg-amber-500" : "bg-rose-500",
+                                )}
+                                aria-label={logsBadge.tone === "pending" ? `${logsBadge.count} pending` : `${logsBadge.count} new`}
+                            >
+                                {logsBadge.count > 99 ? "99+" : logsBadge.count}
+                            </span>
+                        ) : null}
+                    </span>
+                ) : null}
                 {onToolsOpenChange ? (
                     <ToolbarButton
                         id="tool-tools"

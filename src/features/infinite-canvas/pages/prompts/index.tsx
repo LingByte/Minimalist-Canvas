@@ -9,7 +9,7 @@ import { PromptDetailDialog } from "./components/prompt-detail-dialog";
 import { useCopyText } from "@canvas/hooks/use-copy-text";
 import { cn } from "@canvas/lib/utils";
 import { useAssetStore } from "@canvas/stores/use-asset-store";
-import { ALL_PROMPTS_OPTION, type Prompt } from "@canvas/services/api/prompts";
+import { ALL_PROMPTS_OPTION, refreshAllSources, type Prompt } from "@canvas/services/api/prompts";
 
 export default function PromptsPage() {
     const { message } = App.useApp();
@@ -26,9 +26,14 @@ export default function PromptsPage() {
     const handleSync = async () => {
         setSyncing(true);
         try {
+            const summary = await refreshAllSources();
             const result = await query.refetch();
             if (result.isError) throw result.error;
-            message.success(t("prompts.syncSuccess", { total: result.data?.pages[0]?.total ?? totalPrompts }));
+            message.success(
+                t("prompts.syncSuccess", {
+                    total: result.data?.pages[0]?.total ?? summary.total ?? totalPrompts,
+                }),
+            );
         } catch (error) {
             message.error(error instanceof Error ? error.message : t("prompts.syncFailed"));
         } finally {
