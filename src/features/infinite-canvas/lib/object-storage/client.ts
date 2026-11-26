@@ -89,15 +89,91 @@ export async function testObjectStorageConnection(config: ObjectStorageConfig) {
         contentType: "text/plain",
     });
     try {
-        await deleteObject(config, uploaded.key);
+        await deleteObjectAtKey(config, uploaded.key);
     } catch {
         // Probe upload success is enough; delete is best-effort (some keys disallow delete).
     }
     return uploaded;
 }
 
-async function deleteObject(config: ObjectStorageConfig, key: string) {
-    const uploadUrl = buildObjectUploadUrl(config, key);
+/** PUT an object at an exact key (no timestamp/random suffix). */
+export async function putObjectAtKey(
+    config: ObjectStorageConfig,
+    key: string,
+    body: Blob | File,
+    options?: { contentType?: string; signal?: AbortSignal },
+): Promise<LocalObjectUploadResult> {
+    if (!isObjectStorageConfigured(config)) {
+        throw new Error("Object storage is not configured");
+    }
+    if (!resolveObjectStorageEndpoint(config)) {
+        throw new Error("Object storage endpoint is missing");
+    }
+    const mimeType =
+        (options?.contentType || body.type || "application/octet-stream").split(";")[0].trim() || "application/octet-stream";
+    const blob = body.type === mimeType ? body : new Blob([body], { type: mimeType });
+    const normalizedKey = key.replace(/^\/+/, "");
+    const uploadUrl = buildObjectUploadUrl(config, normalizedKey);
+    const extraHeaders: Record<string, string> = { "Content-Type": mimeType };
+    if (config.publicRead) extraHeaders["x-amz-acl"] = "public-read";
+    const headers = await signS3Request({
+        method: "PUT",
+        url: uploadUrl,
+        accessKeyId: config.accessKeyId.trim(),
+        secretAccessKey: config.secretAccessKey.trim(),
+        region: resolveSigningRegion(config),
+        extraHeaders,
+    });
+    const requestHeaders = { ...headers };
+    delete requestHeaders.host;
+    await putObject(uploadUrl, blob, requestHeaders, undefined, options?.signal);
+    return {
+        key: normalizedKey,
+        accessUrl: buildObjectAccessUrl(config, normalizedKey),
+        bytes: blob.size,
+        mimeType,
+    };
+}
+
+/** GET object body as text. Returns null on 404. */
+export async function getObjectText(config: ObjectStorageConfig, key: string, signal?: AbortSignal): Promise<string | null> {
+    if (!isObjectStorageConfigured(config)) {
+        throw new Error("Object storage is not configured");
+    }
+    const normalizedKey = key.replace(/^\/+/, "");
+    const url = buildObjectUploadUrl(config, normalizedKey);
+    const headers = await signS3Request({
+        method: "GET",
+        url,
+        accessKeyId: config.accessKeyId.trim(),
+        secretAccessKey: config.secretAccessKey.trim(),
+        region: resolveSigningRegion(config),
+    });
+    const requestHeaders = { ...headers };
+    delete requestHeaders.host;
+
+    if (isTauri()) {
+        const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
+        const response = await tauriFetch(url, { method: "GET", headers: requestHeaders, signal });
+        if (response.status === 404) return null;
+        if (!response.ok) {
+            const text = await response.text().catch(() => "");
+            throw new Error(text.slice(0, 200) || `download failed (${response.status})`);
+        }
+        return response.text();
+    }
+
+    const response = await fetch(url, { method: "GET", headers: requestHeaders, signal });
+    if (response.status === 404) return null;
+    if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(text.slice(0, 200) || `download failed (${response.status})`);
+    }
+    return response.text();
+}
+
+export async function deleteObjectAtKey(config: ObjectStorageConfig, key: string) {
+    const uploadUrl = buildObjectUploadUrl(config, key.replace(/^\/+/, ""));
     const headers = await signS3Request({
         method: "DELETE",
         url: uploadUrl,
