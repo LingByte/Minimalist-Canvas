@@ -11,39 +11,13 @@ import GenerationLogsPage from "@canvas/pages/generation-logs";
 import HomePage from "@canvas/pages/home";
 import ImagePage from "@canvas/pages/image";
 import NotFound from "@canvas/pages/not-found";
-import ProfilePage from "@canvas/pages/profile";
 import PromptsPage from "@canvas/pages/prompts";
 import VideoPage from "@canvas/pages/video";
 
-import { ForgotPassword } from "@/features/auth/forgot-password";
-import { OAuthCallbackPage } from "@/features/auth/oauth-callback-page";
-import { Otp } from "@/features/auth/otp";
-import { RequireAuth } from "@/features/auth/require-auth";
-import { ResetPasswordPage } from "@/features/auth/reset-password-page";
-import { SignIn } from "@/features/auth/sign-in";
-import { SignUp } from "@/features/auth/sign-up";
-import { ApiKeys } from "@/features/keys";
-import { WorkspaceHome } from "@/features/workspace-home";
-
 import { CANVAS_BASENAME } from "./integration/constants";
-import {
-    SiteCampaignPage,
-    SiteCreativeCirclePage,
-    SiteCreativeCirclePostPage,
-    SiteDashboardPage,
-    SiteDocsPage,
-    SiteFaqDetailPage,
-    SiteFaqPage,
-    SitePricingModelPage,
-    SitePricingPage,
-    SitePromptLibraryPage,
-    SiteUsageLogsIndexPage,
-    SiteUsageLogsPage,
-} from "./pages/site";
 
 const appPages: RouteObject[] = [
     { index: true, element: <HomePage /> },
-    { path: "home", element: <WorkspaceHome /> },
     { path: "image", element: <ImagePage /> },
     { path: "video", element: <VideoPage /> },
     { path: "assets", element: <AssetsPage /> },
@@ -52,45 +26,20 @@ const appPages: RouteObject[] = [
     { path: "canvas/:id", element: <CanvasProjectPage /> },
     { path: "generation-logs", element: <GenerationLogsPage /> },
     { path: "config", element: <ConfigPage /> },
-    { path: "profile", element: <ProfilePage /> },
-    { path: "keys", element: <ApiKeys /> },
-    { path: "usage-logs", element: <SiteUsageLogsIndexPage /> },
-    { path: "usage-logs/:section", element: <SiteUsageLogsPage /> },
-    { path: "dashboard", element: <SiteDashboardPage /> },
-    { path: "dashboard/:section", element: <SiteDashboardPage /> },
-    { path: "docs", element: <SiteDocsPage /> },
-    { path: "docs/:section", element: <SiteDocsPage /> },
-    { path: "faq", element: <SiteFaqPage /> },
-    { path: "faq/:faqId", element: <SiteFaqDetailPage /> },
-    { path: "pricing", element: <SitePricingPage /> },
-    { path: "pricing/:modelId", element: <SitePricingModelPage /> },
-    { path: "creative-circle", element: <SiteCreativeCirclePage /> },
-    { path: "creative-circle/:postId", element: <SiteCreativeCirclePostPage /> },
-    { path: "prompt-library", element: <SitePromptLibraryPage /> },
-    { path: "campaigns/:slug", element: <SiteCampaignPage /> },
 ];
 
 const canvasRoutes: RouteObject[] = [
     {
         errorElement: <CanvasRouteError />,
         children: [
-            { path: "sign-in", element: <SignIn /> },
-            { path: "sign-up", element: <SignUp /> },
-            { path: "register", element: <SignUp /> },
-            { path: "forgot-password", element: <ForgotPassword /> },
-            { path: "otp", element: <Otp /> },
-            { path: "reset", element: <ResetPasswordPage /> },
-            { path: "oauth/:provider", element: <OAuthCallbackPage /> },
             {
                 element: (
-                    <RequireAuth>
-                        <UserLayout>
-                            <AnalyticsTracker />
-                            <CanvasErrorBoundary>
-                                <Outlet />
-                            </CanvasErrorBoundary>
-                        </UserLayout>
-                    </RequireAuth>
+                    <UserLayout>
+                        <AnalyticsTracker />
+                        <CanvasErrorBoundary>
+                            <Outlet />
+                        </CanvasErrorBoundary>
+                    </UserLayout>
                 ),
                 errorElement: <CanvasRouteError />,
                 children: [

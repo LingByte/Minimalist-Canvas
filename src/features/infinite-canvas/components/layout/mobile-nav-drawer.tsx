@@ -1,4 +1,3 @@
-import { LayoutDashboard } from "lucide-react";
 import { Drawer } from "antd";
 import { Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -21,20 +20,12 @@ export function MobileNavDrawer({ open, activeToolSlug, onClose }: MobileNavDraw
         <Drawer
             title={t("topNav.navigation")}
             placement="left"
-            styles={{ section: { width: 280 } }}
+            size={280}
             open={open}
             onClose={onClose}
             className="md:hidden"
         >
             <div className="space-y-1">
-                <Link
-                    to="/dashboard"
-                    onClick={onClose}
-                    className="mb-2 flex items-center gap-3 rounded-xl bg-sky-500/8 px-4 py-3 text-sm font-medium tracking-tight text-sky-700 transition-colors hover:bg-sky-500/12 dark:text-sky-300"
-                >
-                    <LayoutDashboard className="size-4" />
-                    <span>{t("Back to Dashboard")}</span>
-                </Link>
                 {navigationTools.map((tool) => {
                     const Icon = tool.icon;
                     const active = activeToolSlug

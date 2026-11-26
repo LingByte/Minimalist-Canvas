@@ -512,6 +512,8 @@
     "ASR (speech recognition)": "ASR (speech recognition)",
     "Asset URL updated": "Asset URL updated",
     "Assets": "Assets",
+    "Config": "Config",
+    "Generation logs": "Generation logs",
     "Assigned by administrator only": "Assigned by administrator only",
     "Assigned by administrators and used to represent a user level, such as default or vip.": "Assigned by administrators and used to represent a user level, such as default or vip.",
     "Async task polling": "Async task polling",

@@ -16,7 +16,7 @@ export type CanvasHostContextValue = {
 
 const defaultValue: CanvasHostContextValue = {
   embedded: false,
-  homeHref: '/home',
+  homeHref: '/',
   logo: DEFAULT_LOGO,
   brandName: DEFAULT_SYSTEM_NAME,
   brandTagline: DEFAULT_SYSTEM_TAGLINE,
@@ -37,7 +37,7 @@ export function CanvasHostProvider({
     logo: value.logo ?? DEFAULT_LOGO,
     brandName: value.brandName ?? DEFAULT_SYSTEM_NAME,
     brandTagline: value.brandTagline ?? DEFAULT_SYSTEM_TAGLINE,
-    homeHref: value.homeHref ?? (value.embedded ? '/dashboard' : defaultValue.homeHref),
+    homeHref: value.homeHref ?? (value.embedded ? '/canvas' : defaultValue.homeHref),
   }
   return <CanvasHostContext.Provider value={merged}>{children}</CanvasHostContext.Provider>
 }

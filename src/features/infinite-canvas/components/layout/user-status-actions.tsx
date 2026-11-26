@@ -1,9 +1,8 @@
 import type { CSSProperties, ReactNode } from "react";
 import { Dropdown } from "antd";
-import { Keyboard, MoreHorizontal, Puzzle, Settings2 } from "lucide-react";
+import { Keyboard, MoreHorizontal, Settings2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { ProfileDropdown } from "@/components/profile-dropdown";
 import { ThemeSwitch } from "@/components/theme-switch";
 
 import { AnimatedThemeToggler } from "@canvas/components/ui/animated-theme-toggler";
@@ -21,7 +20,6 @@ type UserStatusActionsProps = {
     /** Vertical stack for narrow sidebars; default is a horizontal row. */
     orientation?: "horizontal" | "vertical";
     onOpenShortcuts?: () => void;
-    onOpenPlugins?: () => void;
 };
 
 type MoreMenuItem = {
@@ -37,7 +35,6 @@ export function UserStatusActions({
     compactOnMobile = false,
     orientation = "horizontal",
     onOpenShortcuts,
-    onOpenPlugins,
 }: UserStatusActionsProps) {
     const { t } = useTranslation();
     const { embedded } = useCanvasHost();
@@ -52,16 +49,6 @@ export function UserStatusActions({
     const desktopOnlyClass = compactOnMobile ? "hidden md:inline-flex" : "inline-flex";
 
     const moreMenuItems: MoreMenuItem[] = [
-        ...(onOpenPlugins
-            ? [
-                  {
-                      key: "plugins",
-                      icon: <Puzzle className="size-4" />,
-                      label: t("topNav.plugins"),
-                      onClick: onOpenPlugins,
-                  } satisfies MoreMenuItem,
-              ]
-            : []),
         ...(showConfig
             ? [
                   {
@@ -95,19 +82,6 @@ export function UserStatusActions({
                     : "inline-flex items-center gap-0.5 md:gap-1",
             )}
         >
-            {onOpenPlugins ? (
-                <button
-                    type="button"
-                    className={cn(naturalIconClass, desktopOnlyClass)}
-                    style={iconStyle}
-                    onClick={onOpenPlugins}
-                    aria-label={t("topNav.plugins")}
-                    title={t("topNav.plugins")}
-                >
-                    <Puzzle className="size-4" />
-                </button>
-            ) : null}
-
             {showConfig ? (
                 <button
                     type="button"
@@ -161,7 +135,6 @@ export function UserStatusActions({
                     </button>
                 </Dropdown>
             ) : null}
-            <ProfileDropdown />
         </div>
     );
 }

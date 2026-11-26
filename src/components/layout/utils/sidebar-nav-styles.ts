@@ -1,15 +1,29 @@
 import { cn } from '@/lib/utils'
 
-/** Vertical site / canvas sidebar item — icon + label only, no square border box. */
+/** Vertical icon-rail item: icon chip + caption. */
 export function sidebarNavItemClassName(active: boolean) {
   return cn(
-    'relative flex w-full flex-col items-center gap-1 rounded-xl px-1 py-2.5 transition-colors duration-200',
+    'group/nav relative flex w-full flex-col items-center gap-1.5 rounded-2xl px-1 py-2 transition-colors duration-200 outline-none',
+    'focus-visible:ring-2 focus-visible:ring-sky-500/40',
     active
-      ? 'text-sky-600 dark:text-sky-400'
-      : 'text-sidebar-foreground/60 hover:text-sidebar-foreground'
+      ? 'text-stone-950 dark:text-stone-50'
+      : 'text-sidebar-foreground/55 hover:text-sidebar-foreground'
   )
 }
 
-export function sidebarNavIndicatorClassName() {
-  return 'pointer-events-none absolute inset-x-3 -bottom-0.5 h-[2px] rounded-full bg-sky-500 dark:bg-sky-400'
+/** Soft resting chip around the icon. */
+export function sidebarNavIconChipClassName(active: boolean) {
+  return cn(
+    'relative z-10 grid size-9 place-items-center rounded-[0.7rem] border transition-[background,border-color,color,box-shadow] duration-200',
+    active
+      ? 'border-stone-900 bg-stone-900 text-white shadow-sm dark:border-stone-100 dark:bg-stone-100 dark:text-stone-950'
+      : 'border-transparent bg-transparent text-current group-hover/nav:border-stone-200/80 group-hover/nav:bg-stone-100/80 dark:group-hover/nav:border-stone-700/80 dark:group-hover/nav:bg-stone-800/70'
+  )
+}
+
+export function sidebarNavLabelClassName(active: boolean) {
+  return cn(
+    'relative z-10 max-w-full truncate text-center text-[10px] leading-tight tracking-wide',
+    active ? 'font-semibold' : 'font-medium'
+  )
 }

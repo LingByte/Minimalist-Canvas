@@ -1,8 +1,9 @@
-import { FileText, Images, Maximize2, Settings2, Sparkles } from "lucide-react";
+import { FileText, Images, Maximize2, Sparkles } from "lucide-react";
 
 /**
  * Canvas tool rail. Image + video share one "generate" entry (/image);
  * in-page tabs switch between image and video modes.
+ * Config stays on the bottom gear (UserStatusActions), not duplicated here.
  */
 export const navigationTools = [
     {
@@ -22,10 +23,6 @@ export const navigationTools = [
     {
         slug: "assets",
         icon: Images,
-    },
-    {
-        slug: "config",
-        icon: Settings2,
     },
 ] as const;
 

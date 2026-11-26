@@ -18,13 +18,13 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
 
-import type { SystemStatus } from '@/features/auth/types'
 import { getStatus } from '@/lib/api'
 import { useSystemConfigStore } from '@/stores/system-config-store'
 
 import { mapStatusDataToConfig } from './use-system-config'
 
-// Get initial cache from localStorage
+export type SystemStatus = Record<string, unknown>
+
 function getInitialStatus(): SystemStatus | undefined {
   try {
     if (typeof window !== 'undefined') {
@@ -56,7 +56,6 @@ export function useStatus() {
           )
         }
       }
-      // Save to localStorage
       try {
         if (typeof window !== 'undefined' && status) {
           window.localStorage.setItem('status', JSON.stringify(status))
@@ -66,11 +65,8 @@ export function useStatus() {
       }
       return status as SystemStatus | null
     },
-    // Use localStorage data as initial data
     placeholderData: getInitialStatus(),
-    // Data becomes stale after 5 minutes
     staleTime: 5 * 60 * 1000,
-    // Cache expires after 30 minutes
     gcTime: 30 * 60 * 1000,
   })
 

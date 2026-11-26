@@ -24,7 +24,6 @@ import * as THREE from "three";
 
 import { DEFAULT_SYSTEM_NAME, DEFAULT_SYSTEM_TAGLINE } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { useAuthStore } from "@/stores/auth-store";
 
 const EXIT_NAV_MS = 450;
 const HOME_VIDEO_SRC = "/public.mp4";
@@ -602,8 +601,6 @@ export function AerisTileField(props: AerisTileFieldProps) {
 export function AerisLanding(props: AerisLandingProps) {
     const { t } = useTranslation();
     const navigate = useNavigate();
-    const isAuthenticated = Boolean(useAuthStore((s) => s.auth.user));
-    const hasAccessToken = Boolean(useAuthStore((s) => s.auth.accessToken));
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
     const [falling, setFalling] = useState(false);
@@ -669,24 +666,15 @@ export function AerisLanding(props: AerisLandingProps) {
         };
     }, []);
 
-    const enterWithAuth = useCallback(
-        (target: "/canvas" | "/dashboard") => {
-            if (falling) return;
-
-            if (!(isAuthenticated && hasAccessToken)) {
-                navigate(`/sign-in?redirect=${encodeURIComponent(target)}`);
-                return;
-            }
-
-            setFalling(true);
-            window.setTimeout(() => {
-                startTransition(() => {
-                    navigate(target);
-                });
-            }, EXIT_NAV_MS);
-        },
-        [falling, hasAccessToken, isAuthenticated, navigate]
-    );
+    const enterCanvas = useCallback(() => {
+        if (falling) return;
+        setFalling(true);
+        window.setTimeout(() => {
+            startTransition(() => {
+                navigate("/canvas");
+            });
+        }, EXIT_NAV_MS);
+    }, [falling, navigate]);
 
     const bindVideoRef = useCallback((node: HTMLVideoElement | null) => {
         videoRef.current = node;
@@ -733,20 +721,10 @@ export function AerisLanding(props: AerisLandingProps) {
                         type="button"
                         disabled={falling}
                         onClick={() => {
-                            void enterWithAuth("/canvas");
+                            void enterCanvas();
                         }}
                     >
                         {t("Enter Canvas")}
-                    </button>
-                    <button
-                        className="aeris-enter aeris-enter--ghost"
-                        type="button"
-                        disabled={falling}
-                        onClick={() => {
-                            void enterWithAuth("/dashboard");
-                        }}
-                    >
-                        {t("Enter Console")}
                     </button>
                 </div>
             </div>

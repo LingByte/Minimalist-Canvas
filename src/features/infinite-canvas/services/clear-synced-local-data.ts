@@ -1,5 +1,5 @@
+import { notifyGenerationLogsCleared } from "@canvas/services/api/generation-assets";
 import { kvStore, type KvStore } from "@canvas/services/fs-store";
-import { hydrateUserAssetsFromServer } from "@canvas/services/user-asset-sync";
 import { useAssetStore } from "@canvas/stores/use-asset-store";
 
 const imageLogStore = kvStore("image_generation_logs");
@@ -20,11 +20,8 @@ async function countStore(store: KvStore) {
 }
 
 /**
- * Clear local copies that already live in the backend:
- * - image/video generation history → generation_assets
- * - my assets metadata → user_assets
- *
- * Keeps canvas projects, config, and local media blobs (still needed offline / for nodes).
+ * Clear local generation history and asset metadata.
+ * Keeps canvas projects, config, and local media blobs.
  */
 export async function clearSyncedLocalData(): Promise<ClearedSyncedLocalData> {
   const [imageLogs, videoLogs, assets] = await Promise.all([
@@ -35,7 +32,7 @@ export async function clearSyncedLocalData(): Promise<ClearedSyncedLocalData> {
 
   await Promise.all([imageLogStore.clear(), videoLogStore.clear()]);
   useAssetStore.getState().replaceAssets([]);
-  await hydrateUserAssetsFromServer().catch(() => undefined);
+  notifyGenerationLogsCleared();
 
   return { imageLogs, videoLogs, assets };
 }

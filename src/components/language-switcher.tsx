@@ -28,9 +28,7 @@ import {
   INTERFACE_LANGUAGE_OPTIONS,
   normalizeInterfaceLanguage,
 } from '@/i18n/languages'
-import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { useAuthStore } from '@/stores/auth-store'
 
 /**
  * Always mutates the host (site-wide) i18n instance so canvas and the rest of
@@ -38,7 +36,6 @@ import { useAuthStore } from '@/stores/auth-store'
  */
 export function LanguageSwitcher() {
   const { t } = useTranslation()
-  const user = useAuthStore((s) => s.auth.user)
   const [hostLanguage, setHostLanguage] = useState(hostI18n.language)
 
   useEffect(() => {
@@ -50,22 +47,12 @@ export function LanguageSwitcher() {
   }, [])
 
   const currentLanguage = normalizeInterfaceLanguage(hostLanguage)
-  const handleChangeLanguage = useCallback(
-    async (code: string) => {
-      await hostI18n.changeLanguage(code)
-      const canvasLocale = hostToCanvasLocale(code)
-      localStorage.setItem('minimalist-canvas:locale', canvasLocale)
-      void canvasI18n.changeLanguage(canvasLocale)
-      if (user) {
-        try {
-          await api.put('/api/user/self', { language: code })
-        } catch {
-          // Best-effort persistence; don't block the UI on failure
-        }
-      }
-    },
-    [user]
-  )
+  const handleChangeLanguage = useCallback(async (code: string) => {
+    await hostI18n.changeLanguage(code)
+    const canvasLocale = hostToCanvasLocale(code)
+    localStorage.setItem('minimalist-canvas:locale', canvasLocale)
+    void canvasI18n.changeLanguage(canvasLocale)
+  }, [])
 
   const items: MenuProps['items'] = useMemo(
     () =>

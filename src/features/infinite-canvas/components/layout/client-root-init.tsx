@@ -3,17 +3,8 @@ import { useEffect, useRef } from "react";
 import { App } from "antd";
 import { useTranslation } from "react-i18next";
 
-import { hydrateUserAssetsFromServer } from "@canvas/services/user-asset-sync";
-import {
-    flushUserCanvasConfigToServer,
-    hydrateUserCanvasConfigFromServer,
-    waitForUserCanvasConfigHydration,
-} from "@canvas/services/user-canvas-config-sync";
-import { restoreCanvasProjectsIfLocalEmpty } from "@canvas/services/user-canvas-project-sync";
 import { createModelChannel, useConfigStore } from "@canvas/stores/use-config-store";
 import { usePromptSourceStore } from "@canvas/stores/use-prompt-source-store";
-import { bootstrapAuthentication } from "@/lib/api";
-import { useAuthStore } from "@/stores/auth-store";
 
 export function ClientRootInit({ children }: { children: ReactNode }) {
     const { message } = App.useApp();
@@ -21,21 +12,10 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     const handledConfigParams = useRef(false);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const loadSources = usePromptSourceStore((state) => state.loadSources);
-    const isAuthenticated = useAuthStore((s) => Boolean(s.auth.user && s.auth.accessToken));
-
-    // Restore any existing session in the background — the app renders
-    // without it; hydration kicks in when this flips isAuthenticated.
-    useEffect(() => {
-        void bootstrapAuthentication().catch(() => undefined);
-    }, []);
 
     useEffect(() => {
-        if (!isAuthenticated) return;
         void loadSources().catch(() => undefined);
-        void hydrateUserAssetsFromServer().catch(() => undefined);
-        void hydrateUserCanvasConfigFromServer().catch(() => undefined);
-        void restoreCanvasProjectsIfLocalEmpty();
-    }, [isAuthenticated, loadSources]);
+    }, [loadSources]);
 
     useEffect(() => {
         if (handledConfigParams.current) return;
@@ -50,40 +30,36 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
         searchParams.delete("apikey");
         window.history.replaceState(null, "", `${window.location.pathname}${searchParams.size ? `?${searchParams}` : ""}${window.location.hash}`);
 
-        void (async () => {
-            await waitForUserCanvasConfigHydration().catch(() => undefined);
-            const config = useConfigStore.getState().config;
-            const firstChannel = config.channels[0];
-            const channels = firstChannel
-                ? config.channels.map((channel, index) =>
-                      index === 0
-                          ? {
-                                ...channel,
-                                ...(baseUrl ? { baseUrl } : {}),
-                                ...(apiKey ? { apiKey } : {}),
-                            }
-                          : channel,
-                  )
-                : [
-                      createModelChannel({
-                          id: "default",
-                          name: t("config.channels.defaultName"),
-                          baseUrl: baseUrl || undefined,
-                          apiKey: apiKey || "",
-                      }),
-                  ];
-            useConfigStore.setState({
-                config: {
-                    ...config,
-                    channels,
-                    ...(baseUrl ? { baseUrl } : {}),
-                    ...(apiKey ? { apiKey } : {}),
-                },
-            });
-            await flushUserCanvasConfigToServer();
-            openConfigDialog(false);
-            message.success(t("config.importedDirectConfig"));
-        })();
+        const config = useConfigStore.getState().config;
+        const firstChannel = config.channels[0];
+        const channels = firstChannel
+            ? config.channels.map((channel, index) =>
+                  index === 0
+                      ? {
+                            ...channel,
+                            ...(baseUrl ? { baseUrl } : {}),
+                            ...(apiKey ? { apiKey } : {}),
+                        }
+                      : channel,
+              )
+            : [
+                  createModelChannel({
+                      id: "default",
+                      name: t("config.channels.defaultName"),
+                      baseUrl: baseUrl || undefined,
+                      apiKey: apiKey || "",
+                  }),
+              ];
+        useConfigStore.setState({
+            config: {
+                ...config,
+                channels,
+                ...(baseUrl ? { baseUrl } : {}),
+                ...(apiKey ? { apiKey } : {}),
+            },
+        });
+        openConfigDialog(false);
+        message.success(t("config.importedDirectConfig"));
     }, [message, openConfigDialog, t]);
 
     return <>{children}</>;

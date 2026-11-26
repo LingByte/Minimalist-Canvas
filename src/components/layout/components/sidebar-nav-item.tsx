@@ -18,12 +18,19 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { motion, useReducedMotion } from 'motion/react'
 import type { LucideIcon } from 'lucide-react'
-import type { MouseEvent, ReactNode } from 'react'
+import type { MouseEvent } from 'react'
 import { Link } from 'react-router-dom'
 
 import {
-  sidebarNavIndicatorClassName,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
+  sidebarNavIconChipClassName,
   sidebarNavItemClassName,
+  sidebarNavLabelClassName,
 } from '@/components/layout/utils/sidebar-nav-styles'
 import { cn } from '@/lib/utils'
 
@@ -31,9 +38,9 @@ export const SIDEBAR_NAV_PILL_LAYOUT_ID = 'desktop-sidebar-nav-pill'
 
 const pillTransition = {
   type: 'spring' as const,
-  stiffness: 420,
-  damping: 34,
-  mass: 0.55,
+  stiffness: 480,
+  damping: 36,
+  mass: 0.5,
 }
 
 type SidebarNavItemProps = {
@@ -44,7 +51,8 @@ type SidebarNavItemProps = {
   layoutId?: string
   onClick?: (event: MouseEvent) => void
   className?: string
-  children?: ReactNode
+  tooltipSide?: 'top' | 'right' | 'bottom' | 'left'
+  showLabel?: boolean
 }
 
 export function SidebarNavItem({
@@ -55,42 +63,54 @@ export function SidebarNavItem({
   layoutId = SIDEBAR_NAV_PILL_LAYOUT_ID,
   onClick,
   className,
+  tooltipSide = 'right',
+  showLabel = true,
 }: SidebarNavItemProps) {
   const shouldReduce = useReducedMotion()
 
   return (
-    <Link
-      to={href}
-      onClick={onClick}
-      aria-current={active ? 'page' : undefined}
-      className={cn(sidebarNavItemClassName(active), className)}
-    >
-      {active && !shouldReduce ? (
-        <motion.span
-          layoutId={layoutId}
-          aria-hidden
-          className='pointer-events-none absolute inset-x-1 inset-y-0.5 z-0 rounded-xl bg-sky-500/12 dark:bg-sky-400/15'
-          transition={pillTransition}
-        />
-      ) : null}
-      {active && shouldReduce ? (
-        <span
-          aria-hidden
-          className='pointer-events-none absolute inset-x-1 inset-y-0.5 z-0 rounded-xl bg-sky-500/12 dark:bg-sky-400/15'
-        />
-      ) : null}
-      {active ? (
-        <motion.span
-          layoutId={shouldReduce ? undefined : `${layoutId}-underline`}
-          aria-hidden
-          className={cn(sidebarNavIndicatorClassName(), 'z-10')}
-          transition={pillTransition}
-        />
-      ) : null}
-      <Icon className='relative z-10 size-[1.3rem] stroke-[1.75]' aria-hidden />
-      <span className='relative z-10 max-w-full truncate text-center text-[10px] leading-tight font-medium tracking-wide'>
-        {title}
-      </span>
-    </Link>
+    <TooltipProvider delay={280}>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Link
+              to={href}
+              onClick={onClick}
+              aria-current={active ? 'page' : undefined}
+              aria-label={title}
+              data-active={active ? 'true' : undefined}
+              className={cn(sidebarNavItemClassName(active), className)}
+            />
+          }
+        >
+          <span className={sidebarNavIconChipClassName(active)}>
+            {active && !shouldReduce ? (
+              <motion.span
+                layoutId={layoutId}
+                aria-hidden
+                className='pointer-events-none absolute inset-0 z-0 rounded-[0.7rem] bg-stone-900 dark:bg-stone-100'
+                transition={pillTransition}
+              />
+            ) : null}
+            {active && shouldReduce ? (
+              <span
+                aria-hidden
+                className='pointer-events-none absolute inset-0 z-0 rounded-[0.7rem] bg-stone-900 dark:bg-stone-100'
+              />
+            ) : null}
+            <Icon
+              className='relative z-10 size-[1.15rem] stroke-[2]'
+              aria-hidden
+            />
+          </span>
+          {showLabel ? (
+            <span className={sidebarNavLabelClassName(active)}>{title}</span>
+          ) : null}
+        </TooltipTrigger>
+        <TooltipContent side={tooltipSide} sideOffset={10}>
+          {title}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   )
 }

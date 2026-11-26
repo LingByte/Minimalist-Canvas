@@ -11,7 +11,6 @@ import { I18nextProvider, useTranslation } from "react-i18next";
 import { Toaster } from "sonner";
 
 import { ClientRootInit } from "@canvas/components/layout/client-root-init";
-import { LoginRequiredDialog } from "@/features/auth/components/login-required-dialog";
 import { hostToCanvasLocale, type AppLocale } from "@canvas/i18n";
 import { toIntlLocale } from "@/i18n/languages";
 import { getAntThemeConfig } from "@canvas/lib/app-theme";
@@ -145,7 +144,6 @@ function AppProvidersInner({ children, embedded = false, rootId }: AppProvidersP
                     <div id={CANVAS_MESSAGE_HOST_ID} aria-live="polite" />
                     <QueryClientProvider client={queryClient}>
                         <ClientRootInit>{children}</ClientRootInit>
-                        <LoginRequiredDialog />
                         <Toaster
                             theme={theme}
                             richColors

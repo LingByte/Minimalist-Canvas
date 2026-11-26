@@ -19,13 +19,9 @@ For commercial licensing, please contact support@quantumnous.com
 /// <reference types="@rsbuild/core/types" />
 
 interface ImportMetaEnv {
-  /** Comma-separated local dev plugin URLs (canvas plugin watch mode). */
-  readonly VITE_DEV_PLUGINS?: string
   readonly VITE_ANALYTICS_GA4_ID?: string
   readonly VITE_ANALYTICS_BAIDU_ID?: string
   readonly VITE_DOC_URL?: string
-  readonly VITE_PLUGIN_REGISTRY_URL?: string
-  readonly VITE_PLUGIN_REGISTRY_FALLBACK_URL?: string
   readonly VITE_REACT_APP_SERVER_URL?: string
   readonly VITE_REACT_APP_VERSION?: string
   /** When true/1/yes/on, public "Sign in" becomes one-click demo console entry. */

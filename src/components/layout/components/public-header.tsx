@@ -16,10 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Button, Skeleton } from 'antd'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { BrandIdentity } from '@/components/layout/components/brand-identity'
 import { SiteHeader } from '@/components/layout/components/site-header'
@@ -31,12 +30,9 @@ import {
   siteHeaderDividerClassName,
   siteHeaderNavItemLinkClassName,
 } from '@/components/layout/utils/top-nav-link-styles'
-import { ProfileDropdown } from '@/components/profile-dropdown'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { useDesktopSiteNavLinks } from '@/hooks/use-desktop-site-nav-links'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { cn } from '@/lib/utils'
-import { useAuthStore } from '@/stores/auth-store'
 
 export interface PublicHeaderProps {
   navLinks?: TopNavLink[]
@@ -53,8 +49,14 @@ export interface PublicHeaderProps {
   className?: string
 }
 
+const DEFAULT_NAV_LINKS: TopNavLink[] = [
+  { title: 'navigation.canvas', href: '/canvas' },
+  { title: 'navigation.image', href: '/image' },
+  { title: 'navigation.assets', href: '/assets' },
+  { title: 'navigation.config', href: '/config' },
+]
+
 function isNavLinkActive(pathname: string, href: string) {
-  if (href === '/home') return pathname === '/home'
   if (href === '/') return pathname === '/'
   return pathname === href || pathname.startsWith(`${href}/`)
 }
@@ -67,27 +69,26 @@ export function PublicHeader(props: PublicHeaderProps) {
     logo: customLogo,
     siteName: customSiteName,
     homeUrl = '/',
-    showAuthButtons = true,
     hideDesktopNav = false,
     hideBrand = false,
     className,
   } = props
 
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const { pathname } = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
-  const { auth } = useAuthStore()
   const { systemName, logo: systemLogo, loading } = useSystemConfig()
-  const dynamicLinks = useDesktopSiteNavLinks()
-
-  const user = auth.user
-  const isAuthenticated = !!user
   const displaySiteName = customSiteName || systemName
 
   const links = useMemo(
-    () => (navLinks && navLinks.length > 0 ? navLinks : dynamicLinks),
-    [dynamicLinks, navLinks]
+    () =>
+      (navLinks && navLinks.length > 0 ? navLinks : DEFAULT_NAV_LINKS).map(
+        (link) => ({
+          ...link,
+          title: t(link.title),
+        })
+      ),
+    [navLinks, t]
   )
 
   const renderNavLink = (
@@ -157,29 +158,6 @@ export function PublicHeader(props: PublicHeaderProps) {
     )
   }
 
-  let authContent: React.ReactNode = null
-  if (showAuthButtons) {
-    if (loading) {
-      authContent = (
-        <Skeleton.Button active size='small' style={{ width: 80 }} />
-      )
-    } else if (isAuthenticated) {
-      authContent = <ProfileDropdown />
-    } else {
-      authContent = (
-        <Link to='/sign-in'>
-          <Button
-            type='primary'
-            size='small'
-            className='h-8 rounded-full px-3.5 text-xs font-medium'
-          >
-            {t('Sign in')}
-          </Button>
-        </Link>
-      )
-    }
-  }
-
   const brand = hideBrand ? null : (
     <Link to={homeUrl} className={siteHeaderBrandClassName}>
       {brandContent}
@@ -205,26 +183,11 @@ export function PublicHeader(props: PublicHeaderProps) {
         {!hideDesktopNav && (showLanguageSwitcher || showThemeSwitch) ? (
           <span aria-hidden className={siteHeaderDividerClassName} />
         ) : null}
-        {hideDesktopNav ? null : authContent}
       </div>
 
       <div className='flex items-center gap-1.5 sm:hidden'>
         {showLanguageSwitcher ? <LanguageSwitcher /> : null}
         {showThemeSwitch ? <ThemeSwitch /> : null}
-        {showAuthButtons && !loading && isAuthenticated ? (
-          <ProfileDropdown />
-        ) : null}
-        {showAuthButtons && !loading && !isAuthenticated ? (
-          <Link to='/sign-in'>
-            <Button
-              type='primary'
-              size='small'
-              className='h-8 rounded-full px-3 text-xs font-medium'
-            >
-              {t('Sign in')}
-            </Button>
-          </Link>
-        ) : null}
       </div>
     </>
   )
@@ -286,38 +249,6 @@ export function PublicHeader(props: PublicHeaderProps) {
             })
           )}
         </nav>
-
-        {showAuthButtons ? (
-          <div
-            className={cn(
-              'transition-all duration-500',
-              mobileOpen
-                ? 'translate-y-0 opacity-100'
-                : 'translate-y-4 opacity-0'
-            )}
-          >
-            {isAuthenticated ? (
-              <button
-                type='button'
-                onClick={() => {
-                  setMobileOpen(false)
-                  navigate('/dashboard')
-                }}
-                className='bg-foreground text-background inline-flex h-11 w-full items-center justify-center rounded-full text-sm font-medium transition-opacity hover:opacity-90'
-              >
-                {t('Go to Dashboard')}
-              </button>
-            ) : (
-              <Link
-                to='/sign-in'
-                onClick={() => setMobileOpen(false)}
-                className='bg-foreground text-background inline-flex h-11 w-full items-center justify-center rounded-full text-sm font-medium transition-opacity hover:opacity-90'
-              >
-                {t('Sign in')}
-              </Link>
-            )}
-          </div>
-        ) : null}
       </div>
     </div>
   )

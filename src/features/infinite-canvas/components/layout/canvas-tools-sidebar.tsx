@@ -1,5 +1,4 @@
-import { LayoutDashboard, Menu } from "lucide-react";
-import { Tooltip } from "antd";
+import { Menu, Settings2 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { startTransition, useCallback, useState, type MouseEvent } from "react";
@@ -7,13 +6,21 @@ import { startTransition, useCallback, useState, type MouseEvent } from "react";
 import { navigationTools, navigationToolActive, type NavigationToolSlug } from "@canvas/constant/navigation-tools";
 import { AppConfigModal } from "@canvas/components/layout/app-config-modal";
 import { MobileNavDrawer } from "@canvas/components/layout/mobile-nav-drawer";
-import { UserStatusActions } from "@canvas/components/layout/user-status-actions";
+import { AnimatedThemeToggler } from "@canvas/components/ui/animated-theme-toggler";
 import { SidebarNavItem } from "@/components/layout/components/sidebar-nav-item";
-import { sidebarNavItemClassName } from "@/components/layout/utils/sidebar-nav-styles";
+import { Button } from "@/components/ui/button";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { SmartImage } from "@/components/smart-image";
 import { useCanvasHost } from "@canvas/integration/canvas-host-context";
 import { DEFAULT_LOGO, DEFAULT_SYSTEM_NAME } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { useConfigStore } from "@canvas/stores/use-config-store";
+import { useThemeStore } from "@canvas/stores/use-theme-store";
 
 function activeToolFromPath(pathname: string): NavigationToolSlug | undefined {
     const slug = pathname.split("/").filter(Boolean)[0];
@@ -26,13 +33,16 @@ function isModifiedClick(event: MouseEvent) {
     return event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0;
 }
 
-/** Canvas workbench chrome: vertical tool rail (replaces the old top header nav). */
+/** Canvas workbench chrome: vertical tool rail. */
 export function CanvasToolsSidebar(props: { className?: string }) {
     const { t } = useTranslation();
     const { pathname } = useLocation();
     const navigate = useNavigate();
     const { embedded, homeHref, logo, brandName } = useCanvasHost();
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
+    const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
+    const theme = useThemeStore((state) => state.theme);
+    const setTheme = useThemeStore((state) => state.setTheme);
 
     const activeToolSlug = activeToolFromPath(pathname);
     const brand = brandName || DEFAULT_SYSTEM_NAME;
@@ -46,7 +56,7 @@ export function CanvasToolsSidebar(props: { className?: string }) {
                 navigate(href);
             });
         },
-        [navigate]
+        [navigate],
     );
 
     const logoImage = (
@@ -59,19 +69,11 @@ export function CanvasToolsSidebar(props: { className?: string }) {
     );
 
     const homeLink = embedded ? (
-        <a
-            href={homeHref}
-            className="flex items-center justify-center transition-opacity hover:opacity-90"
-            aria-label={brand}
-        >
+        <a href={homeHref} className="flex items-center justify-center transition-opacity hover:opacity-90" aria-label={brand}>
             {logoImage}
         </a>
     ) : (
-        <Link
-            to="/home"
-            className="flex items-center justify-center transition-opacity hover:opacity-90"
-            aria-label={brand}
-        >
+        <Link to="/" className="flex items-center justify-center transition-opacity hover:opacity-90" aria-label={brand}>
             {logoImage}
         </Link>
     );
@@ -81,30 +83,13 @@ export function CanvasToolsSidebar(props: { className?: string }) {
             <aside
                 className={cn(
                     "bg-sidebar text-sidebar-foreground border-sidebar-border hidden h-dvh w-[4.75rem] shrink-0 flex-col items-center border-r md:flex",
-                    props.className
+                    props.className,
                 )}
                 aria-label={t("topNav.navigation")}
             >
                 <div className="flex h-14 w-full items-center justify-center px-2">{homeLink}</div>
 
-                <div className="w-full px-1.5 pb-1">
-                    <Tooltip title={t("Back to Dashboard")} placement="right">
-                        <Link
-                            to="/dashboard"
-                            onClick={(event) => go("/dashboard", event)}
-                            className={sidebarNavItemClassName(false)}
-                        >
-                            <LayoutDashboard className="size-[1.3rem] stroke-[1.75]" aria-hidden />
-                            <span className="max-w-full truncate text-center text-[10px] leading-tight font-medium tracking-wide">
-                                {t("Console")}
-                            </span>
-                        </Link>
-                    </Tooltip>
-                </div>
-
-                <div className="bg-sidebar-border mx-3 mb-1 h-px w-10 shrink-0" />
-
-                <nav className="flex w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto px-1.5 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <nav className="flex w-full flex-1 flex-col items-center gap-1 overflow-y-auto px-1.5 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     {navigationTools.map((tool) => {
                         const href = `/${tool.slug}`;
                         return (
@@ -122,40 +107,74 @@ export function CanvasToolsSidebar(props: { className?: string }) {
                 </nav>
 
                 <div className="border-sidebar-border flex w-full flex-col items-center gap-2 border-t px-1.5 py-3">
-                    <UserStatusActions showConfig={true} orientation="vertical" />
+                    <TooltipProvider delay={280}>
+                        <Tooltip>
+                            <TooltipTrigger
+                                render={
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        data-tour="config-settings-button"
+                                        className="text-sidebar-foreground/55 hover:text-sidebar-foreground size-9 rounded-[0.7rem] border border-transparent hover:border-stone-200/80 hover:bg-stone-100/80 dark:hover:border-stone-700/80 dark:hover:bg-stone-800/70"
+                                        onClick={() => openConfigDialog(false)}
+                                        aria-label={t("navigation.config")}
+                                    />
+                                }
+                            >
+                                <Settings2 className="size-[1.15rem] stroke-[2]" />
+                            </TooltipTrigger>
+                            <TooltipContent side="right" sideOffset={10}>
+                                {t("navigation.config")}
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                    <AnimatedThemeToggler
+                        theme={theme}
+                        onThemeChange={setTheme}
+                        className="text-sidebar-foreground/55 hover:text-sidebar-foreground inline-flex size-9 items-center justify-center rounded-[0.7rem] border border-transparent transition-colors hover:border-stone-200/80 hover:bg-stone-100/80 dark:hover:border-stone-700/80 dark:hover:bg-stone-800/70"
+                        aria-label={t(theme === "dark" ? "topNav.lightTheme" : "topNav.darkTheme")}
+                        title={t(theme === "dark" ? "topNav.lightTheme" : "topNav.darkTheme")}
+                    />
                 </div>
             </aside>
 
             <div className="border-border bg-background flex h-12 w-full shrink-0 items-center justify-between gap-2 border-b px-2 md:hidden">
                 <div className="flex min-w-0 items-center gap-1.5">
-                    <button
+                    <Button
                         type="button"
-                        className="inline-flex size-8 items-center justify-center rounded-full text-foreground transition hover:bg-sky-500/10 hover:text-sky-700"
+                        variant="ghost"
+                        size="icon"
+                        className="size-8"
                         onClick={() => setMobileNavOpen(true)}
                         aria-label={t("topNav.openMenu")}
                         aria-expanded={mobileNavOpen}
                     >
                         <Menu className="size-5" />
-                    </button>
+                    </Button>
                     {homeLink}
-                    <Link
-                        to="/dashboard"
-                        className="inline-flex h-8 items-center gap-1 rounded-full px-2 text-xs font-medium text-sky-700 transition hover:bg-sky-500/10 dark:text-sky-300"
-                    >
-                        <LayoutDashboard className="size-3.5" />
-                        {t("Console")}
-                    </Link>
                 </div>
                 <div className="flex items-center gap-0.5">
-                    <UserStatusActions showConfig={true} compactOnMobile />
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-8"
+                        onClick={() => openConfigDialog(false)}
+                        aria-label={t("navigation.config")}
+                    >
+                        <Settings2 className="size-4" />
+                    </Button>
+                    <AnimatedThemeToggler
+                        theme={theme}
+                        onThemeChange={setTheme}
+                        className="inline-flex size-8 items-center justify-center rounded-md"
+                        aria-label={t(theme === "dark" ? "topNav.lightTheme" : "topNav.darkTheme")}
+                    />
                 </div>
             </div>
 
-            <MobileNavDrawer
-                open={mobileNavOpen}
-                activeToolSlug={activeToolSlug}
-                onClose={() => setMobileNavOpen(false)}
-            />
+            <MobileNavDrawer open={mobileNavOpen} activeToolSlug={activeToolSlug} onClose={() => setMobileNavOpen(false)} />
             <AppConfigModal />
         </>
     );

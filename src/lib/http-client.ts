@@ -20,23 +20,14 @@ import axios, { type AxiosRequestConfig } from 'axios'
 import { t } from 'i18next'
 import { toast } from 'sonner'
 
-import {
-  applyAuthRotation,
-  clearAuthentication,
-  refreshAuthentication,
-} from '@/lib/auth-session'
 import { createTauriAdapter } from '@/lib/tauri-http-adapter'
 import { getServerErrorMessageKey } from '@/lib/server-error-message'
-import { useAuthStore } from '@/stores/auth-store'
 
 declare module 'axios' {
   export interface AxiosRequestConfig {
     skipBusinessError?: boolean
     skipErrorHandler?: boolean
     disableDuplicate?: boolean
-    skipAuthRefresh?: boolean
-    authRetry?: boolean
-    acceptAuthRotation?: boolean
   }
 }
 
@@ -60,8 +51,7 @@ api.get = ((url: string, config: ApiRequestConfig = {}) => {
   if (config.disableDuplicate) return originalGet(url, config)
 
   const params = config.params ? JSON.stringify(config.params) : '{}'
-  const sessionSID = useAuthStore.getState().auth.session?.sid || 'anonymous'
-  const key = `${sessionSID}:${url}?${params}`
+  const key = `anonymous:${url}?${params}`
   const existingRequest = inFlightGet.get(key)
   if (existingRequest) return existingRequest
 
@@ -71,39 +61,6 @@ api.get = ((url: string, config: ApiRequestConfig = {}) => {
   inFlightGet.set(key, request)
   return request
 }) as typeof api.get
-
-function promptSignIn(_reason: 'required' | 'expired' = 'required'): void {
-  // Desktop is local-first; do not open auth UI on incidental 401s.
-}
-
-// Raw backend auth failures (e.g. "Unauthorized, not logged in and no access
-// token provided") should never reach the user — swap them for a friendly,
-// localized message.
-const UNAUTHENTICATED_PATTERNS = [
-  /not logged in/i,
-  /no access token/i,
-  /unauthorized/i,
-  /unauthenticated/i,
-  /未登录/,
-  /未授权/,
-]
-
-function isUnauthenticatedMessage(message: unknown): boolean {
-  return (
-    typeof message === 'string' &&
-    UNAUTHENTICATED_PATTERNS.some((pattern) => pattern.test(message))
-  )
-}
-
-function unauthenticatedMessage(): string {
-  return useAuthStore.getState().auth.user
-    ? t('Session expired!')
-    : t('Please sign in first')
-}
-
-function unauthenticatedReason(): 'required' | 'expired' {
-  return useAuthStore.getState().auth.user ? 'expired' : 'required'
-}
 
 function resolveErrorMessage(payload: unknown, fallback?: string): string {
   const messageKey = getServerErrorMessageKey(payload)
@@ -116,99 +73,25 @@ function resolveErrorMessage(payload: unknown, fallback?: string): string {
     typeof data === 'object' && data !== null
       ? (data as { message?: unknown }).message
       : undefined
-  if (isUnauthenticatedMessage(raw)) return unauthenticatedMessage()
   return typeof raw === 'string' && raw ? raw : fallback || t('Request failed')
-}
-
-function isUnauthenticatedResolvedMessage(message: string): boolean {
-  return (
-    message === t('Please sign in first') ||
-    message === t('Session expired!') ||
-    isUnauthenticatedMessage(message)
-  )
 }
 
 api.interceptors.response.use(
   (response) => {
-    if (response.config.acceptAuthRotation && response.data?.success === true) {
-      applyAuthRotation(response.data.data)
-    }
-
     if (
       !response.config.skipBusinessError &&
       typeof response.data?.success === 'boolean' &&
       !response.data.success
     ) {
-      const message = resolveErrorMessage(response.data)
-      if (isUnauthenticatedResolvedMessage(message)) {
-        promptSignIn(unauthenticatedReason())
-      } else {
-        toast.error(message)
-      }
+      toast.error(resolveErrorMessage(response.data))
     }
     return response
   },
-  async (error) => {
+  (error) => {
     const config = error?.config as ApiRequestConfig | undefined
-    const skipErrorHandler = config?.skipErrorHandler
-    const status = error?.response?.status
-
-    if (status === 401) {
-      // No session to refresh — anonymous/local-only usage must not be
-      // bounced to the sign-in page by incidental API calls.
-      const hadSession = Boolean(
-        useAuthStore.getState().auth.session || useAuthStore.getState().auth.accessToken
-      )
-      if (config && !config.skipAuthRefresh && !config.authRetry && hadSession) {
-        config.authRetry = true
-        const outcome = await refreshAuthentication()
-        if (outcome.kind === 'authenticated') {
-          const token = useAuthStore.getState().auth.accessToken
-          if (token) {
-            config.headers = {
-              ...config.headers,
-              Authorization: `Bearer ${token}`,
-            }
-          }
-          return api.request(config)
-        }
-
-        if (outcome.kind === 'anonymous' || outcome.kind === 'out_of_sync') {
-          if (!skipErrorHandler) promptSignIn('expired')
-        }
-      } else if (config?.authRetry) {
-        clearAuthentication(false)
-        if (!skipErrorHandler) promptSignIn('expired')
-      } else if (!skipErrorHandler) {
-        promptSignIn(hadSession ? 'expired' : 'required')
-      }
-    } else if (!skipErrorHandler) {
-      const message = resolveErrorMessage(error, error?.message)
-      if (isUnauthenticatedResolvedMessage(message)) {
-        promptSignIn(unauthenticatedReason())
-      } else {
-        toast.error(message)
-      }
+    if (!config?.skipErrorHandler) {
+      toast.error(resolveErrorMessage(error, error?.message))
     }
     throw error
   }
 )
-
-api.interceptors.request.use(async (config) => {
-  const auth = useAuthStore.getState().auth
-  const refreshBefore = Math.floor(Date.now() / 1000) + 60
-  if (
-    auth.accessToken &&
-    auth.accessExpiresAt &&
-    auth.accessExpiresAt <= refreshBefore &&
-    !config.skipAuthRefresh
-  ) {
-    await refreshAuthentication().catch(() => undefined)
-  }
-
-  const accessToken = useAuthStore.getState().auth.accessToken
-  if (accessToken) {
-    config.headers.Authorization = `Bearer ${accessToken}`
-  }
-  return config
-})

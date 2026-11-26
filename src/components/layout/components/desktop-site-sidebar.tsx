@@ -16,57 +16,31 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import {
-  BookMarked,
-  BookOpen,
-  Boxes,
-  CircleHelp,
-  Frame,
-  Gift,
-  History,
-  Home,
-  LayoutDashboard,
-  ListTodo,
-  ScrollText,
-  Sparkles,
-  type LucideIcon,
-} from 'lucide-react'
+import { FileText, Frame, Images, Settings2, Sparkles, type LucideIcon } from 'lucide-react'
 import { startTransition, useCallback, useMemo, type MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { SmartImage } from '@/components/smart-image'
-import { ProfileDropdown } from '@/components/profile-dropdown'
 import { SidebarNavItem } from '@/components/layout/components/sidebar-nav-item'
-import { useDesktopSiteNavLinks } from '@/hooks/use-desktop-site-nav-links'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { DEFAULT_LOGO } from '@/lib/constants'
 import { cn } from '@/lib/utils'
-import { useAuthStore } from '@/stores/auth-store'
 
-const NAV_ICONS: Record<string, LucideIcon> = {
-  '/home': Home,
-  '/dashboard': LayoutDashboard,
-  '/usage-logs/common': ScrollText,
-  '/usage-logs/task': ListTodo,
-  '/canvas': Frame,
-  '/generation-logs': History,
-  '/prompt-library': BookMarked,
-  '/creative-circle': Sparkles,
-  '/pricing': Boxes,
-  '/docs': BookOpen,
-  '/faq': CircleHelp,
-}
-
-function navIconFor(href: string): LucideIcon {
-  if (href.startsWith('/campaigns/')) return Gift
-  return NAV_ICONS[href] ?? Boxes
-}
+const LOCAL_NAV: { href: string; titleKey: string; icon: LucideIcon }[] = [
+  { href: '/canvas', titleKey: 'navigation.canvas', icon: Frame },
+  { href: '/image', titleKey: 'navigation.image', icon: Sparkles },
+  { href: '/assets', titleKey: 'navigation.assets', icon: Images },
+  { href: '/prompts', titleKey: 'navigation.prompts', icon: FileText },
+  { href: '/config', titleKey: 'navigation.config', icon: Settings2 },
+]
 
 function isNavActive(pathname: string, href: string) {
-  if (href === '/home') return pathname === '/home'
   if (href === '/canvas') {
     return pathname === '/canvas' || pathname.startsWith('/canvas/')
+  }
+  if (href === '/image') {
+    return pathname === '/image' || pathname === '/video' || pathname.startsWith('/image/')
   }
   return pathname === href || pathname.startsWith(`${href}/`)
 }
@@ -79,19 +53,16 @@ export function DesktopSiteSidebar(props: { className?: string }) {
   const { t } = useTranslation()
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  const links = useDesktopSiteNavLinks()
   const { systemName, logo } = useSystemConfig()
-  const user = useAuthStore((state) => state.auth.user)
-  const isAuthenticated = Boolean(user)
   const logoUrl = logo || DEFAULT_LOGO
 
   const items = useMemo(
     () =>
-      links.map((link) => ({
+      LOCAL_NAV.map((link) => ({
         ...link,
-        icon: navIconFor(link.href),
+        title: t(link.titleKey),
       })),
-    [links]
+    [t]
   )
 
   const go = useCallback(
@@ -111,11 +82,11 @@ export function DesktopSiteSidebar(props: { className?: string }) {
         'bg-sidebar text-sidebar-foreground border-sidebar-border flex h-dvh w-[4.75rem] shrink-0 flex-col items-center border-r',
         props.className
       )}
-      aria-label={t('Primary')}
+      aria-label={t('topNav.navigation')}
     >
       <Link
-        to='/home'
-        onClick={(event) => go('/home', event)}
+        to='/'
+        onClick={(event) => go('/', event)}
         className='flex h-14 w-full items-center justify-center px-2 transition-opacity hover:opacity-90'
         aria-label={systemName}
       >
@@ -127,7 +98,7 @@ export function DesktopSiteSidebar(props: { className?: string }) {
         />
       </Link>
 
-      <nav className='mt-1 flex w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto px-1.5 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'>
+      <nav className='mt-1 flex w-full flex-1 flex-col items-center gap-1 overflow-y-auto px-1.5 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'>
         {items.map((item) => (
           <SidebarNavItem
             key={item.href}
@@ -139,21 +110,6 @@ export function DesktopSiteSidebar(props: { className?: string }) {
           />
         ))}
       </nav>
-
-      <div className='border-sidebar-border flex w-full flex-col items-center gap-2 border-t px-2 py-3'>
-        {isAuthenticated ? (
-          <div className='flex w-full justify-center'>
-            <ProfileDropdown />
-          </div>
-        ) : (
-          <Link
-            to='/sign-in'
-            className='inline-flex h-8 w-full items-center justify-center rounded-full border border-sky-500/35 text-[11px] font-medium tracking-wide text-sky-700 transition hover:bg-sky-500/10 dark:text-sky-300'
-          >
-            {t('Sign in')}
-          </Link>
-        )}
-      </div>
     </aside>
   )
 }

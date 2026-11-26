@@ -9,8 +9,6 @@ import { restoreHostI18n } from '@canvas/i18n'
 import { AppProviders } from '@canvas/components/layout/app-providers'
 import { initAnalytics } from '@canvas/lib/analytics'
 import { createCanvasRouter } from '@canvas/router'
-import { useConfigOnboardingStore } from '@canvas/stores/use-config-onboarding-store'
-
 import { CanvasHostProvider } from './canvas-host-context'
 import { CANVAS_BASENAME, CANVAS_ROOT_ID } from './constants'
 import { useHostLocaleSync } from './use-host-locale-sync'
@@ -40,7 +38,6 @@ function InfiniteCanvasRuntime() {
     // Ensure host remains the default i18n while canvas uses I18nextProvider.
     restoreHostI18n()
     return () => {
-      useConfigOnboardingStore.getState().stop(false)
       cleanupHostDocumentLocks()
       restoreHostThemeClass()
       restoreHostI18n()
@@ -64,7 +61,7 @@ function InfiniteCanvasRuntime() {
 
 export function InfiniteCanvasApp() {
   return (
-    <CanvasHostProvider value={{ embedded: true, homeHref: '/dashboard' }}>
+    <CanvasHostProvider value={{ embedded: true, homeHref: '/canvas' }}>
       <div
         id={CANVAS_ROOT_ID}
         className='bg-background text-foreground h-full min-h-0 w-full overflow-hidden'

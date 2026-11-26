@@ -1,8 +1,8 @@
-/** Fixed backend site for this desktop build — auth, prompts, assets APIs. */
-export const SITE_BASE_URL = "https://canvas.soulmy.top";
+/** Optional site origin for opening external pages / legacy site helpers. */
+export const SITE_BASE_URL = (import.meta.env.VITE_REACT_APP_SERVER_URL || "").replace(/\/+$/, "");
 
-/** Origin accepted by the backend's auth allowlist (its configured server_address). */
-export const SITE_ORIGIN = "https://canvas.soulmy.top";
+/** Origin accepted by optional remote site helpers. */
+export const SITE_ORIGIN = SITE_BASE_URL;
 
 function isDesktop() {
     return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -38,6 +38,7 @@ export function siteBaseUrl(): string {
 /** Build an absolute URL on the configured site, e.g. siteUrl("/profile"). */
 export function siteUrl(path: string): string {
     const base = siteBaseUrl();
+    if (!base) return path.startsWith("/") ? path : `/${path}`;
     return `${base}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
@@ -62,7 +63,6 @@ export async function openExternal(url: string): Promise<void> {
     window.open(url, "_blank", "noopener,noreferrer");
 }
 
-/** Open a page on the configured site in the system browser. */
 export async function openSitePage(path: string): Promise<void> {
     await openExternal(siteUrl(path));
 }
