@@ -1,10 +1,13 @@
 import i18n from "@canvas/i18n";
+import { CHARACTER_ASSET_SHEET_PROMPT } from "@canvas/services/api/builtin-prompt-templates";
 import { requestImageQuestion, type AiTextMessage } from "@canvas/services/api/image";
 import { resolveModelForCapability, type AiConfig } from "@canvas/stores/use-config-store";
 import type { CanvasResourceReference } from "@canvas/lib/canvas/canvas-resource-references";
 import type { CanvasGenerationMode } from "@canvas/types/canvas";
 
 export type OptimizablePromptMode = Extract<CanvasGenerationMode, "image" | "video" | "audio">;
+
+export type PromptOptimizePreset = "default" | "character-asset-sheet";
 
 export type PromptOptimizeInput = {
     mode: OptimizablePromptMode;
@@ -13,6 +16,12 @@ export type PromptOptimizeInput = {
     seconds?: number;
     /** Connected canvas assets the optimized prompt may cite by label. */
     references?: CanvasResourceReference[];
+    /** Optional user critique: only fix these issues, keep the rest. */
+    feedback?: string;
+    /** When refining, the previous optimizer output becomes the base draft. */
+    previousResult?: string;
+    /** Structural template to fill / enforce. */
+    preset?: PromptOptimizePreset;
 };
 
 // Fixed production spec the user provided — keep structure and field names verbatim.
@@ -44,13 +53,36 @@ function referenceBlock(references: CanvasResourceReference[] | undefined) {
     return lines.length ? `\n\nConnected canvas assets (cite them by label inside the prompt):\n${lines.join("\n")}` : "";
 }
 
+function feedbackBlock(feedback: string | undefined) {
+    const text = feedback?.trim();
+    if (!text) return "";
+    return `\n\nUser feedback (priority — only change what is needed to address these points; keep everything else):\n${text}`;
+}
+
 const OPTIMIZER_SYSTEM: Record<OptimizablePromptMode, (input: PromptOptimizeInput) => string> = {
-    image: (input) => `You are a prompt engineer for text-to-image generation. Rewrite the user's rough idea into one refined generation prompt.
+    image: (input) => {
+        if (input.preset === "character-asset-sheet") {
+            return `你是角色资产设定图提示词工程师。把用户的草稿改写成下方模板的完整生图提示词，填满所有 {占位符}，保留模板分区结构与中文标签原文。
+
+<template>
+${CHARACTER_ASSET_SHEET_PROMPT}
+</template>
+
+规则：
+- 严格保留模板的章节标题、分区布局要求、表情顺序与质量约束。
+- 用用户草稿里的角色信息替换全部 {占位符}；草稿未给出的字段，按角色气质合理补全，不要留下花括号占位符。
+- 若提供了用户反馈：只针对反馈修改，其余措辞与设定尽量保持上一版结果。
+- 输出语言与用户草稿一致（通常为中文）。
+- 只输出最终提示词正文，不要解释、不要 markdown、不要代码块。${feedbackBlock(input.feedback)}${referenceBlock(input.references)}`;
+        }
+        return `You are a prompt engineer for text-to-image generation. Rewrite the user's rough idea into one refined generation prompt.
 Rules:
 - Keep the user's intent and answer in the same language as their draft.
 - Make it concrete and visual: subject, action, environment, composition, lighting, color palette, style, camera/lens, quality cues — only details that help the renderer.
 - Keep every asset reference label (e.g. 图片 N / Image N) verbatim so existing bindings stay intact.
-- Output only the final prompt text — no explanations, no markdown, no quotes.${referenceBlock(input.references)}`,
+- If user feedback is provided, only change what is needed to address it; keep the rest stable.
+- Output only the final prompt text — no explanations, no markdown, no quotes.${feedbackBlock(input.feedback)}${referenceBlock(input.references)}`;
+    },
     video: (input) => `你是一名导演级分镜脚本撰写助手。把用户的粗略创意改写为下面的分镜表，逐字保留其结构、字段名与全局固定规则原文：
 
 <spec>
@@ -63,23 +95,33 @@ ${VIDEO_STORYBOARD_SPEC}
 - 镜号按成片时长安排：总时长约 ${input.seconds ?? 8} 秒，每镜约 3–8 秒，镜号连续编号（镜号 1、镜号 2…），含对白的镜头按规则 1–3 预留时间。
 - 将每个【自定义…】占位替换为具体、可拍的内容；不适用字段按模板要求写"无"。
 - 分镜表字段名与全局规则保持原文，内容描述使用与用户草稿相同的语言。
-- 只输出填好的分镜表，不要解释、不要代码块。${referenceBlock(input.references)}`,
+- 若提供了用户反馈：只针对反馈修改，其余镜头尽量保持。
+- 只输出填好的分镜表，不要解释、不要代码块。${feedbackBlock(input.feedback)}${referenceBlock(input.references)}`,
     audio: (input) => `You are a prompt engineer for audio/music generation. Rewrite the user's rough idea into one refined generation prompt.
 Rules:
 - Keep the user's intent and answer in the same language as their draft.
 - Make it concrete: genre, mood, tempo, instrumentation, vocals, structure, mix/texture — only details that help the renderer.
 - Keep every asset reference label verbatim so existing bindings stay intact.
-- Output only the final prompt text — no explanations, no markdown, no quotes.${referenceBlock(input.references)}`,
+- If user feedback is provided, only change what is needed to address it; keep the rest stable.
+- Output only the final prompt text — no explanations, no markdown, no quotes.${feedbackBlock(input.feedback)}${referenceBlock(input.references)}`,
 };
 
 export function buildPromptOptimizeMessages(input: PromptOptimizeInput): AiTextMessage[] {
+    const base = input.previousResult?.trim() || input.draft;
+    const userParts = [`Current prompt:\n${base}`];
+    if (input.previousResult?.trim() && input.draft.trim() && input.draft.trim() !== input.previousResult.trim()) {
+        userParts.unshift(`Original user idea:\n${input.draft.trim()}`);
+    }
+    if (input.feedback?.trim()) {
+        userParts.push(`Feedback:\n${input.feedback.trim()}`);
+    }
     return [
         { role: "system", content: OPTIMIZER_SYSTEM[input.mode](input) },
-        { role: "user", content: input.draft },
+        { role: "user", content: userParts.join("\n\n") },
     ];
 }
 
-/** Rewrite a node composer draft with the configured text model; streams the rewrite via onDelta. */
+/** Rewrite a composer draft with the configured text model; streams the rewrite via onDelta. */
 export async function optimizeCanvasPrompt(
     config: AiConfig,
     input: PromptOptimizeInput,

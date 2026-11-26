@@ -21,6 +21,7 @@ import {
     workbenchPromptShellClassName,
     workbenchResultsClassName,
 } from "@canvas/components/workbench/workbench-studio";
+import { PromptOptimizeDialog } from "@canvas/components/workbench/prompt-optimize-dialog";
 import { CloudUploadProgress } from "@canvas/components/canvas/cloud-upload-progress";
 import { assertCanvasMediaUploadSize, QIHUO_MAX_IMAGE_UPLOAD_BYTES } from "@canvas/services/object-storage";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
@@ -107,6 +108,7 @@ export default function ImagePage() {
     const [logsOpen, setLogsOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [promptDialogOpen, setPromptDialogOpen] = useState(false);
+    const [optimizeOpen, setOptimizeOpen] = useState(false);
     const [assetPickerOpen, setAssetPickerOpen] = useState(false);
     const [startedAt, setStartedAt] = useState(0);
     const [elapsedMs, setElapsedMs] = useState(0);
@@ -687,7 +689,18 @@ export default function ImagePage() {
                                         placeholder={t("imageWorkbench.promptPlaceholder")}
                                         className="thin-scrollbar min-h-[160px] w-full cursor-text bg-transparent px-3 pt-3 pb-12 text-sm leading-6 outline-none"
                                     />
-                                    <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-end gap-2 p-2">
+                                    <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 p-2">
+                                        <Tooltip title={prompt.trim() ? t("canvas.promptPanel.optimizePrompt") : t("canvas.promptPanel.optimizeNeedsPrompt")}>
+                                            <button
+                                                type="button"
+                                                disabled={!prompt.trim() || running}
+                                                className="pointer-events-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-stone-500 transition hover:text-violet-600 disabled:cursor-not-allowed disabled:opacity-40 dark:text-stone-400 dark:hover:text-violet-300"
+                                                onClick={() => setOptimizeOpen(true)}
+                                            >
+                                                <Sparkles className="size-3.5" />
+                                                {t("canvas.promptPanel.optimizeTitle")}
+                                            </button>
+                                        </Tooltip>
                                         <button
                                             type="button"
                                             className="pointer-events-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-stone-500 transition hover:text-emerald-600 dark:text-stone-400 dark:hover:text-emerald-300"
@@ -779,6 +792,13 @@ export default function ImagePage() {
                 ) : null}
             </Drawer>
             <PromptSelectDialog open={promptDialogOpen} onOpenChange={setPromptDialogOpen} onSelect={setPrompt} />
+            <PromptOptimizeDialog
+                open={optimizeOpen}
+                draft={prompt}
+                preset="character-asset-sheet"
+                onClose={() => setOptimizeOpen(false)}
+                onApply={setPrompt}
+            />
             <AssetPickerModal open={assetPickerOpen} defaultTab="my-assets" onInsert={(payload) => void insertPickedAsset(payload)} onClose={() => setAssetPickerOpen(false)} />
             <Modal title={t("workbench.deleteLogs")} open={deleteConfirmOpen} onCancel={() => setDeleteConfirmOpen(false)} onOk={deleteSelectedLogs} okText={t("common.delete")} okButtonProps={{ danger: true }} cancelText={t("common.cancel")}>
                 {t("workbench.deleteLogsConfirm", { count: selectedLogIds.length })}
