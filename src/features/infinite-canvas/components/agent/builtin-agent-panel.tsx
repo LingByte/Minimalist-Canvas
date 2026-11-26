@@ -15,7 +15,6 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { AgentChatTimeline } from "./agent-chat";
 import { AgentChatComposer } from "./agent-chat-composer";
-import { AgentConnectView } from "./agent-connect-view";
 import { AgentPanelTabs } from "./agent-panel-tabs";
 import { runBuiltinAgentHarness } from "@canvas/lib/agent/builtin-agent-harness";
 import {
@@ -32,13 +31,11 @@ import {
     encodeChannelModel,
     guessCapability,
     modelOptionName,
-    resolveModelChannel,
     selectableModelsByCapability,
     useConfigStore,
     useEffectiveConfig,
 } from "@canvas/stores/use-config-store";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
-import { getDefaultChannel } from "@canvas/integration/gateway-utils";
 
 /**
  * Built-in ReAct agent: Base URL + API Key, canvas tools, context, multi-turn local history.
@@ -79,7 +76,6 @@ export function BuiltinAgentPanel() {
         return textModels[0] || "";
     }, [config.model, config.textModel, textModels]);
     const ready = Boolean(textModel) && isAiConfigReady(config, textModel);
-    const channel = textModel ? resolveModelChannel(config, textModel) : getDefaultChannel(config) || null;
 
     useEffect(() => {
         const loaded = loadBuiltinAgentThreads(projectId);
@@ -218,7 +214,7 @@ export function BuiltinAgentPanel() {
         if (!ready || !textModel) {
             openConfigDialog(false, "channels");
             message.warning(t("agent.connect.configureAiFirst"));
-            setAgentState({ activeTab: "setup" });
+            setAgentState({ activeTab: "chat" });
             return;
         }
 
@@ -351,7 +347,7 @@ export function BuiltinAgentPanel() {
         ],
         [t],
     );
-    const tabValue = activeTab === "setup" || activeTab === "history" ? activeTab : "chat";
+    const tabValue = activeTab === "history" ? "history" : "chat";
 
     return (
         <>
@@ -377,7 +373,6 @@ export function BuiltinAgentPanel() {
                 items={[
                     { value: "chat", label: t("agent.panel.chat"), icon: <MessageSquare className="size-3.5" /> },
                     { value: "history", label: t("agent.panel.history"), icon: <History className="size-3.5" />, count: threads.length },
-                    { value: "setup", label: t("agent.connect.settingsTab"), icon: <Settings2 className="size-3.5" /> },
                 ]}
                 onChange={(next) => setAgentState({ activeTab: next })}
                 right={
@@ -408,19 +403,7 @@ export function BuiltinAgentPanel() {
                 }
             />
 
-            {tabValue === "setup" ? (
-                <AgentConnectView
-                    theme={theme}
-                    connected={ready}
-                    activity={activity}
-                    connectError=""
-                    onToggleEnabled={() => openConfigDialog(false, "channels")}
-                    builtin
-                    baseUrl={channel?.baseUrl || config.baseUrl || ""}
-                    channelName={channel?.name || ""}
-                    modelLabel={textModel ? modelOptionName(textModel) : ""}
-                />
-            ) : tabValue === "history" ? (
+            {tabValue === "history" ? (
                 <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto p-3">
                     <div className="mb-3 flex items-center justify-between gap-2">
                         <div className="text-sm" style={{ color: theme.node.muted }}>
@@ -511,10 +494,7 @@ export function BuiltinAgentPanel() {
                                         className="mt-5"
                                         type="primary"
                                         icon={<Settings2 className="size-4" />}
-                                        onClick={() => {
-                                            openConfigDialog(false, "channels");
-                                            setAgentState({ activeTab: "setup" });
-                                        }}
+                                        onClick={() => openConfigDialog(false, "channels")}
                                     >
                                         {t("agent.connect.openAiConfig")}
                                     </Button>
@@ -528,7 +508,7 @@ export function BuiltinAgentPanel() {
                             disabled={!ready}
                             sending={sending || waiting}
                             placeholder={
-                                ready ? t("agent.panel.placeholderBuiltin") : t("agent.connect.configureAiFirst")
+                                ready ? t("agent.panel.placeholderBuiltinShort") : t("agent.connect.configureAiFirst")
                             }
                             theme={theme}
                             models={composerModels}

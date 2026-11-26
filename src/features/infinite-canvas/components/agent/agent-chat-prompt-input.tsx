@@ -170,7 +170,11 @@ export function AgentChatPromptInput({ value, disabled, placeholder, theme, onCh
 
     return (
         <div ref={containerRef} className="relative">
-            {!value.trim() ? <div className="pointer-events-none absolute left-1 top-1 text-sm leading-6" style={{ color: theme.node.placeholder }}>{placeholder}</div> : null}
+            {!value.trim() ? (
+                <div className="pointer-events-none absolute inset-x-1 top-1 line-clamp-3 text-sm leading-6" style={{ color: theme.node.placeholder }}>
+                    {placeholder}
+                </div>
+            ) : null}
             <div
                 ref={editorRef}
                 contentEditable={!disabled}
