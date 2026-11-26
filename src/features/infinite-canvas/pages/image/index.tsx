@@ -1268,39 +1268,52 @@ function LogCard({
 
     return (
         <div
-            className={`flex w-full min-w-0 max-w-full items-start gap-2 overflow-hidden rounded-lg border p-2 transition ${active ? "border-stone-900 bg-blue-50 dark:border-stone-100 dark:bg-blue-950/20" : "border-stone-200 bg-background hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-900"}`}
+            className={`flex w-full min-w-0 max-w-full items-stretch gap-2 overflow-hidden rounded-lg border p-2 transition ${active ? "border-stone-900 bg-blue-50 dark:border-stone-100 dark:bg-blue-950/20" : "border-stone-200 bg-background hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-900"}`}
         >
             <Checkbox className="mt-0.5 shrink-0" checked={selected} onClick={(event) => event.stopPropagation()} onChange={(event) => onSelectedChange(event.target.checked)} />
-            <button type="button" className="min-w-0 flex-1 overflow-hidden text-left" onClick={onClick}>
-                <div className="flex min-w-0 items-start gap-2">
-                    <div className="min-w-0 flex-1 truncate text-sm font-semibold leading-5">{log.title}</div>
-                    <Tag className="m-0 h-6 shrink-0 rounded-md px-1.5 text-xs leading-6" color={statusColor}>
-                        {statusLabel}
-                    </Tag>
+            <button type="button" className="flex min-w-0 flex-1 items-stretch gap-3 overflow-hidden text-left" onClick={onClick}>
+                <div className="min-w-0 flex-1 overflow-hidden">
+                    <div className="flex min-w-0 items-start gap-2">
+                        <div className="min-w-0 flex-1 truncate text-sm font-semibold leading-5">{log.title}</div>
+                        <Tag className="m-0 h-6 shrink-0 rounded-md px-1.5 text-xs leading-6" color={statusColor}>
+                            {statusLabel}
+                        </Tag>
+                    </div>
+                    {failed && log.error ? (
+                        <div className="mt-1.5 line-clamp-2 text-[11px] leading-4 text-red-500 dark:text-red-400" title={log.error}>
+                            {log.error}
+                        </div>
+                    ) : null}
+                    <div className="mt-2 flex min-w-0 flex-wrap gap-1">
+                        {!failed ? <Tag className="m-0 h-6 rounded-md px-1.5 text-xs leading-6">{t("workbench.itemCount", { count: log.imageCount || log.successCount || 0 })}</Tag> : null}
+                        <Tag className="m-0 h-6 rounded-md px-1.5 text-xs leading-6" color="green">
+                            {formatDuration(log.durationMs)}
+                        </Tag>
+                        <Tag className="m-0 h-6 max-w-full truncate rounded-md px-1.5 text-xs leading-6">{log.time}</Tag>
+                    </div>
                 </div>
                 {thumbnails.length ? (
-                    <div className="mt-2 flex gap-1 overflow-hidden">
-                        {thumbnails.map((image, index) => (
-                            <SmartImage key={`${log.id}-${index}`} src={image} alt="" className="size-8 shrink-0 rounded-md object-cover" fallbackIconClassName="size-3" />
+                    <div className="ml-auto flex shrink-0 items-center gap-1 self-center">
+                        {thumbnails.slice(0, 2).map((image, index) => (
+                            <SmartImage
+                                key={`${log.id}-${index}`}
+                                src={image}
+                                alt=""
+                                className="h-16 w-20 shrink-0 rounded-md object-cover ring-1 ring-black/5 dark:ring-white/10"
+                                fallbackIconClassName="size-4"
+                            />
                         ))}
+                        {thumbnails.length > 2 ? (
+                            <div className="flex h-16 w-10 shrink-0 items-center justify-center rounded-md bg-stone-100 text-xs font-medium text-stone-500 dark:bg-stone-800 dark:text-stone-300">
+                                +{thumbnails.length - 2}
+                            </div>
+                        ) : null}
                     </div>
                 ) : null}
-                {failed && log.error ? (
-                    <div className="mt-1.5 line-clamp-2 text-[11px] leading-4 text-red-500 dark:text-red-400" title={log.error}>
-                        {log.error}
-                    </div>
-                ) : null}
-                <div className="mt-2 flex min-w-0 flex-wrap gap-1">
-                    {!failed ? <Tag className="m-0 h-6 rounded-md px-1.5 text-xs leading-6">{t("workbench.itemCount", { count: log.imageCount || log.successCount || 0 })}</Tag> : null}
-                    <Tag className="m-0 h-6 rounded-md px-1.5 text-xs leading-6" color="green">
-                        {formatDuration(log.durationMs)}
-                    </Tag>
-                    <Tag className="m-0 h-6 max-w-full truncate rounded-md px-1.5 text-xs leading-6">{log.time}</Tag>
-                </div>
             </button>
             <button
                 type="button"
-                className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-stone-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                className="inline-flex size-7 shrink-0 items-center justify-center self-start rounded-md text-stone-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
                 aria-label={t("common.delete")}
                 title={t("common.delete")}
                 onClick={(event) => {
