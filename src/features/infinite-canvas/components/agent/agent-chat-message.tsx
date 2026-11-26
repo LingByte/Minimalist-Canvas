@@ -1,11 +1,12 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { App, Button, Image, Modal, Popover } from "antd";
-import { Brain, CheckCircle2, ChevronDown, ChevronRight, Circle, CircleAlert, Copy, ExternalLink, FilePenLine, FileText, FolderOpen, ListChecks, LoaderCircle, Search, ShieldAlert, TerminalSquare, Wrench, XCircle } from "lucide-react";
+import { Brain, CheckCircle2, ChevronDown, ChevronRight, Circle, CircleAlert, Copy, ExternalLink, FilePenLine, FileText, FolderOpen, ListChecks, LoaderCircle, Search, ShieldAlert, TerminalSquare, User, Wrench, XCircle } from "lucide-react";
 import { Streamdown, type LinkSafetyModalProps } from "streamdown";
 import { useTranslation } from "react-i18next";
 
 import i18n from "@canvas/i18n";
 import { useCopyText } from "@canvas/hooks/use-copy-text";
+import { useCanvasHost } from "@canvas/integration/canvas-host-context";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
 import { useAgentStore, type AgentCanvasReference, type AgentPendingApproval, type AgentSkillReference } from "@canvas/stores/use-agent-store";
 import { resolveAgentMessageAssetUrl, revealAgentLocalFile } from "@canvas/services/api/canvas-agent";
@@ -103,6 +104,30 @@ export type AgentChatMessageItem = {
     streamId?: string;
 };
 
+function AgentAvatar({ role, theme }: { role: "user" | "assistant"; theme: (typeof canvasThemes)[keyof typeof canvasThemes] }) {
+    const { logo, brandName } = useCanvasHost();
+    if (role === "assistant") {
+        return (
+            <span
+                className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-full ring-1 ring-black/5 dark:ring-white/10"
+                style={{ background: theme.toolbar.activeBg }}
+                title={brandName}
+            >
+                <SmartImage src={logo} alt={brandName} className="size-5 object-contain" fallbackIconClassName="size-3.5" />
+            </span>
+        );
+    }
+    return (
+        <span
+            className="grid size-8 shrink-0 place-items-center rounded-full ring-1 ring-black/5 dark:ring-white/10"
+            style={{ background: theme.toolbar.panel, color: theme.node.muted }}
+            aria-hidden
+        >
+            <User className="size-3.5" />
+        </span>
+    );
+}
+
 export function AgentChatMessage({ item, theme, onRejectTool, onApproveTool }: { item: AgentChatMessageItem; theme: (typeof canvasThemes)[keyof typeof canvasThemes]; onRejectTool?: (id: string) => void; onApproveTool?: (id: string) => void }) {
     const isUser = item.role === "user";
     const isSystem = item.role === "system";
@@ -121,17 +146,37 @@ export function AgentChatMessage({ item, theme, onRejectTool, onApproveTool }: {
         if (objectField(item.detail, "status") === "pending") return <AgentPendingToolCard summary={item.text} detail={item.detail} theme={theme} onReject={() => onRejectTool?.(item.id)} onApprove={() => onApproveTool?.(item.id)} />;
         return <AgentToolCard title={item.title || tr("toolCall")} text={item.text} detail={item.detail} theme={theme} />;
     }
+    if (item.role === "error") {
+        return (
+            <div className="flex items-start gap-2.5">
+                <AgentAvatar role="assistant" theme={theme} />
+                <div
+                    className="min-w-0 max-w-[min(100%,28rem)] rounded-2xl rounded-tl-md border px-3.5 py-2.5 text-sm leading-6"
+                    style={{ borderColor: "rgba(220,38,38,.28)", background: "rgba(220,38,38,.06)", color }}
+                >
+                    {item.text}
+                </div>
+            </div>
+        );
+    }
     return (
-        <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-            <div
-                className={isUser ? "min-w-0 max-w-[82%] py-1 text-right text-sm leading-6" : "min-w-0 w-full text-left text-sm leading-6"}
-                style={{ color }}
-            >
-                {isUser ? (
-                    <AgentUserMessageContent text={item.text} references={item.canvasReferences || []} skill={item.skill} theme={theme} />
-                ) : (
-                    <Streamdown {...streamdownProps()} animated={streamdownAnimation} isAnimating={!!item.streamId}>{item.text}</Streamdown>
-                )}
+        <div className={`flex items-end gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"}`}>
+            <AgentAvatar role={isUser ? "user" : "assistant"} theme={theme} />
+            <div className={`min-w-0 ${isUser ? "max-w-[min(82%,28rem)]" : "max-w-[min(100%,36rem)] flex-1"}`}>
+                <div
+                    className={`text-sm leading-6 ${isUser ? "rounded-2xl rounded-tr-md px-3.5 py-2.5 text-left" : "rounded-2xl rounded-tl-md px-3.5 py-2.5"}`}
+                    style={{
+                        color,
+                        background: isUser ? theme.toolbar.activeBg : theme.toolbar.panel,
+                        border: `1px solid ${theme.node.stroke}`,
+                    }}
+                >
+                    {isUser ? (
+                        <AgentUserMessageContent text={item.text} references={item.canvasReferences || []} skill={item.skill} theme={theme} />
+                    ) : (
+                        <Streamdown {...streamdownProps()} animated={streamdownAnimation} isAnimating={!!item.streamId}>{item.text}</Streamdown>
+                    )}
+                </div>
                 {item.attachments?.length ? <AgentMessageAttachments attachments={item.attachments} alignRight={isUser} /> : null}
                 {item.meta ? <div className={`mt-1 text-[11px] tabular-nums opacity-55 ${isUser ? "text-right" : ""}`}>{item.meta}</div> : null}
             </div>
@@ -400,6 +445,20 @@ function AgentPlanCard({ title, plan, theme }: { title: string; plan: PlanDetail
     );
 }
 
+function AgentTypingDots({ color }: { color: string }) {
+    return (
+        <span className="inline-flex items-center gap-1 px-0.5" aria-hidden>
+            {[0, 1, 2].map((index) => (
+                <span
+                    key={index}
+                    className="size-1.5 rounded-full opacity-40 [animation:agent-typing-dot_1.05s_ease-in-out_infinite]"
+                    style={{ background: color, animationDelay: `${index * 160}ms` }}
+                />
+            ))}
+        </span>
+    );
+}
+
 export function AgentWorkingMessage({ text, detail, status = "running", mcpStatuses = [], activityKey, theme }: { text: string; detail?: string; status?: "running" | "ready" | "error"; mcpStatuses?: Array<{ name: string; status: "running" | "ready" | "error"; detail: string }>; activityKey: string; theme: (typeof canvasThemes)[keyof typeof canvasThemes] }) {
     const { t } = useTranslation();
     const [elapsed, setElapsed] = useState(0);
@@ -410,27 +469,48 @@ export function AgentWorkingMessage({ text, detail, status = "running", mcpStatu
         return () => window.clearInterval(timer);
     }, [activityKey]);
     return (
-        <div className="min-w-0 py-1" aria-live="polite">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" style={{ color: theme.node.muted }}>
-                {status === "running" ? <LoaderCircle className="size-3.5 shrink-0 animate-spin" /> : status === "ready" ? <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600" /> : <XCircle className="size-3.5 shrink-0 text-red-600" />}
-                <span className="min-w-0">{text}</span>
-                {status === "running" && elapsed >= 5 ? <span className="shrink-0 text-[11px] tabular-nums opacity-60">{waitingTime(elapsed)}</span> : null}
-            </div>
-            {detail ? <div className="ml-5.5 mt-1 text-xs leading-5 opacity-65" style={{ color: theme.node.muted }}>{detail}</div> : null}
-            {mcpStatuses.length ? (
-                <div className="ml-5.5 mt-3 space-y-2">
-                    {mcpStatuses.map((item) => (
-                        <div key={item.name} className="flex min-w-0 items-start gap-2 text-xs leading-5" style={{ color: theme.node.muted }}>
-                            {item.status === "running" ? <LoaderCircle className="mt-0.5 size-3.5 shrink-0 animate-spin" /> : item.status === "ready" ? <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-600" /> : <XCircle className="mt-0.5 size-3.5 shrink-0 text-red-600" />}
-                            <div className="min-w-0">
-                                <div className="font-medium" style={{ color: theme.node.text }}>{item.name}</div>
-                                <div className="opacity-65">{item.detail}</div>
-                            </div>
-                        </div>
-                    ))}
+        <div className="flex items-end gap-2.5" aria-live="polite">
+            <AgentAvatar role="assistant" theme={theme} />
+            <div
+                className="min-w-0 max-w-[min(100%,28rem)] rounded-2xl rounded-tl-md border px-3.5 py-2.5"
+                style={{ borderColor: theme.node.stroke, background: theme.toolbar.panel }}
+            >
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" style={{ color: theme.node.muted }}>
+                    {status === "running" ? (
+                        <span className="relative inline-flex size-3.5 shrink-0 items-center justify-center">
+                            <span className="absolute inset-0 rounded-full opacity-30 animate-ping" style={{ background: theme.node.text }} />
+                            <LoaderCircle className="relative size-3.5 animate-spin" />
+                        </span>
+                    ) : status === "ready" ? (
+                        <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600" />
+                    ) : (
+                        <XCircle className="size-3.5 shrink-0 text-red-600" />
+                    )}
+                    <span className="min-w-0">{text}</span>
+                    {status === "running" ? <AgentTypingDots color={theme.node.muted} /> : null}
+                    {status === "running" && elapsed >= 5 ? (
+                        <span className="shrink-0 text-[11px] tabular-nums opacity-60">{waitingTime(elapsed)}</span>
+                    ) : null}
                 </div>
-            ) : null}
-            {status === "running" && elapsed >= 30 ? <div className="mt-1 text-xs leading-5 opacity-65" style={{ color: theme.node.muted }}>{t("agent.message.slowResponse")}</div> : null}
+                {detail ? <div className="mt-1 text-xs leading-5 opacity-65" style={{ color: theme.node.muted }}>{detail}</div> : null}
+                {mcpStatuses.length ? (
+                    <div className="mt-3 space-y-2">
+                        {mcpStatuses.map((item) => (
+                            <div key={item.name} className="flex min-w-0 items-start gap-2 text-xs leading-5" style={{ color: theme.node.muted }}>
+                                {item.status === "running" ? <LoaderCircle className="mt-0.5 size-3.5 shrink-0 animate-spin" /> : item.status === "ready" ? <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-600" /> : <XCircle className="mt-0.5 size-3.5 shrink-0 text-red-600" />}
+                                <div className="min-w-0">
+                                    <div className="font-medium" style={{ color: theme.node.text }}>{item.name}</div>
+                                    <div className="opacity-65">{item.detail}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : null}
+                {status === "running" && elapsed >= 30 ? (
+                    <div className="mt-1 text-xs leading-5 opacity-65" style={{ color: theme.node.muted }}>{t("agent.message.slowResponse")}</div>
+                ) : null}
+            </div>
+            <style>{`@keyframes agent-typing-dot{0%,80%,100%{transform:translateY(0);opacity:.35}40%{transform:translateY(-3px);opacity:1}}`}</style>
         </div>
     );
 }

@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { App, Button, Tooltip } from "antd";
+import { App, Button, Popover, Tooltip } from "antd";
 import {
-    Bot,
-    History,
+    ChevronDown,
     MessageSquare,
     PanelRightClose,
     Plus,
     Settings2,
-    Sparkles,
     Trash2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -24,6 +22,7 @@ import {
     upsertBuiltinAgentThread,
     type BuiltinAgentThread,
 } from "@canvas/lib/canvas/builtin-agent-threads";
+import { useCanvasHost } from "@canvas/integration/canvas-host-context";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
 import { randomId } from "@canvas/lib/utils";
 import { useAgentStore, type AgentChatItem, type AgentModel } from "@canvas/stores/use-agent-store";
@@ -36,6 +35,7 @@ import {
     useEffectiveConfig,
 } from "@canvas/stores/use-config-store";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
+import { SmartImage } from "@/components/smart-image";
 
 /**
  * Built-in ReAct agent: Base URL + API Key, canvas tools, context, multi-turn local history.
@@ -45,12 +45,13 @@ export function BuiltinAgentPanel() {
     const { t } = useTranslation();
     const navigate = useNavigate();
     const { id: projectId = "default" } = useParams();
+    const { logo, brandName } = useCanvasHost();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const config = useEffectiveConfig();
     const isAiConfigReady = useConfigStore((state) => state.isAiConfigReady);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const updateConfig = useConfigStore((state) => state.updateConfig);
-    const { prompt, sending, waiting, activeTab, activity, messages } = useAgentStore();
+    const { prompt, sending, waiting, messages } = useAgentStore();
     const setAgentState = useAgentStore((state) => state.setAgentState);
     const closePanel = useAgentStore((state) => state.closePanel);
     const abortRef = useRef<AbortController | null>(null);
@@ -59,6 +60,7 @@ export function BuiltinAgentPanel() {
         const loaded = loadBuiltinAgentThreads(projectId);
         return loaded[0]?.id || randomId();
     });
+    const [sessionsOpen, setSessionsOpen] = useState(false);
     const hydratedRef = useRef(false);
 
     const textModels = useMemo(() => {
@@ -135,11 +137,6 @@ export function BuiltinAgentPanel() {
         });
     }, [ready, setAgentState, textModel]);
 
-    const channelLabel = useMemo(() => {
-        if (!ready) return t("agent.connect.aiNotReady");
-        return modelOptionName(textModel) || t("agent.connect.aiReady");
-    }, [ready, t, textModel]);
-
     const stopTurn = () => {
         abortRef.current?.abort();
         abortRef.current = null;
@@ -167,10 +164,12 @@ export function BuiltinAgentPanel() {
         persistCurrentThread();
         const nextId = randomId();
         setActiveThreadId(nextId);
+        setSessionsOpen(false);
         setAgentState({ messages: [], prompt: "", connectError: "", activeTab: "chat" });
     };
 
     const resumeThread = (threadId: string) => {
+        setSessionsOpen(false);
         if (threadId === activeThreadId) {
             setAgentState({ activeTab: "chat" });
             return;
@@ -333,11 +332,23 @@ export function BuiltinAgentPanel() {
 
     useEffect(() => () => abortRef.current?.abort(), []);
 
-    const statusText = channelLabel || t("agent.status.disconnected");
-    const conversationTitle = useMemo(
-        () => titleFromMessages(messages, t("agent.runtime.newConversation")),
-        [messages, t],
-    );
+    const conversationTitle = useMemo(() => {
+        const saved = threads.find((item) => item.id === activeThreadId)?.title;
+        if (saved && messages.length) return saved;
+        return titleFromMessages(messages, t("agent.runtime.newConversation"));
+    }, [activeThreadId, messages, t, threads]);
+    const sessionRows = useMemo(() => {
+        const listed = [...threads];
+        if (!listed.some((item) => item.id === activeThreadId)) {
+            listed.unshift({
+                id: activeThreadId,
+                title: t("agent.runtime.newConversation"),
+                updatedAt: Date.now(),
+                messages: [],
+            });
+        }
+        return listed;
+    }, [activeThreadId, t, threads]);
     const suggestions = useMemo(
         () => [
             t("agent.chat.suggestions.storyboard"),
@@ -347,34 +358,102 @@ export function BuiltinAgentPanel() {
         ],
         [t],
     );
-    const tabValue = activeTab === "history" ? "history" : "chat";
 
     return (
         <>
             <AgentPanelTabs
-                value={tabValue}
+                value="chat"
                 theme={theme}
                 leading={
-                    <div className="flex min-w-0 items-center gap-1.5">
+                    <Tooltip title={brandName || t("agent.panel.brandName")} placement="bottom">
                         <span
-                            className="grid size-8 place-items-center rounded-lg"
+                            className="grid size-8 place-items-center overflow-hidden rounded-xl ring-1 ring-black/5 dark:ring-white/10"
                             style={{ background: theme.toolbar.activeBg }}
+                            aria-label={brandName || t("agent.panel.brandName")}
                         >
-                            <Bot className="size-4" />
+                            <SmartImage src={logo} alt="" className="size-5 object-contain" fallbackIconClassName="size-3.5" />
                         </span>
-                        <div className="min-w-0">
-                            <div className="truncate text-sm font-semibold leading-4">{t("agent.panel.brandName")}</div>
-                            <div className="hidden truncate text-[11px] leading-4 @min-[480px]:block" style={{ color: theme.node.muted }}>
-                                {messages.length ? conversationTitle : statusText}
-                            </div>
-                        </div>
-                    </div>
+                    </Tooltip>
                 }
-                items={[
-                    { value: "chat", label: t("agent.panel.chat"), icon: <MessageSquare className="size-3.5" /> },
-                    { value: "history", label: t("agent.panel.history"), icon: <History className="size-3.5" />, count: threads.length },
-                ]}
-                onChange={(next) => setAgentState({ activeTab: next })}
+                center={
+                    <Popover
+                        trigger="click"
+                        placement="bottomLeft"
+                        open={sessionsOpen}
+                        onOpenChange={setSessionsOpen}
+                        arrow={false}
+                        content={
+                            <div className="w-[280px]">
+                                <div className="mb-2 flex items-center justify-between gap-2 px-1">
+                                    <div className="text-xs" style={{ color: theme.node.muted }}>
+                                        {sessionRows.length
+                                            ? t("agent.history.count", { count: sessionRows.length })
+                                            : t("agent.history.empty")}
+                                    </div>
+                                    <Button
+                                        size="small"
+                                        type="text"
+                                        className="!h-7"
+                                        icon={<Plus className="size-3.5" />}
+                                        disabled={sending || waiting}
+                                        onClick={startNewThread}
+                                    >
+                                        {t("agent.history.newThread")}
+                                    </Button>
+                                </div>
+                                <div className="thin-scrollbar max-h-72 space-y-1 overflow-y-auto">
+                                    {sessionRows.map((thread) => {
+                                        const active = thread.id === activeThreadId;
+                                        return (
+                                            <div
+                                                key={thread.id}
+                                                className="group flex items-start gap-1 rounded-xl px-2 py-2 transition hover:bg-black/[.04] dark:hover:bg-white/[.06]"
+                                                style={{
+                                                    background: active ? theme.toolbar.activeBg : "transparent",
+                                                }}
+                                            >
+                                                <button
+                                                    type="button"
+                                                    className="min-w-0 flex-1 text-left"
+                                                    onClick={() => resumeThread(thread.id)}
+                                                >
+                                                    <div className="truncate text-sm font-medium leading-5">{thread.title}</div>
+                                                    <div className="mt-0.5 text-[11px] tabular-nums" style={{ color: theme.node.muted }}>
+                                                        {new Date(thread.updatedAt).toLocaleString()}
+                                                        {active ? ` · ${t("agent.history.current")}` : ""}
+                                                    </div>
+                                                </button>
+                                                {threads.some((item) => item.id === thread.id) ? (
+                                                    <button
+                                                        type="button"
+                                                        className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-md opacity-0 transition group-hover:opacity-100 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                                                        style={{ color: theme.node.muted }}
+                                                        aria-label={t("agent.history.deleteCount", { count: 1 })}
+                                                        onClick={() => removeThread(thread.id)}
+                                                    >
+                                                        <Trash2 className="size-3.5" />
+                                                    </button>
+                                                ) : null}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        }
+                    >
+                        <button
+                            type="button"
+                            className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-lg px-2 py-1.5 text-left transition hover:bg-black/[.04] dark:hover:bg-white/[.06]"
+                            aria-label={t("agent.history.selectThread", { name: conversationTitle })}
+                        >
+                            <MessageSquare className="size-3.5 shrink-0 opacity-55" />
+                            <span className="min-w-0 truncate text-sm font-medium leading-5">{conversationTitle}</span>
+                            <ChevronDown className="size-3.5 shrink-0 opacity-45" />
+                        </button>
+                    </Popover>
+                }
+                items={[]}
+                onChange={() => undefined}
                 right={
                     <>
                         <Tooltip title={t("agent.history.newThread")} placement="bottom">
@@ -403,124 +482,71 @@ export function BuiltinAgentPanel() {
                 }
             />
 
-            {tabValue === "history" ? (
-                <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto p-3">
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                        <div className="text-sm" style={{ color: theme.node.muted }}>
-                            {threads.length
-                                ? t("agent.history.count", { count: threads.length })
-                                : t("agent.history.empty")}
+            <AgentChatTimeline
+                theme={theme}
+                pendingTool={null}
+                pendingApprovals={[]}
+                sending={sending}
+                waiting={waiting}
+                onRejectTool={() => undefined}
+                onApproveTool={() => undefined}
+                onApprovalDecision={() => undefined}
+                emptyState={
+                    <div className="flex h-full min-h-[280px] flex-col items-center justify-center px-6 py-10 text-center">
+                        <div
+                            className="mb-4 grid size-12 place-items-center overflow-hidden rounded-2xl ring-1 ring-black/5 dark:ring-white/10"
+                            style={{ background: theme.toolbar.activeBg, color: theme.node.text }}
+                        >
+                            <SmartImage src={logo} alt="" className="size-7 object-contain" fallbackIconClassName="size-5" />
                         </div>
-                        <Button size="small" type="primary" icon={<Plus className="size-3.5" />} disabled={sending || waiting} onClick={startNewThread}>
-                            {t("agent.history.newThread")}
-                        </Button>
-                    </div>
-                    <div className="space-y-2">
-                        {threads.map((thread) => {
-                            const active = thread.id === activeThreadId;
-                            return (
-                                <div
-                                    key={thread.id}
-                                    className="group flex items-start gap-2 rounded-xl border px-3 py-2.5 transition hover:bg-black/[.03] dark:hover:bg-white/[.04]"
-                                    style={{
-                                        borderColor: active ? theme.node.text : theme.node.stroke,
-                                        background: active ? theme.toolbar.activeBg : "transparent",
-                                    }}
-                                >
+                        <div className="text-base font-semibold leading-6">{t("agent.chat.emptyTitle")}</div>
+                        <div className="mt-1.5 max-w-[280px] text-sm leading-5" style={{ color: theme.node.muted }}>
+                            {ready ? t("agent.chat.emptyHint") : t("agent.connect.configureAiFirst")}
+                        </div>
+                        {ready ? (
+                            <div className="mt-5 flex w-full max-w-[340px] flex-col gap-2">
+                                {suggestions.map((item) => (
                                     <button
+                                        key={item}
                                         type="button"
-                                        className="min-w-0 flex-1 text-left"
-                                        onClick={() => resumeThread(thread.id)}
+                                        className="rounded-xl border px-3.5 py-2.5 text-left text-sm leading-5 transition hover:bg-black/[.03] dark:hover:bg-white/[.04]"
+                                        style={{ borderColor: theme.node.stroke, color: theme.node.text }}
+                                        onClick={() => void sendPrompt(item)}
                                     >
-                                        <div className="truncate text-sm font-medium leading-5">{thread.title}</div>
-                                        <div className="mt-0.5 text-[11px] tabular-nums" style={{ color: theme.node.muted }}>
-                                            {new Date(thread.updatedAt).toLocaleString()}
-                                            {active ? ` · ${t("agent.history.current")}` : ""}
-                                        </div>
+                                        {item}
                                     </button>
-                                    <Button
-                                        type="text"
-                                        size="small"
-                                        danger
-                                        className="!h-7 !w-7 !min-w-7 opacity-0 group-hover:opacity-100"
-                                        icon={<Trash2 className="size-3.5" />}
-                                        aria-label={t("agent.history.deleteCount", { count: 1 })}
-                                        onClick={() => removeThread(thread.id)}
-                                    />
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            ) : (
-                <>
-                    <AgentChatTimeline
-                        theme={theme}
-                        pendingTool={null}
-                        pendingApprovals={[]}
-                        sending={sending}
-                        waiting={waiting}
-                        onRejectTool={() => undefined}
-                        onApproveTool={() => undefined}
-                        onApprovalDecision={() => undefined}
-                        emptyState={
-                            <div className="flex h-full min-h-[280px] flex-col items-center justify-center px-6 py-10 text-center">
-                                <div
-                                    className="mb-4 grid size-12 place-items-center rounded-2xl"
-                                    style={{ background: theme.toolbar.activeBg, color: theme.node.text }}
-                                >
-                                    <Sparkles className="size-5" />
-                                </div>
-                                <div className="text-base font-semibold leading-6">{t("agent.chat.emptyTitle")}</div>
-                                <div className="mt-1.5 max-w-[280px] text-sm leading-5" style={{ color: theme.node.muted }}>
-                                    {ready ? t("agent.chat.emptyHint") : t("agent.connect.configureAiFirst")}
-                                </div>
-                                {ready ? (
-                                    <div className="mt-5 flex w-full max-w-[340px] flex-col gap-2">
-                                        {suggestions.map((item) => (
-                                            <button
-                                                key={item}
-                                                type="button"
-                                                className="rounded-xl border px-3.5 py-2.5 text-left text-sm leading-5 transition hover:bg-black/[.03] dark:hover:bg-white/[.04]"
-                                                style={{ borderColor: theme.node.stroke, color: theme.node.text }}
-                                                onClick={() => void sendPrompt(item)}
-                                            >
-                                                {item}
-                                            </button>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <Button
-                                        className="mt-5"
-                                        type="primary"
-                                        icon={<Settings2 className="size-4" />}
-                                        onClick={() => openConfigDialog(false, "channels")}
-                                    >
-                                        {t("agent.connect.openAiConfig")}
-                                    </Button>
-                                )}
+                                ))}
                             </div>
-                        }
-                    />
-                    <div className="shrink-0 px-1 pb-1 pt-1">
-                        <AgentChatComposer
-                            prompt={prompt}
-                            disabled={!ready}
-                            sending={sending || waiting}
-                            placeholder={
-                                ready ? t("agent.panel.placeholderBuiltinShort") : t("agent.connect.configureAiFirst")
-                            }
-                            theme={theme}
-                            models={composerModels}
-                            model={textModel || composerModels[0]?.model}
-                            onModelChange={changeModel}
-                            onPromptChange={(next) => setAgentState({ prompt: next })}
-                            onSubmit={() => void sendPrompt()}
-                            onStop={stopTurn}
-                        />
+                        ) : (
+                            <Button
+                                className="mt-5"
+                                type="primary"
+                                icon={<Settings2 className="size-4" />}
+                                onClick={() => openConfigDialog(false, "channels")}
+                            >
+                                {t("agent.connect.openAiConfig")}
+                            </Button>
+                        )}
                     </div>
-                </>
-            )}
+                }
+            />
+            <div className="shrink-0 px-1 pb-1 pt-1">
+                <AgentChatComposer
+                    prompt={prompt}
+                    disabled={!ready}
+                    sending={sending || waiting}
+                    placeholder={
+                        ready ? t("agent.panel.placeholderBuiltinShort") : t("agent.connect.configureAiFirst")
+                    }
+                    theme={theme}
+                    models={composerModels}
+                    model={textModel || composerModels[0]?.model}
+                    onModelChange={changeModel}
+                    onPromptChange={(next) => setAgentState({ prompt: next })}
+                    onSubmit={() => void sendPrompt()}
+                    onStop={stopTurn}
+                />
+            </div>
         </>
     );
 }

@@ -265,16 +265,16 @@ export function CanvasTopBar({
                             </button>
                         </Tooltip>
                         <UserStatusActions variant="canvas" compactOnMobile />
-                        <Button
-                            type="text"
-                            className="!flex !h-8 !w-8 !min-w-8 !items-center !justify-center !rounded-lg !p-0 md:!w-auto md:!min-w-0 md:!px-2.5"
-                            style={agentOpen ? activeBtn : { color: theme.node.text }}
-                            icon={<Bot className="size-4" />}
-                            onClick={onToggleAgent}
-                            aria-label={t(agentOpen ? "topNav.closeAgent" : "topNav.openAgent")}
-                        >
-                            <span className="hidden md:inline">{t("agent.panel.brandName")}</span>
-                        </Button>
+                        <Tooltip title={t("agent.panel.brandName")}>
+                            <Button
+                                type="text"
+                                className="!flex !h-8 !w-8 !min-w-8 !items-center !justify-center !rounded-lg !p-0"
+                                style={agentOpen ? activeBtn : { color: theme.node.text }}
+                                icon={<Bot className="size-4" />}
+                                onClick={onToggleAgent}
+                                aria-label={t(agentOpen ? "topNav.closeAgent" : "topNav.openAgent")}
+                            />
+                        </Tooltip>
                     </div>
                 </div>
             </div>
