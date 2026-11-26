@@ -39,7 +39,18 @@ export function useAgentBridge(params: AgentBridgeParams) {
     const [agentUndoSnapshot, setAgentUndoSnapshot] = useState<CanvasAgentSnapshot | null>(null);
     const projectTitle = title || i18n.t("canvas.project.untitled");
 
-    const agentSnapshot = useMemo<CanvasAgentSnapshot>(() => ({ projectId, title: projectTitle, nodes, connections, selectedNodeIds: Array.from(selectedNodeIds), viewport }), [connections, projectTitle, nodes, projectId, selectedNodeIds, viewport]);
+    // Omit live viewport from the memoized snapshot so pan/zoom does not rebuild agent context every frame.
+    const agentSnapshot = useMemo<CanvasAgentSnapshot>(
+        () => ({
+            projectId,
+            title: projectTitle,
+            nodes,
+            connections,
+            selectedNodeIds: Array.from(selectedNodeIds),
+            viewport: viewportRef.current,
+        }),
+        [connections, projectTitle, nodes, projectId, selectedNodeIds],
+    );
     const applyAgentOps = useCallback(
         (ops?: CanvasAgentOp[]) => {
             const safeOps = Array.isArray(ops) ? ops.filter((op) => op?.type) : [];
@@ -90,9 +101,14 @@ export function useAgentBridge(params: AgentBridgeParams) {
     }, [agentUndoSnapshot, projectTitle, projectId]);
 
     useEffect(() => {
-        setAgentCanvasContext({ snapshot: agentSnapshot, applyOps: applyAgentOps, undoOps: undoAgentOps, canUndo: Boolean(agentUndoSnapshot) });
+        setAgentCanvasContext({
+            snapshot: { ...agentSnapshot, viewport: viewportRef.current },
+            applyOps: applyAgentOps,
+            undoOps: undoAgentOps,
+            canUndo: Boolean(agentUndoSnapshot),
+        });
         return () => setAgentCanvasContext(null);
-    }, [agentSnapshot, applyAgentOps, agentUndoSnapshot, setAgentCanvasContext, undoAgentOps]);
+    }, [agentSnapshot, applyAgentOps, agentUndoSnapshot, setAgentCanvasContext, undoAgentOps, viewportRef]);
 
     return { applyAgentOps };
 }

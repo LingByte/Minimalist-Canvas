@@ -26,6 +26,8 @@ const appPages: RouteObject[] = [
     { path: "prompts", element: <PromptsPage /> },
     { path: "canvas", element: <CanvasPage /> },
     { path: "canvas/:id", element: <CanvasProjectPage /> },
+    // Alias so navigate(`/${id}`) from the project chrome also opens a canvas.
+    { path: ":id", element: <CanvasProjectPage /> },
     { path: "generation-logs", element: <GenerationLogsPage /> },
     { path: "config", element: <ConfigPage /> },
 ];

@@ -11,6 +11,8 @@ import { generateCanvasImage, waitForGenerationAsset } from "@canvas/services/ap
 import { getGenerationAssetByClientId } from "@canvas/services/api/generation-assets";
 import { createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, waitForVideoGenerationTask, type VideoGenerationTask } from "@canvas/services/api/video";
 import { defaultConfig, useConfigStore, useEffectiveConfig } from "@canvas/stores/use-config-store";
+import { uploadCanvasCloudVersion } from "@canvas/services/canvas-cloud-versions";
+import { isObjectStorageConfigured } from "@canvas/lib/object-storage/types";
 import { imageToDataUrl, resolveImageUrl, uploadImage } from "@canvas/services/image-storage";
 import { uploadMediaFile } from "@canvas/services/file-storage";
 import {
@@ -309,6 +311,7 @@ function InfiniteCanvasPage() {
     const lastHistoryRef = useRef<CanvasHistoryEntry | null>(null);
     const historyCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const viewportSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const documentSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const applyingHistoryRef = useRef(false);
     const historyPausedRef = useRef(false);
     const didInitialCenterRef = useRef(false);
@@ -385,8 +388,12 @@ function InfiniteCanvasPage() {
     }, [clearRequestedTab, markLogsSeen, openElementsPanel, requestedTab]);
 
     const [projectLoaded, setProjectLoaded] = useState(false);
-    const saveStatus = { dirty: false, saving: false };
     const [manualSaving, setManualSaving] = useState(false);
+    const objectStorage = useConfigStore((state) => state.objectStorage);
+    const cloudDirty = Boolean(
+        currentProject &&
+            (!currentProject.cloudSyncedAt || currentProject.updatedAt > currentProject.cloudSyncedAt),
+    );
     const [toolbarNodeId, setToolbarNodeId] = useState<string | null>(null);
     const [nodeImageSettingsOpen, setNodeImageSettingsOpen] = useState(false);
     const [dialogNodeId, setDialogNodeId] = useState<string | null>(null);
@@ -611,7 +618,24 @@ function InfiniteCanvasPage() {
 
     useEffect(() => {
         if (!projectLoaded || historyPausedRef.current) return;
-        updateProject(projectId, { nodes, connections, chatSessions, activeChatId, backgroundMode, showImageInfo });
+        if (documentSaveTimerRef.current) clearTimeout(documentSaveTimerRef.current);
+        documentSaveTimerRef.current = setTimeout(() => {
+            updateProject(projectId, {
+                nodes: nodesRef.current,
+                connections: connectionsRef.current,
+                chatSessions,
+                activeChatId,
+                backgroundMode,
+                showImageInfo,
+            });
+            documentSaveTimerRef.current = null;
+        }, 400);
+        return () => {
+            if (documentSaveTimerRef.current) {
+                clearTimeout(documentSaveTimerRef.current);
+                documentSaveTimerRef.current = null;
+            }
+        };
     }, [activeChatId, backgroundMode, chatSessions, connections, nodes, projectId, projectLoaded, showImageInfo, updateProject]);
 
     useEffect(() => {
@@ -890,9 +914,17 @@ function InfiniteCanvasPage() {
     }, [connections, nodes]);
     const mentionReferencesByNodeId = useMemo(() => {
         const map = new Map<string, ReturnType<typeof buildNodeMentionReferences>>();
-        nodes.forEach((node) => map.set(node.id, buildNodeMentionReferences(node, nodes, connections)));
+        const needsMentions = (node: CanvasNodeData) =>
+            node.type === CanvasNodeType.Text ||
+            node.type === CanvasNodeType.Config ||
+            node.id === dialogNodeId ||
+            selectedNodeIds.has(node.id);
+        nodes.forEach((node) => {
+            if (!needsMentions(node)) return;
+            map.set(node.id, buildNodeMentionReferences(node, nodes, connections));
+        });
         return map;
-    }, [connections, nodes]);
+    }, [connections, dialogNodeId, nodes, selectedNodeIds]);
 
     useEffect(() => {
         if (!cropNodeHasImage || !cropNode) {
@@ -1277,7 +1309,7 @@ function InfiniteCanvasPage() {
 
     const createAndOpenProject = useCallback(() => {
         const id = createProject(t("canvas.defaultTitle", { count: useCanvasStore.getState().projects.length + 1 }));
-        navigate(`/${id}`);
+        navigate(`/canvas/${id}`);
     }, [createProject, navigate, t]);
 
     const deleteCurrentProject = useCallback(async () => {
@@ -1304,17 +1336,22 @@ function InfiniteCanvasPage() {
 
     const saveCurrentProject = useCallback(async () => {
         if (manualSaving) return;
+        if (!isObjectStorageConfigured(objectStorage)) {
+            message.warning(t("canvas.cloudVersion.configureFirst"));
+            openConfigDialog(false, "object-storage");
+            return;
+        }
         setManualSaving(true);
         try {
-            await Promise.resolve();
-            message.success(t("canvas.saveSuccess"));
+            const result = await uploadCanvasCloudVersion(projectId);
+            message.success(result.archived ? t("canvas.cloudVersion.archived") : t("canvas.saveSuccess"));
         } catch (error) {
             console.error(error);
-            message.error(t("canvas.saveFailed"));
+            message.error(error instanceof Error ? error.message : t("canvas.saveFailed"));
         } finally {
             setManualSaving(false);
         }
-    }, [manualSaving, message, projectId, t]);
+    }, [manualSaving, message, objectStorage, openConfigDialog, projectId, t]);
 
     const handleVersionRestored = useCallback(async (project: CanvasProject) => {
         setProjectLoaded(false);
@@ -1323,10 +1360,16 @@ function InfiniteCanvasPage() {
             const restoredNodes = await hydrateCanvasImages(resetInterruptedGeneration(project.nodes));
             const migrated = migrateDirectorCanvas(restoredNodes, project.directorScenes || []);
             const restoredSessions = await hydrateAssistantImages(project.chatSessions || []);
+            const nextProject: CanvasProject = {
+                ...project,
+                id: projectId,
+                nodes: migrated.nodes,
+                directorScenes: migrated.directorScenes,
+                chatSessions: restoredSessions,
+                updatedAt: new Date().toISOString(),
+            };
+            useCanvasStore.getState().restoreProject(nextProject);
             setNodes(migrated.nodes);
-            if (migrated.directorScenes !== (project.directorScenes || [])) {
-                updateProject(projectId, { directorScenes: migrated.directorScenes });
-            }
             setConnections(project.connections);
             setChatSessions(restoredSessions);
             setActiveChatId(project.activeChatId || null);
@@ -1352,7 +1395,7 @@ function InfiniteCanvasPage() {
         } finally {
             historyPausedRef.current = false;
         }
-    }, []);
+    }, [projectId]);
 
     const exportCurrentProject = useCallback(async () => {
         const project = useCanvasStore.getState().projects.find((item) => item.id === projectId);
@@ -1932,9 +1975,13 @@ function InfiniteCanvasPage() {
     }, []);
 
     const handleNodeResizeStart = useCallback(() => {
+        historyPausedRef.current = true;
         setIsNodeResizing(true);
     }, []);
-    const handleNodeResizeEnd = useCallback(() => setIsNodeResizing(false), []);
+    const handleNodeResizeEnd = useCallback(() => {
+        historyPausedRef.current = false;
+        setIsNodeResizing(false);
+    }, []);
 
     const toggleNodeFreeResize = useCallback((nodeId: string) => {
         setNodes((prev) =>
@@ -4549,7 +4596,7 @@ function InfiniteCanvasPage() {
         setContextMenu({ type: "node", x: event.clientX, y: event.clientY, nodeId });
     }, []);
 
-    const renderNodePanel = useCallback(
+    const renderNodePanelImpl = useCallback(
         (panelNode: CanvasNodeData) =>
             getNodeDefinition(panelNode.type)?.Panel ? (
                 renderPluginPanel(panelNode)
@@ -4579,7 +4626,7 @@ function InfiniteCanvasPage() {
         [configInputsById, connectMentionReference, handleConfigNodeChange, handleGenerateNode, handleNodePromptChange, mentionReferencesByNodeId, renderPluginPanel, runningNodeIds],
     );
 
-    const renderNodeContentPanel = useCallback(
+    const renderNodeContentPanelImpl = useCallback(
         (contentNode: CanvasNodeData) => {
             if (contentNode.type === CanvasNodeType.Director) {
                 const scene = (currentProject?.directorScenes || []).find((item) => item.id === contentNode.metadata?.directorSceneId) || null;
@@ -4625,6 +4672,15 @@ function InfiniteCanvasPage() {
         [configInputsById, currentProject?.directorScenes, generateStoryboardImages, generateStoryboardVideos, handleConfigNodeChange, handleGenerateNode, openDirectorWorkbench, runningNodeIds, storyboardBusy, updateScriptStoryboard],
     );
 
+    // Keep CanvasNode memo stable: panel renderers change often (running set, mentions),
+    // but most nodes only need the latest impl when their own panel is open.
+    const renderNodePanelRef = useRef(renderNodePanelImpl);
+    const renderNodeContentPanelRef = useRef(renderNodeContentPanelImpl);
+    renderNodePanelRef.current = renderNodePanelImpl;
+    renderNodeContentPanelRef.current = renderNodeContentPanelImpl;
+    const renderNodePanel = useCallback((panelNode: CanvasNodeData) => renderNodePanelRef.current(panelNode), []);
+    const renderNodeContentPanel = useCallback((contentNode: CanvasNodeData) => renderNodeContentPanelRef.current(contentNode), []);
+
     if (!projectLoaded) return <CanvasRefreshShell />;
 
     return (
@@ -4642,8 +4698,8 @@ function InfiniteCanvasPage() {
                     onCancelTitleEditing={() => setTitleEditing(false)}
                     canUndo={historyState.canUndo}
                     canRedo={historyState.canRedo}
-                    saveDirty={saveStatus.dirty || manualSaving}
-                    saveSaving={saveStatus.saving || manualSaving}
+                    saveDirty={cloudDirty || manualSaving}
+                    saveSaving={manualSaving}
                     onSaveProject={() => void saveCurrentProject()}
                     onHome={() => {
                         if (embedded) {
@@ -4652,7 +4708,7 @@ function InfiniteCanvasPage() {
                         }
                         navigate("/");
                     }}
-                    onProjects={() => navigate("/")}
+                    onProjects={() => navigate("/canvas")}
                     onCreateProject={createAndOpenProject}
                     onDeleteProject={deleteCurrentProject}
                     onExportProject={exportCurrentProject}
