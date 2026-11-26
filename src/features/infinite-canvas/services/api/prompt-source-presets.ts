@@ -1,5 +1,7 @@
 import { nanoid } from "nanoid";
 
+import { BUILTIN_PROMPT_SOURCE_ID, BUILTIN_PROMPT_SOURCE_URL } from "./builtin-prompt-templates";
+
 export type PromptSource = {
     id: string;
     name: string;
@@ -24,6 +26,14 @@ export function createPromptSource(source?: Partial<PromptSource>): PromptSource
 }
 
 export const DEFAULT_PROMPT_SOURCES: PromptSource[] = [
+    {
+        id: BUILTIN_PROMPT_SOURCE_ID,
+        name: "至简画布模板",
+        url: BUILTIN_PROMPT_SOURCE_URL,
+        homepage: "",
+        enabled: true,
+        builtIn: true,
+    },
     registrySource("banana-prompt-quicker", "Banana Prompt Quicker", "https://glidea.github.io/banana-prompt-quicker/"),
     registrySource("davidwu-gpt-image2-prompts", "DavidWu GPT Image 2", "https://github.com/davidwuw0811-boop/awesome-gpt-image2-prompts"),
     registrySource("freestylefly-gpt-image-2", "Freestylefly GPT Image 2", "https://github.com/freestylefly/awesome-gpt-image-2"),

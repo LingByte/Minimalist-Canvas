@@ -1,3 +1,4 @@
+import { isBuiltinPromptSourceUrl, listBuiltinPromptTemplates } from "./builtin-prompt-templates";
 import type { PromptSource } from "./prompt-source-presets";
 
 export type RawPrompt = {
@@ -30,8 +31,14 @@ async function fetchSource(source: PromptSource, options?: RunOptions) {
 export async function runPromptSource(source: PromptSource, options?: RunOptions): Promise<RawPrompt[]> {
     const url = source.url.trim();
     if (!url) throw new Error("JSON URL 不能为空");
+    if (isBuiltinPromptSourceUrl(url)) {
+        if (options?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+        const items = listBuiltinPromptTemplates();
+        if (!items.length) throw new Error(`「${source.name}」未解析到有效提示词`);
+        return items;
+    }
     if (!/^https?:\/\//i.test(url)) {
-        throw new Error(`「${source.name}」来源地址无效，仅支持 http(s) URL`);
+        throw new Error(`「${source.name}」来源地址无效，仅支持 http(s) 或 builtin://`);
     }
     let data: unknown;
     try {

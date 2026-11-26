@@ -22,9 +22,9 @@ type PromptSourceStore = {
   setSources: (sources: PromptSource[]) => void;
 };
 
-function isHttpPromptSourceUrl(url: string) {
+function isSupportedPromptSourceUrl(url: string) {
   const value = url.trim().toLowerCase();
-  return value.startsWith("http://") || value.startsWith("https://");
+  return value.startsWith("http://") || value.startsWith("https://") || value.startsWith("builtin://");
 }
 
 function mergeWithDefaults(saved: PromptSource[]): PromptSource[] {
@@ -39,7 +39,7 @@ function mergeWithDefaults(saved: PromptSource[]): PromptSource[] {
       (source) =>
         !source.builtIn &&
         !DEFAULT_PROMPT_SOURCES.some((item) => item.id === source.id) &&
-        isHttpPromptSourceUrl(source.url),
+        isSupportedPromptSourceUrl(source.url),
     )
     .map((source) => createPromptSource(source));
   return [...builtIn, ...custom];
