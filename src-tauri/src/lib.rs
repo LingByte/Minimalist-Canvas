@@ -37,6 +37,8 @@ pub fn run() {
             tomato::library_delete_local,
             tomato::library_reveal_local,
             tomato::library_open_local,
+            tomato::library_open_book,
+            tomato::library_read_chapter,
             tomato::library_downloader_status,
             tomato::library_install_downloader,
             tomato::library_start_downloader,

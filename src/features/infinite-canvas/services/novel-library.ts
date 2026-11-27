@@ -154,7 +154,36 @@ export async function revealLocalNovel(path: string) {
 
 export async function openLocalNovel(path: string) {
     requireDesktop();
-    return invoke<void>("library_open_local", { path });
+    return invoke<void>("library_reveal_local", { path });
+}
+
+export type NovelChapterMeta = {
+    index: number;
+    title: string;
+};
+
+export type NovelBookView = {
+    path: string;
+    title: string;
+    author: string;
+    chapters: NovelChapterMeta[];
+    format: string;
+};
+
+export type NovelChapter = {
+    index: number;
+    title: string;
+    text: string;
+};
+
+export async function openNovelBook(path: string) {
+    requireDesktop();
+    return invoke<NovelBookView>("library_open_book", { path });
+}
+
+export async function readNovelChapter(path: string, index: number) {
+    requireDesktop();
+    return invoke<NovelChapter>("library_read_chapter", { path, index });
 }
 
 export async function getDownloaderStatus() {

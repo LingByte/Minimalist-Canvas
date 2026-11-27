@@ -9,7 +9,7 @@ mod local;
 mod runtime;
 
 pub use book_dir::{
-    delete_book, ensure_book_dir, import_epub_as_book_dir, open_book, read_chapter,
+    delete_book, ensure_book_dir, import_epub_as_book_dir, is_book_dir, open_book, read_chapter,
 };
 pub use client::{PreviewResponse, SearchItem, SearchResponse, TomatoClient, cover_url_from_raw};
 pub use config::{

@@ -5,9 +5,10 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tomato_library::{
-    DownloadProgressEvent, DownloadRequest, DownloadResult, DownloaderStatus, LocalBook,
-    TomatoClient, TomatoLibraryConfig, TomatoLibraryConfigManager, cover_url_from_raw,
-    default_library_path, delete_book, download_book_to_library_with_progress, list_local_books,
+    DownloadProgressEvent, DownloadRequest, DownloadResult, DownloaderStatus, EpubChapter,
+    EpubChapterMeta, LocalBook, TomatoClient, TomatoLibraryConfig, TomatoLibraryConfigManager,
+    cover_url_from_raw, default_library_path, delete_book, download_book_to_library_with_progress,
+    ensure_book_dir, is_book_dir, list_local_books, open_book, read_chapter, read_local_text,
     runtime,
 };
 
@@ -407,6 +408,110 @@ fn ensure_path_in_library(path: &PathBuf) -> Result<PathBuf, String> {
 pub async fn library_delete_local(path: String) -> Result<(), String> {
     let path = ensure_path_in_library(&PathBuf::from(path))?;
     delete_book(&path).map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryBookView {
+    pub path: String,
+    pub title: String,
+    pub author: String,
+    pub chapters: Vec<EpubChapterMeta>,
+    pub format: String,
+}
+
+fn file_stem_title(path: &std::path::Path) -> String {
+    path.file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "未命名".into())
+}
+
+#[tauri::command]
+pub async fn library_open_book(path: String) -> Result<LibraryBookView, String> {
+    let path = ensure_path_in_library(&PathBuf::from(path))?;
+    if !path.exists() {
+        return Err(format!("路径不存在: {}", path.display()));
+    }
+    let cfg = load_cfg()?;
+    let library_root = cfg.ensure_library_dir().map_err(|e| e.to_string())?;
+
+    if is_book_dir(&path) {
+        let book = open_book(&path).map_err(|e| e.to_string())?;
+        return Ok(LibraryBookView {
+            path: path.to_string_lossy().into_owned(),
+            title: book.title,
+            author: book.author,
+            chapters: book.chapters,
+            format: "book".into(),
+        });
+    }
+
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+
+    if ext == "epub" {
+        let book_dir = ensure_book_dir(&path, &library_root).map_err(|e| e.to_string())?;
+        let book = open_book(&book_dir).map_err(|e| e.to_string())?;
+        return Ok(LibraryBookView {
+            path: book_dir.to_string_lossy().into_owned(),
+            title: book.title,
+            author: book.author,
+            chapters: book.chapters,
+            format: "book".into(),
+        });
+    }
+
+    if ext == "txt" {
+        let title = file_stem_title(&path);
+        return Ok(LibraryBookView {
+            path: path.to_string_lossy().into_owned(),
+            title: title.clone(),
+            author: String::new(),
+            chapters: vec![EpubChapterMeta {
+                index: 0,
+                title: title.clone(),
+            }],
+            format: "txt".into(),
+        });
+    }
+
+    Err(format!("暂不支持在应用内阅读该格式: {}", ext))
+}
+
+#[tauri::command]
+pub async fn library_read_chapter(path: String, index: u32) -> Result<EpubChapter, String> {
+    let path = ensure_path_in_library(&PathBuf::from(path))?;
+    if !path.exists() {
+        return Err(format!("路径不存在: {}", path.display()));
+    }
+
+    if is_book_dir(&path) {
+        return read_chapter(&path, index).map_err(|e| e.to_string());
+    }
+
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+
+    if ext == "txt" {
+        if index != 0 {
+            return Err("章节不存在".into());
+        }
+        let title = file_stem_title(&path);
+        let text = read_local_text(&path, 800_000).map_err(|e| e.to_string())?;
+        return Ok(EpubChapter {
+            index: 0,
+            title,
+            text,
+        });
+    }
+
+    Err("请先打开书籍后再读取章节".into())
 }
 
 #[tauri::command]

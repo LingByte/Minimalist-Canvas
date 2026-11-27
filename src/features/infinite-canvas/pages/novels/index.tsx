@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { App, Button, Empty, Input, Modal, Progress, Segmented, Spin, Tag, Tooltip } from "antd";
-import { BookOpen, Download, FolderOpen, HardDriveDownload, Info, Play, RefreshCw, Search, Square, Trash2 } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, Download, FolderOpen, HardDriveDownload, Info, List, Play, RefreshCw, Search, Square, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { isTauri } from "@canvas/services/fs-store";
@@ -12,14 +12,17 @@ import {
     installDownloader,
     listenNovelDownloadProgress,
     listLocalNovels,
-    openLocalNovel,
+    openNovelBook,
     previewNovel,
+    readNovelChapter,
     revealLocalNovel,
     searchNovels,
     startDownloader,
     stopDownloader,
     type DownloaderStatus,
     type LocalNovel,
+    type NovelBookView,
+    type NovelChapter,
     type NovelDownloadProgress,
     type NovelPreview,
     type NovelSearchItem,
@@ -63,6 +66,13 @@ export default function NovelsPage() {
     const [detailLoading, setDetailLoading] = useState(false);
     const [detailItem, setDetailItem] = useState<NovelSearchItem | null>(null);
     const [detail, setDetail] = useState<NovelPreview | null>(null);
+    const [readerOpen, setReaderOpen] = useState(false);
+    const [readerLoading, setReaderLoading] = useState(false);
+    const [chapterLoading, setChapterLoading] = useState(false);
+    const [readerBook, setReaderBook] = useState<NovelBookView | null>(null);
+    const [readerChapter, setReaderChapter] = useState<NovelChapter | null>(null);
+    const [readerIndex, setReaderIndex] = useState(0);
+    const [tocOpen, setTocOpen] = useState(true);
 
     const running = Boolean(downloader?.running) || downloader?.phase === "running";
     // Prefer running over install: a live local server may outlive the Child handle /
@@ -220,6 +230,44 @@ export default function NovelsPage() {
             .finally(() => setDetailLoading(false));
     };
 
+    const loadChapter = useCallback(
+        async (bookPath: string, index: number) => {
+            setChapterLoading(true);
+            try {
+                const chapter = await readNovelChapter(bookPath, index);
+                setReaderChapter(chapter);
+                setReaderIndex(index);
+            } catch (error) {
+                message.error(error instanceof Error ? error.message : t("novels.local.chapterFailed"));
+            } finally {
+                setChapterLoading(false);
+            }
+        },
+        [message, t],
+    );
+
+    const onRead = async (book: LocalNovel) => {
+        setReaderOpen(true);
+        setReaderLoading(true);
+        setReaderBook(null);
+        setReaderChapter(null);
+        setTocOpen(true);
+        try {
+            const opened = await openNovelBook(book.path);
+            setReaderBook(opened);
+            if (opened.path !== book.path) {
+                void refreshLocal();
+            }
+            const first = opened.chapters[0]?.index ?? 0;
+            await loadChapter(opened.path, first);
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : t("novels.local.readFailed"));
+            setReaderOpen(false);
+        } finally {
+            setReaderLoading(false);
+        }
+    };
+
     const onDelete = (book: LocalNovel) => {
         modal.confirm({
             title: t("novels.local.deleteTitle", { name: book.name }),
@@ -237,6 +285,11 @@ export default function NovelsPage() {
             },
         });
     };
+
+    const chapterMetaIndex = useMemo(() => {
+        if (!readerBook) return -1;
+        return readerBook.chapters.findIndex((chapter) => chapter.index === readerIndex);
+    }, [readerBook, readerIndex]);
 
     const installProgress = useMemo(() => {
         if (downloader?.phase !== "installing") return null;
@@ -380,10 +433,10 @@ export default function NovelsPage() {
                                                 {book.ext.toUpperCase()} · {formatBytes(book.size)}
                                             </div>
                                             <div className="mt-2 flex flex-wrap gap-1.5">
-                                                <Button size="small" onClick={() => void openLocalNovel(book.path)}>
-                                                    {t("novels.local.open")}
+                                                <Button type="primary" size="small" icon={<BookOpen className="size-3.5" />} onClick={() => void onRead(book)}>
+                                                    {t("novels.local.read")}
                                                 </Button>
-                                                <Button size="small" onClick={() => void revealLocalNovel(book.path)}>
+                                                <Button size="small" icon={<FolderOpen className="size-3.5" />} onClick={() => void revealLocalNovel(book.path)}>
                                                     {t("novels.local.reveal")}
                                                 </Button>
                                                 <Button size="small" danger icon={<Trash2 className="size-3.5" />} onClick={() => onDelete(book)} />
@@ -464,6 +517,122 @@ export default function NovelsPage() {
                     )}
                 </div>
             </main>
+
+            <Modal
+                open={readerOpen}
+                title={null}
+                footer={null}
+                onCancel={() => {
+                    setReaderOpen(false);
+                    setReaderBook(null);
+                    setReaderChapter(null);
+                }}
+                width="min(1100px, 96vw)"
+                centered
+                destroyOnHidden
+                styles={{ body: { padding: 0, height: "min(82vh, 860px)" } }}
+                className="novel-reader-modal"
+            >
+                {readerLoading && !readerBook ? (
+                    <div className="flex h-full items-center justify-center py-24">
+                        <Spin />
+                    </div>
+                ) : readerBook ? (
+                    <div className="flex h-full min-h-0 flex-col">
+                        <header className="flex shrink-0 items-center gap-3 border-b border-stone-200 px-4 py-3 dark:border-stone-800">
+                            <div className="min-w-0 flex-1">
+                                <div className="truncate text-base font-semibold">{readerBook.title}</div>
+                                <div className="mt-0.5 truncate text-xs text-stone-500">
+                                    {readerBook.author || t("novels.search.unknownAuthor")}
+                                    {readerBook.chapters.length
+                                        ? ` · ${t("novels.local.readingProgress", {
+                                              current: Math.max(1, chapterMetaIndex + 1),
+                                              total: readerBook.chapters.length,
+                                          })}`
+                                        : ""}
+                                </div>
+                            </div>
+                            <Button
+                                size="small"
+                                icon={<List className="size-3.5" />}
+                                onClick={() => setTocOpen((open) => !open)}
+                            >
+                                {t("novels.local.chapterList")}
+                            </Button>
+                            <Button
+                                size="small"
+                                disabled={chapterMetaIndex <= 0 || chapterLoading}
+                                icon={<ChevronLeft className="size-3.5" />}
+                                onClick={() => {
+                                    const prev = readerBook.chapters[chapterMetaIndex - 1];
+                                    if (prev) void loadChapter(readerBook.path, prev.index);
+                                }}
+                            >
+                                {t("novels.local.prevChapter")}
+                            </Button>
+                            <Button
+                                size="small"
+                                disabled={chapterMetaIndex < 0 || chapterMetaIndex >= readerBook.chapters.length - 1 || chapterLoading}
+                                icon={<ChevronRight className="size-3.5" />}
+                                onClick={() => {
+                                    const next = readerBook.chapters[chapterMetaIndex + 1];
+                                    if (next) void loadChapter(readerBook.path, next.index);
+                                }}
+                            >
+                                {t("novels.local.nextChapter")}
+                            </Button>
+                        </header>
+                        <div className="flex min-h-0 flex-1">
+                            {tocOpen ? (
+                                <aside className="flex w-56 shrink-0 flex-col border-r border-stone-200 dark:border-stone-800 sm:w-64">
+                                    <div className="shrink-0 px-3 py-2 text-xs font-medium text-stone-500">
+                                        {t("novels.local.chapterList")}
+                                    </div>
+                                    <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3">
+                                        {readerBook.chapters.length ? (
+                                            readerBook.chapters.map((chapter) => (
+                                                <button
+                                                    key={chapter.index}
+                                                    type="button"
+                                                    className={cn(
+                                                        "mb-0.5 w-full rounded-lg px-2.5 py-2 text-left text-sm transition-colors",
+                                                        chapter.index === readerIndex
+                                                            ? "bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900"
+                                                            : "text-stone-700 hover:bg-stone-100 dark:text-stone-200 dark:hover:bg-stone-800",
+                                                    )}
+                                                    onClick={() => void loadChapter(readerBook.path, chapter.index)}
+                                                >
+                                                    <span className="line-clamp-2">{chapter.title}</span>
+                                                </button>
+                                            ))
+                                        ) : (
+                                            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("novels.local.noChapters")} />
+                                        )}
+                                    </div>
+                                </aside>
+                            ) : null}
+                            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-[#f7f4ef] px-5 py-6 dark:bg-stone-950 sm:px-10">
+                                {chapterLoading && !readerChapter ? (
+                                    <div className="flex justify-center py-20">
+                                        <Spin />
+                                    </div>
+                                ) : readerChapter ? (
+                                    <article className={cn("mx-auto max-w-2xl", chapterLoading && "opacity-60")}>
+                                        <h2 className="mb-5 text-xl font-semibold tracking-tight text-stone-900 dark:text-stone-50">
+                                            {readerChapter.title}
+                                        </h2>
+                                        <div className="whitespace-pre-wrap text-[15px] leading-8 text-stone-800 dark:text-stone-200">
+                                            {readerChapter.text}
+                                        </div>
+                                    </article>
+                                ) : (
+                                    <Empty className="py-20" description={t("novels.local.noChapters")} />
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                ) : null}
+            </Modal>
 
             <Modal
                 open={detailOpen}
