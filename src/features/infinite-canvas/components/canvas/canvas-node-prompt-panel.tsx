@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { ModelPicker } from "@canvas/components/model-picker";
 import { defaultConfig, resolveModelForCapability, useConfigStore, useEffectiveConfig, type AiConfig } from "@canvas/stores/use-config-store";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
+import { resolveNodeTtsVoiceId } from "@canvas/lib/tts-voices";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { CanvasImageSettingsPopover } from "./canvas-image-settings-popover";
 import { CanvasModelPriceHint } from "./canvas-model-price-hint";
@@ -302,7 +303,12 @@ function buildNodeConfig(globalConfig: AiConfig, node: CanvasNodeData, mode: Can
         audioFormat: node.metadata?.audioFormat || globalConfig.audioFormat || defaultConfig.audioFormat,
         audioSpeed: node.metadata?.audioSpeed || globalConfig.audioSpeed || defaultConfig.audioSpeed,
         audioInstructions: node.metadata?.audioInstructions || globalConfig.audioInstructions || defaultConfig.audioInstructions,
-        ttsVoiceId: node.metadata?.ttsVoiceId || globalConfig.ttsVoiceId || defaultConfig.ttsVoiceId,
+        ttsVoiceId: resolveNodeTtsVoiceId({
+            nodeTtsVoiceId: node.metadata?.ttsVoiceId,
+            nodeAudioVoice: node.metadata?.audioVoice,
+            globalTtsVoiceId: globalConfig.ttsVoiceId,
+            fallback: defaultConfig.ttsVoiceId,
+        }),
         ttsEngineId: node.metadata?.ttsEngineId || globalConfig.ttsEngineId || defaultConfig.ttsEngineId,
         count: String(node.metadata?.count || (mode === "image" ? globalConfig.canvasImageCount || globalConfig.count : globalConfig.count) || defaultConfig.count),
     };

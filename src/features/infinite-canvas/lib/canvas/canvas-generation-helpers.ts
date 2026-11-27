@@ -7,6 +7,7 @@ import { resolveMediaUrl } from "@canvas/services/file-storage";
 import { getGenerationAssetByClientId } from "@canvas/services/api/generation-assets";
 import { isUnstableMediaUrl } from "@canvas/lib/signed-url";
 import { imageMetadata, referenceUrl } from "@canvas/lib/canvas/canvas-node-factory";
+import { resolveNodeTtsVoiceId } from "@canvas/lib/tts-voices";
 import type { NodeGenerationInput } from "@canvas/components/canvas/canvas-node-generation";
 import type { CanvasNodeGenerationMode } from "@canvas/components/canvas/canvas-node-prompt-panel";
 import type { CanvasImageAngleParams } from "@canvas/components/canvas/canvas-node-angle-dialog";
@@ -224,7 +225,12 @@ export function buildGenerationConfig(config: AiConfig, node: CanvasNodeData | u
         audioFormat: node?.metadata?.audioFormat || config.audioFormat || defaultConfig.audioFormat,
         audioSpeed: node?.metadata?.audioSpeed || config.audioSpeed || defaultConfig.audioSpeed,
         audioInstructions: node?.metadata?.audioInstructions || config.audioInstructions || defaultConfig.audioInstructions,
-        ttsVoiceId: node?.metadata?.ttsVoiceId || config.ttsVoiceId || defaultConfig.ttsVoiceId,
+        ttsVoiceId: resolveNodeTtsVoiceId({
+            nodeTtsVoiceId: node?.metadata?.ttsVoiceId,
+            nodeAudioVoice: node?.metadata?.audioVoice,
+            globalTtsVoiceId: config.ttsVoiceId,
+            fallback: defaultConfig.ttsVoiceId,
+        }),
         ttsEngineId: node?.metadata?.ttsEngineId || config.ttsEngineId || defaultConfig.ttsEngineId,
         count: String(node?.metadata?.count || (mode === "image" ? config.canvasImageCount || config.count : config.count) || defaultConfig.count),
     };

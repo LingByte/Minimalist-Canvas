@@ -275,7 +275,7 @@ export const synthesizeQcloud: TtsSynthesizer = async (engine, input) => {
     const appId = engine.options.appId?.trim();
     const secretId = engine.options.secretId?.trim();
     const secretKey = engine.options.secretKey?.trim();
-    const voiceType = Number(engine.options.voiceType || input.voice || engine.voice || "1001");
+    const voiceType = Number(engine.options.voiceType || input.voice || engine.voice || "101001");
     if (!appId || !secretId || !secretKey) throw new Error("QCloud appId / secretId / secretKey are required");
 
     // TC3: Action / Version / Region belong in X-TC-* headers only — not the JSON body.

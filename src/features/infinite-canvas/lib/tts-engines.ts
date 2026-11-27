@@ -165,10 +165,10 @@ export const TTS_VENDOR_META: TtsVendorMeta[] = [
         labelKey: "config.tts.vendors.qcloud",
         fields: ["appId", "secretId", "secretKey"],
         defaults: {
-            voice: "1001",
+            voice: "101001",
             model: "",
             baseUrl: "",
-            options: { appId: "", secretId: "", secretKey: "", voiceType: "1001" },
+            options: { appId: "", secretId: "", secretKey: "", voiceType: "101001" },
         },
     },
     {

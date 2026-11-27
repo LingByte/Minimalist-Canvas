@@ -179,6 +179,20 @@ export function migrateLegacyAudioVoiceId(audioVoice: string | undefined, ttsVoi
     return resolved?.id || DEFAULT_TTS_VOICE_ID;
 }
 
+/** Prefer node catalog id; fall back to legacy node audioVoice, then global/default. */
+export function resolveNodeTtsVoiceId(options: {
+    nodeTtsVoiceId?: string;
+    nodeAudioVoice?: string;
+    globalTtsVoiceId?: string;
+    fallback?: string;
+}) {
+    const nodeId = (options.nodeTtsVoiceId || "").trim();
+    if (nodeId) return nodeId;
+    const legacy = (options.nodeAudioVoice || "").trim();
+    if (legacy) return migrateLegacyAudioVoiceId(legacy, undefined);
+    return (options.globalTtsVoiceId || "").trim() || options.fallback || DEFAULT_TTS_VOICE_ID;
+}
+
 function applyUpstreamVoice(engine: TtsEngine, upstreamId: string): TtsEngine {
     const options = { ...engine.options };
     switch (engine.vendor) {

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## v0.1.13 - 2026-11-27
+
++ [新增] 原生 TTS：多厂商语音合成适配（OpenAI Compatible、腾讯云、火山、Azure、ElevenLabs 等）。
++ [新增] 内置音色目录；画布与偏好只选音色，按厂商自动匹配就绪渠道（多个时随机）。
++ [新增] TTS 配置页仅注册厂商凭证，支持引擎测试试听。
++ [修复] 旧节点仅有 `audioVoice` 时正确迁移到 `ttsVoiceId`，避免误用全局音色。
++ [修复] 腾讯云默认 VoiceType 与目录对齐为 `101001`。
++ [说明] 讯飞当前走 voice_clone WebSocket，目录里的在线音色可能不完全适用，后续再拆在线 TTS。
+
 ## v0.16.0 - 2026-08-18
 
 + [新增] 提示词来源新增 Freestylefly GPT Image 2 内置来源。
