@@ -11,6 +11,7 @@ import {
 } from "@canvas/constant/navigation-tools";
 import { AppConfigModal } from "@canvas/components/layout/app-config-modal";
 import { MobileNavDrawer } from "@canvas/components/layout/mobile-nav-drawer";
+import { VersionReleaseModal } from "@canvas/components/layout/version-release-modal";
 import { AnimatedThemeToggler } from "@canvas/components/ui/animated-theme-toggler";
 import { SidebarNavItem } from "@/components/layout/components/sidebar-nav-item";
 import { Button } from "@/components/ui/button";
@@ -152,6 +153,7 @@ export function CanvasToolsSidebar(props: { className?: string }) {
                         aria-label={t(theme === "dark" ? "topNav.lightTheme" : "topNav.darkTheme")}
                         title={t(theme === "dark" ? "topNav.lightTheme" : "topNav.darkTheme")}
                     />
+                    <VersionReleaseModal className="text-sidebar-foreground/45 hover:text-sidebar-foreground max-w-[4.25rem] truncate px-1 text-center text-[10px] font-medium tracking-tight" />
                 </div>
             </aside>
 
@@ -171,6 +173,7 @@ export function CanvasToolsSidebar(props: { className?: string }) {
                     {homeLink}
                 </div>
                 <div className="flex items-center gap-0.5">
+                    <VersionReleaseModal className="px-1.5 text-[11px] font-medium text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-white" />
                     <Button
                         type="button"
                         variant="ghost"
