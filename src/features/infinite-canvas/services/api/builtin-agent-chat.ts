@@ -30,21 +30,24 @@ type StreamState = {
     error?: string;
 };
 
+export type BuiltinAgentToolChoice = "auto" | "required";
+
 export async function requestBuiltinAgentChatTurn(
     config: AiConfig,
     messages: BuiltinAgentChatMessage[],
     tools: BuiltinAgentToolDefinition[],
     onDelta: (text: string) => void,
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal; toolChoice?: BuiltinAgentToolChoice },
 ): Promise<BuiltinAgentChatTurn> {
     const requestConfig = resolveModelRequestConfig(config, config.model || config.textModel);
+    const toolChoice = options?.toolChoice === "required" ? "required" : "auto";
     if (requestConfig.apiFormat === "anthropic") {
         const turn = await requestAnthropicMessages(
             requestConfig,
             messages as AnthropicChatMessage[],
             toAnthropicTools(tools),
             onDelta,
-            { signal: options?.signal },
+            { signal: options?.signal, toolChoice },
         );
         return {
             content: turn.content,
@@ -66,7 +69,7 @@ export async function requestBuiltinAgentChatTurn(
             model: requestConfig.model,
             messages: toWireMessages(messages),
             tools: tools.length ? tools : undefined,
-            tool_choice: tools.length ? "auto" : undefined,
+            tool_choice: tools.length ? toolChoice : undefined,
             stream: true,
         }),
         signal: options?.signal,

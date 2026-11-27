@@ -250,11 +250,37 @@ export function builtinAgentTools(hasCanvas: boolean): ResponseFunctionTool[] {
             function: {
                 name: "canvas_apply_ops",
                 description:
-                    "Apply operations to the open canvas. Ops: {type:'add_node',nodeType?,title?,x?,y?,width?,height?,metadata?} | {type:'update_node',id,metadata?|patch?} | {type:'delete_node',id?|ids?|nodeType?} | {type:'connect_nodes',fromNodeId,toNodeId} | {type:'delete_connections',id?|ids?|all?} | {type:'set_viewport',viewport:{x,y,zoom}} | {type:'select_nodes',ids[]} | {type:'run_generation',nodeId,mode?('text'|'image'|'video'|'audio'),prompt?}. nodeType includes 'text','image','video','audio','config','script','director','group'. For storyboards prefer nodeType 'script' with metadata.storyboard.rows[] = [{id?,shotNumber,durationSeconds,plotDescription,imageNodeId?,videoNodeId?}]. Missing script storyboard is auto-initialized. Returns an audit + updated counts.",
+                    "Apply operations to the open canvas. Ops: {type:'add_node',nodeType?,title?,x?,y?,width?,height?,metadata?} | {type:'update_node',id,metadata?|patch?} | {type:'delete_node',id?|ids?|nodeType?} | {type:'connect_nodes',fromNodeId,toNodeId} | {type:'delete_connections',id?|ids?|all?} | {type:'set_viewport',viewport:{x,y,zoom}} | {type:'select_nodes',ids[]} | {type:'run_generation',nodeId,mode?('text'|'image'|'video'|'audio'),prompt?}. For filling prompts on existing nodes prefer canvas_update_node_prompts. Example update_node: {type:'update_node',id:'image-123',metadata:{prompt:'...',composerContent:'...'}}. nodeType includes 'text','image','video','audio','config','script','director','group'. For storyboards prefer nodeType 'script' with metadata.storyboard.rows[] = [{id?,shotNumber,durationSeconds,plotDescription,imageNodeId?,videoNodeId?}]. Missing script storyboard is auto-initialized. Returns an audit + updated counts.",
                 parameters: {
                     type: "object",
                     properties: { ops: { type: "array", items: { type: "object" } } },
                     required: ["ops"],
+                },
+            },
+        },
+        {
+            type: "function",
+            function: {
+                name: "canvas_update_node_prompts",
+                description:
+                    "REQUIRED tool when filling/rewriting/optimizing prompts on EXISTING canvas nodes. Prefer this over chat text or canvas_apply_ops update_node. Call canvas_get_state first for real nodeIds, then send one batch items[{nodeId,prompt,title?}]. Writes metadata.prompt + metadata.composerContent (and text content for text nodes). Does NOT start generation. Never claim prompts updated without this tool succeeding.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        items: {
+                            type: "array",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    nodeId: { type: "string" },
+                                    prompt: { type: "string" },
+                                    title: { type: "string" },
+                                },
+                                required: ["nodeId", "prompt"],
+                            },
+                        },
+                    },
+                    required: ["items"],
                 },
             },
         },
@@ -327,6 +353,56 @@ export async function runBuiltinAgentTool(
                 nodes: next.nodes.length,
                 connections: next.connections.length,
                 selectedNodeIds: next.selectedNodeIds,
+                state: compactCanvasSnapshot(next),
+            };
+        }
+        case "canvas_update_node_prompts": {
+            const applyOps = canvasContext?.applyOps;
+            const snapshot = canvasContext?.snapshot;
+            if (!applyOps || !snapshot) throw new Error(i18n.t("agent.mcp.noCanvas"));
+            const items = Array.isArray(args.items) ? args.items : [];
+            if (!items.length) throw new Error(i18n.t("agent.mcp.opsRequired"));
+            const known = new Set(snapshot.nodes.map((node) => node.id));
+            const ops: CanvasAgentOp[] = [];
+            const skipped: Array<{ nodeId: string; reason: string }> = [];
+            const updated: string[] = [];
+            for (const raw of items) {
+                if (!raw || typeof raw !== "object") continue;
+                const item = raw as { nodeId?: unknown; prompt?: unknown; title?: unknown };
+                const nodeId = String(item.nodeId || "").trim();
+                const prompt = typeof item.prompt === "string" ? item.prompt : "";
+                const title = typeof item.title === "string" ? item.title.trim() : "";
+                if (!nodeId) {
+                    skipped.push({ nodeId: "", reason: "missing nodeId" });
+                    continue;
+                }
+                if (!known.has(nodeId)) {
+                    skipped.push({ nodeId, reason: "node not found" });
+                    continue;
+                }
+                if (!prompt.trim()) {
+                    skipped.push({ nodeId, reason: "empty prompt" });
+                    continue;
+                }
+                updated.push(nodeId);
+                ops.push({
+                    type: "update_node",
+                    id: nodeId,
+                    ...(title ? { patch: { title } } : {}),
+                    metadata: { prompt, composerContent: prompt },
+                });
+            }
+            if (!ops.length) {
+                return { ok: false, updated: [], skipped, reason: "no valid items" };
+            }
+            const audit = auditCanvasOps(snapshot, ops);
+            const next = applyOps(ops);
+            return {
+                ...audit,
+                ok: true,
+                updated,
+                skipped,
+                nodes: next.nodes.length,
                 state: compactCanvasSnapshot(next),
             };
         }
@@ -512,6 +588,22 @@ function summarizeBuiltinToolResult(name: string, result: unknown) {
     }
     if (name === "canvas_get_state" || name === "canvas_get_selection") {
         return i18n.t(name === "canvas_get_selection" ? "agent.eventMore.selectionRead" : "agent.eventMore.canvasRead");
+    }
+    if (name === "canvas_update_node_prompts" && result && typeof result === "object") {
+        const data = result as { updated?: unknown[]; skipped?: unknown[] };
+        const updated = Array.isArray(data.updated) ? data.updated.length : 0;
+        const skipped = Array.isArray(data.skipped) ? data.skipped.length : 0;
+        if (skipped) {
+            return i18n.t("agent.eventMore.canvasOpsPartial", {
+                applied: updated,
+                skipped,
+                defaultValue: `已更新 ${updated} 个提示词，跳过 ${skipped} 项`,
+            });
+        }
+        return i18n.t("agent.eventMore.nodePromptsUpdated", {
+            count: updated,
+            defaultValue: `已更新 ${updated} 个节点提示词`,
+        });
     }
     if (name === "canvas_apply_ops" && result && typeof result === "object") {
         const data = result as { applied?: number; skipped?: unknown[]; nodes?: number; connections?: number };

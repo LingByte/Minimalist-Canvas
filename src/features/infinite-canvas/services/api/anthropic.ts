@@ -77,15 +77,22 @@ export function toAnthropicBody(
     model: string,
     messages: AnthropicChatMessage[],
     tools?: AnthropicToolDefinition[],
-    options?: { maxTokens?: number; systemPrompt?: string },
+    options?: { maxTokens?: number; systemPrompt?: string; toolChoice?: "auto" | "required" },
 ) {
     const { system, messages: converted } = toAnthropicMessages(messages, options?.systemPrompt);
+    const toolChoice =
+        tools?.length && options?.toolChoice === "required"
+            ? { type: "any" as const }
+            : tools?.length
+              ? { type: "auto" as const }
+              : undefined;
     return {
         model,
         max_tokens: options?.maxTokens ?? DEFAULT_MAX_TOKENS,
         ...(system ? { system } : {}),
         messages: converted,
         ...(tools?.length ? { tools } : {}),
+        ...(toolChoice ? { tool_choice: toolChoice } : {}),
         stream: true,
     };
 }
@@ -95,7 +102,7 @@ export async function requestAnthropicMessages(
     messages: AnthropicChatMessage[],
     tools: AnthropicToolDefinition[],
     onDelta?: (text: string) => void,
-    options?: { signal?: AbortSignal; systemPrompt?: string; maxTokens?: number },
+    options?: { signal?: AbortSignal; systemPrompt?: string; maxTokens?: number; toolChoice?: "auto" | "required" },
 ): Promise<AnthropicChatTurn> {
     const response = await postAnthropicMessages(config, messages, tools, options);
     if (!response.ok) throw new Error(await readFetchError(response));
@@ -132,7 +139,7 @@ async function postAnthropicMessages(
     config: { baseUrl: string; apiKey: string; model: string },
     messages: AnthropicChatMessage[],
     tools: AnthropicToolDefinition[],
-    options?: { signal?: AbortSignal; systemPrompt?: string; maxTokens?: number },
+    options?: { signal?: AbortSignal; systemPrompt?: string; maxTokens?: number; toolChoice?: "auto" | "required" },
 ) {
     const url = anthropicApiUrl(config.baseUrl, "/messages");
     const headers = { ...anthropicHeaders(config.apiKey), Accept: "text/event-stream" };

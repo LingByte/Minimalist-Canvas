@@ -47,7 +47,10 @@ export function applyCanvasAgentOps(snapshot: CanvasAgentSnapshot, ops?: CanvasA
         if (op.type === "add_node") {
             const nodeType = resolveAgentNodeType(op.nodeType);
             const spec = resolveAgentNodeSpec(nodeType);
-            const metadata = withScriptStoryboard(nodeType, { ...spec.metadata, ...op.metadata });
+            const metadata = withScriptStoryboard(
+                nodeType,
+                mirrorGenerationPrompt(nodeType, { ...spec.metadata, ...op.metadata }),
+            );
             const node: CanvasNodeData = {
                 id: op.id || `${nodeType}-${Date.now()}-${index}`,
                 type: nodeType,
@@ -73,7 +76,7 @@ export function applyCanvasAgentOps(snapshot: CanvasAgentSnapshot, ops?: CanvasA
                 };
                 return {
                     ...merged,
-                    metadata: withScriptStoryboard(merged.type, merged.metadata || {}),
+                    metadata: withScriptStoryboard(merged.type, mirrorGenerationPrompt(merged.type, merged.metadata || {})),
                 };
             });
         }
@@ -112,6 +115,29 @@ function resolveAgentNodeSpec(nodeType: CanvasNodeTypeId) {
         return { width: spec.width, height: spec.height, title: spec.title, metadata: spec.metadata || {} };
     }
     return getNodeSpec(nodeType);
+}
+
+/** Keep image/video/audio prompt fields in sync so UI + generation both see agent updates. */
+function mirrorGenerationPrompt(nodeType: CanvasNodeTypeId, metadata: CanvasNodeMetadata): CanvasNodeMetadata {
+    if (
+        nodeType !== CanvasNodeType.Image &&
+        nodeType !== CanvasNodeType.Video &&
+        nodeType !== CanvasNodeType.Audio &&
+        nodeType !== CanvasNodeType.Text
+    ) {
+        return metadata;
+    }
+    const prompt = typeof metadata.prompt === "string" ? metadata.prompt : undefined;
+    const composer = typeof metadata.composerContent === "string" ? metadata.composerContent : undefined;
+    const content = typeof metadata.content === "string" && nodeType === CanvasNodeType.Text ? metadata.content : undefined;
+    if (nodeType === CanvasNodeType.Text) {
+        const text = composer ?? prompt ?? content;
+        if (typeof text !== "string") return metadata;
+        return { ...metadata, content: text, prompt: text, composerContent: text };
+    }
+    const text = composer ?? prompt;
+    if (typeof text !== "string") return metadata;
+    return { ...metadata, prompt: text, composerContent: text };
 }
 
 function withScriptStoryboard(nodeType: CanvasNodeTypeId, metadata: CanvasNodeMetadata): CanvasNodeMetadata {

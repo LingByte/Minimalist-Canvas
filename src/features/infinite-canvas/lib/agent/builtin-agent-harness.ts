@@ -10,15 +10,22 @@ import {
     type BuiltinAgentToolResult,
 } from "@canvas/lib/agent/builtin-agent-tools";
 import {
+    hasReActActions,
+    parseReActActions,
+    stripReActBlocks,
+} from "@canvas/lib/agent/react-parser";
+import {
     requestBuiltinAgentChatTurn,
     type BuiltinAgentChatMessage,
     type BuiltinAgentContentPart,
+    type BuiltinAgentToolChoice,
 } from "@canvas/services/api/builtin-agent-chat";
 import type { AiConfig } from "@canvas/stores/use-config-store";
 import type { AgentAttachment, AgentCanvasContext, AgentChatItem } from "@canvas/stores/use-agent-store";
 import { randomId } from "@canvas/lib/utils";
 
 export const BUILTIN_AGENT_MAX_TOOL_ROUNDS = 12;
+const MAX_NO_TOOL_RETRIES = 2;
 
 export type BuiltinAgentHarnessHandlers = {
     onAssistantDelta: (assistantId: string, text: string) => void;
@@ -61,29 +68,53 @@ export async function runBuiltinAgentHarness(options: {
     ];
 
     let finalText = "";
-    // Rebuild each turn so shipped/user skills land in use_skill after store.load().
-    const tools = () => builtinAgentTools(true) as BuiltinAgentToolDefinition[];
+    let toolsDisabled = false;
+    let noToolRetries = 0;
+    const actionIntent = detectCanvasActionIntent(userText);
+    let forceTools = actionIntent;
+    // Only advertise canvas tools when a canvas is actually open.
+    const tools = () => builtinAgentTools(Boolean(liveContext?.snapshot)) as BuiltinAgentToolDefinition[];
+
     for (let round = 0; round < BUILTIN_AGENT_MAX_TOOL_ROUNDS; round += 1) {
         if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
         messages[0] = { role: "system", content: buildBuiltinAgentSystemPrompt(liveSnapshot) };
         const assistantId = randomId();
         handlers.onActivity?.(`thinking:${round + 1}`);
+        const activeTools = tools();
+        const toolChoice: BuiltinAgentToolChoice =
+            forceTools && activeTools.length ? "required" : "auto";
 
         let turn;
         try {
             turn = await requestBuiltinAgentChatTurnWithRetry(
                 config,
                 messages,
-                tools(),
+                activeTools,
                 (text) => {
                     if (text.trim()) handlers.onAssistantDelta(assistantId, text);
                 },
                 signal,
+                toolChoice,
             );
         } catch (error) {
-            // Some relays reject tool schemas; fall back to context-only chat once.
             const message = error instanceof Error ? error.message : String(error);
-            if (round === 0 && /tool|function.?call|not support|unsupported|invalid/i.test(message)) {
+            const toolProtocolError = /tool|function.?call|not support|unsupported|invalid|tool_choice/i.test(message);
+            // Relays that reject tool_choice=required: retry once with auto.
+            if (toolChoice === "required" && activeTools.length && toolProtocolError) {
+                forceTools = false;
+                turn = await requestBuiltinAgentChatTurnWithRetry(
+                    config,
+                    messages,
+                    activeTools,
+                    (text) => {
+                        if (text.trim()) handlers.onAssistantDelta(assistantId, text);
+                    },
+                    signal,
+                    "auto",
+                );
+            } else if (round === 0 && activeTools.length && toolProtocolError) {
+                // Some relays reject tool schemas entirely; fall back to context-only chat once.
+                toolsDisabled = true;
                 turn = await requestBuiltinAgentChatTurnWithRetry(
                     config,
                     messages,
@@ -92,20 +123,67 @@ export async function runBuiltinAgentHarness(options: {
                         if (text.trim()) handlers.onAssistantDelta(assistantId, text);
                     },
                     signal,
+                    "auto",
                 );
                 finalText = turn.content || "";
                 handlers.onAssistantFinalize(assistantId, finalText);
                 return { text: finalText, toolRounds: 0, toolsDisabled: true };
+            } else {
+                throw error;
             }
-            throw error;
         }
+
+        // Models without native tool_calls sometimes emit ReAct text — convert before giving up.
+        if (!turn.toolCalls.length && activeTools.length && hasReActActions(turn.content || "")) {
+            const reactCalls = parseReActActions(turn.content || "");
+            const known = new Set(activeTools.map((tool) => tool.function.name));
+            const converted = reactCalls
+                .filter((call) => known.has(call.name))
+                .map((call) => ({
+                    id: `react_${call.name}_${randomId()}`,
+                    name: call.name,
+                    arguments: JSON.stringify(call.args || {}),
+                }));
+            if (converted.length) {
+                turn = {
+                    content: stripReActBlocks(turn.content || ""),
+                    toolCalls: converted,
+                };
+            }
+        }
+
         finalText = turn.content || "";
-        handlers.onAssistantFinalize(assistantId, finalText);
 
         if (!turn.toolCalls.length) {
-            return { text: finalText, toolRounds: round };
+            const claimed = looksLikeClaimedMutation(finalText);
+            const shouldRetry =
+                activeTools.length > 0 &&
+                noToolRetries < MAX_NO_TOOL_RETRIES &&
+                (actionIntent || claimed);
+            if (shouldRetry) {
+                noToolRetries += 1;
+                forceTools = true;
+                // Drop the hallucinated bubble; keep model text in history for the nudge round.
+                handlers.onAssistantFinalize(assistantId, "");
+                messages.push({ role: "assistant", content: finalText || "(no tool calls)" });
+                messages.push({
+                    role: "user",
+                    content: [
+                        "STOP. You described canvas/world changes but did NOT call any tools.",
+                        "You MUST call tools now. Do not claim success in text and do not paste prompts only in chat.",
+                        "Typical sequence: canvas_get_state → canvas_update_node_prompts (for existing node prompts) and/or canvas_apply_ops (and run_generation only if asked).",
+                        "Use real node ids from canvas_get_state. Prefer one canvas_update_node_prompts batch. Reply with tool calls only until mutations succeed.",
+                    ].join("\n"),
+                });
+                handlers.onActivity?.(`retry-tools:${noToolRetries}`);
+                continue;
+            }
+            handlers.onAssistantFinalize(assistantId, finalText);
+            return { text: finalText, toolRounds: round, toolsDisabled };
         }
 
+        handlers.onAssistantFinalize(assistantId, finalText);
+        forceTools = false;
         messages.push({
             role: "assistant",
             content: finalText,
@@ -130,13 +208,18 @@ export async function runBuiltinAgentHarness(options: {
                 },
             });
             handlers.onActivity?.(label);
-            // Prefer store's latest canvasContext (bridge may have refreshed) while keeping liveSnapshot.
             const storeContext = liveContext;
             const result = await executeBuiltinAgentTool(call, { canvasContext: storeContext, navigate });
-            if (call.name === "canvas_apply_ops" && result.ok) {
-                // liveSnapshot is updated by liveContext.applyOps; also accept compact state payloads.
+            if (
+                (call.name === "canvas_apply_ops" || call.name === "canvas_update_node_prompts") &&
+                result.ok
+            ) {
                 liveSnapshot = storeContext?.snapshot || liveSnapshot;
-            } else if (call.name === "canvas_get_state" || call.name === "canvas_get_selection" || call.name === "canvas_undo_ops") {
+            } else if (
+                call.name === "canvas_get_state" ||
+                call.name === "canvas_get_selection" ||
+                call.name === "canvas_undo_ops"
+            ) {
                 liveSnapshot = storeContext?.snapshot || liveSnapshot;
             }
             const status = result.ok ? "completed" : "failed";
@@ -159,11 +242,27 @@ export async function runBuiltinAgentHarness(options: {
         }
     }
 
-    return { text: finalText, toolRounds: BUILTIN_AGENT_MAX_TOOL_ROUNDS };
+    return { text: finalText, toolRounds: BUILTIN_AGENT_MAX_TOOL_ROUNDS, toolsDisabled };
+}
+
+/** User likely wants the agent to mutate or inspect the canvas via tools. */
+export function detectCanvasActionIntent(text: string) {
+    const value = text.trim();
+    if (!value) return false;
+    return /创建|添加|新增|更新|修改|改写|改一下|优化|润色|重写|填充|写入|补全|设置|删除|移除|连接|连线|分镜|剧本|节点|提示词|生图|生成|导出|撤销|undo|create|add|update|edit|rewrite|polish|optimize|fill|set|delete|remove|connect|storyboard|script|node|prompt|generate|canvas_apply_ops|canvas_update_node_prompts|run_generation/i.test(
+        value,
+    );
+}
+
+function looksLikeClaimedMutation(text: string) {
+    const value = text.trim();
+    if (!value) return false;
+    return /已(经)?(完成)?(更新|创建|修改|写入|填充|添加|删除|连接|生成|优化|润色)|prompts?\s+(have been|were|are)\s+(updated|filled|set|rewritten|optimized)|successfully\s+(updated|created|added|modified|optimized)|我已经(把|将)|节点的提示词已|提示词(已经|都)?(写好|更新|改好)/i.test(
+        value,
+    );
 }
 
 function serializeToolResult(result: BuiltinAgentToolResult) {
-    // Prefer the human-readable meme wiki text for the model when present.
     if (
         result.name === "search_meme_wiki" &&
         result.result &&
@@ -215,8 +314,7 @@ function formatBuiltinToolOutput(name: string, result: BuiltinAgentToolResult) {
             entry?: { title?: string };
             hits?: Array<{ title?: string }>;
         };
-        if (typeof hit.text === "string" && hit.text.trim()) return hit.text.trim().slice(0, 2400);
-        if (Array.isArray(hit.hits) && hit.hits.length) {
+        if ((hit.mode === "search" || hit.mode === "pack") && Array.isArray(hit.hits)) {
             return hit.hits
                 .slice(0, 8)
                 .map((item) => item.title)
@@ -228,7 +326,7 @@ function formatBuiltinToolOutput(name: string, result: BuiltinAgentToolResult) {
     if (name === "canvas_get_state" || name === "canvas_get_selection") {
         return compactJson(result.result, 2400);
     }
-    if (name === "canvas_apply_ops") {
+    if (name === "canvas_apply_ops" || name === "canvas_update_node_prompts") {
         return compactJson(result.result, 2400);
     }
     if (result.summary) return result.summary;
@@ -273,15 +371,15 @@ async function requestBuiltinAgentChatTurnWithRetry(
     tools: Parameters<typeof requestBuiltinAgentChatTurn>[2],
     onDelta: Parameters<typeof requestBuiltinAgentChatTurn>[3],
     signal?: AbortSignal,
+    toolChoice: BuiltinAgentToolChoice = "auto",
 ) {
     try {
-        return await requestBuiltinAgentChatTurn(config, messages, tools, onDelta, { signal });
+        return await requestBuiltinAgentChatTurn(config, messages, tools, onDelta, { signal, toolChoice });
     } catch (error) {
         if (signal?.aborted || !isTransientNetworkError(error)) throw error;
-        // One quiet retry for flaky relays / brief disconnects.
         await new Promise((resolve) => window.setTimeout(resolve, 450));
         if (signal?.aborted) throw error;
-        return requestBuiltinAgentChatTurn(config, messages, tools, onDelta, { signal });
+        return requestBuiltinAgentChatTurn(config, messages, tools, onDelta, { signal, toolChoice });
     }
 }
 

@@ -41,7 +41,10 @@ export function buildBuiltinAgentSystemPrompt(snapshot: CanvasAgentSnapshot | nu
     return [
         "You are 至简未来AI, the built-in script / storyboard harness agent inside Minimalist Canvas.",
         "Default mission: turn user ideas into structured screenplays on the canvas, then optional image/video generation.",
-        "Prefer tools over guessing. Workflow: think → call tools → observe → reply briefly in the user's language (default Chinese).",
+        "CRITICAL: Canvas/world changes ONLY happen via tools. Text that claims you updated/created/deleted nodes without a successful tool call in THIS turn is a lie — do not do that.",
+        "Workflow: think → CALL TOOLS → observe tool JSON → reply briefly in the user's language (default Chinese).",
+        "If the user asks to create/update/fill/rewrite/optimize/delete/connect/generate on the canvas, your FIRST action must be a tool call (usually canvas_get_state, then canvas_update_node_prompts / canvas_apply_ops / run_generation).",
+        "Never paste long prompt drafts into chat as a substitute for writing them onto nodes.",
         "",
         "Script harness stages (use update_plan for multi-step work):",
         "1) Clarify genre, length, tone, and cast if missing.",
@@ -63,10 +66,12 @@ export function buildBuiltinAgentSystemPrompt(snapshot: CanvasAgentSnapshot | nu
         "- Fill plotDescription with concrete shot action, dialogue hints, and camera intent.",
         "- For shot images: add image nodes with metadata.prompt (or composerContent) derived from the shot plot, connect Script→Image, set row.imageNodeId, then run_generation on those image node ids.",
         "- If the user only asks to create an image/video/audio/text node (empty placeholder), call canvas_apply_ops with add_node only. Do NOT call run_generation unless they explicitly ask to generate content.",
+        "- To fill / rewrite / optimize prompts on EXISTING nodes: MUST call canvas_update_node_prompts with real nodeIds from canvas_get_state. Prefer one batch items[] covering all target nodes.",
+        "- Do not claim prompts were updated unless canvas_update_node_prompts / canvas_apply_ops returned updated node ids.",
         "- Prefer placing new nodes near the current viewport center when position is unspecified.",
         "- Never invent node IDs; call canvas_get_state first when unsure.",
         "- canvas_get_state / apply_ops return compact summaries (including storyboard row digests), not raw media payloads.",
-        "- After canvas mutations, briefly summarize what changed.",
+        "- After tools succeed, summarize ONLY what the tool results show (updated/skipped counts and ids). Never invent success.",
         "",
         "If you see unfamiliar Chinese memes/slang, call search_meme_wiki before guessing.",
         "Keep replies concise. Do not open with a generic capability list unless the user asks what you can do.",
@@ -81,7 +86,8 @@ export function buildBuiltinAgentSystemPrompt(snapshot: CanvasAgentSnapshot | nu
 
 function compactNode(node: CanvasNodeData) {
     const metadata = node.metadata || {};
-    const text = truncate(String(metadata.content || metadata.composerContent || metadata.prompt || ""), MAX_TEXT_CHARS);
+    const prompt = truncate(String(metadata.composerContent || metadata.prompt || ""), MAX_TEXT_CHARS);
+    const content = truncate(String(metadata.content || ""), MAX_TEXT_CHARS);
     const base = {
         id: node.id,
         type: node.type,
@@ -94,7 +100,10 @@ function compactNode(node: CanvasNodeData) {
         mode: metadata.generationMode,
         model: metadata.model,
         workflowKind: metadata.workflowKind,
-        text: text || undefined,
+        prompt: prompt || undefined,
+        content: content && content !== prompt ? content : undefined,
+        // Legacy alias so older skills still see a text excerpt.
+        text: prompt || content || undefined,
     };
     if (node.type !== CanvasNodeType.Script) return base;
     return {

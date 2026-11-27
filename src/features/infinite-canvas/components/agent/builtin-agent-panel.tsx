@@ -15,7 +15,7 @@ import { AgentChatTimeline } from "./agent-chat";
 import { AgentChatComposer } from "./agent-chat-composer";
 import { AgentPanelTabs } from "./agent-panel-tabs";
 import { BuiltinAgentSkillsView } from "./builtin-agent-skills-view";
-import { runBuiltinAgentHarness } from "@canvas/lib/agent/builtin-agent-harness";
+import { BUILTIN_AGENT_MAX_TOOL_ROUNDS, runBuiltinAgentHarness } from "@canvas/lib/agent/builtin-agent-harness";
 import {
     deleteBuiltinAgentThread,
     loadBuiltinAgentThreads,
@@ -343,7 +343,7 @@ export function BuiltinAgentPanel() {
 
         try {
             const canvasContext = useAgentStore.getState().canvasContext;
-            await runBuiltinAgentHarness({
+            const harnessResult = await runBuiltinAgentHarness({
                 config: { ...config, model: textModel, textModel },
                 history,
                 userText: promptForModel || text,
@@ -422,8 +422,30 @@ export function BuiltinAgentPanel() {
                     onActivity: (value) => setAgentState({ activity: value }),
                 },
             });
-            const finalized = useAgentStore.getState().messages;
+            let finalized = useAgentStore.getState().messages;
+            if (harnessResult.toolsDisabled) {
+                finalized = [
+                    ...finalized,
+                    {
+                        id: randomId(),
+                        role: "error",
+                        text: t("agent.builtin.noToolsSupport"),
+                        threadId: activeThreadId,
+                    },
+                ];
+            } else if (harnessResult.toolRounds >= BUILTIN_AGENT_MAX_TOOL_ROUNDS) {
+                finalized = [
+                    ...finalized,
+                    {
+                        id: randomId(),
+                        role: "assistant",
+                        text: t("agent.builtin.toolLimitReached", { count: BUILTIN_AGENT_MAX_TOOL_ROUNDS }),
+                        threadId: activeThreadId,
+                    },
+                ];
+            }
             setAgentState({
+                messages: finalized,
                 sending: false,
                 waiting: false,
                 activity: textModel ? modelOptionName(textModel) : "",
