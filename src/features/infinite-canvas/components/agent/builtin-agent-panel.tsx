@@ -655,7 +655,27 @@ export function BuiltinAgentPanel() {
                                 <div className="mt-1.5 max-w-[280px] text-sm leading-5" style={{ color: theme.node.muted }}>
                                     {ready ? t("agent.chat.emptyHint") : t("agent.connect.configureAiFirst")}
                                 </div>
-                                {!ready ? (
+                                {ready ? (
+                                    <div className="mt-5 flex max-w-[320px] flex-wrap justify-center gap-2">
+                                        {(
+                                            [
+                                                "agent.chat.suggestions.storyboard",
+                                                "agent.chat.suggestions.memeStoryboard",
+                                                "agent.chat.suggestions.shotList",
+                                            ] as const
+                                        ).map((key) => (
+                                            <button
+                                                key={key}
+                                                type="button"
+                                                className="rounded-full border px-3 py-1.5 text-left text-xs leading-4 transition hover:bg-black/5 dark:hover:bg-white/10"
+                                                style={{ borderColor: theme.node.stroke, color: theme.node.text }}
+                                                onClick={() => setAgentState({ prompt: t(key), activeTab: "chat" })}
+                                            >
+                                                {t(key)}
+                                            </button>
+                                        ))}
+                                    </div>
+                                ) : (
                                     <Button
                                         className="mt-5"
                                         type="primary"
@@ -664,7 +684,7 @@ export function BuiltinAgentPanel() {
                                     >
                                         {t("agent.connect.openAiConfig")}
                                     </Button>
-                                ) : null}
+                                )}
                             </div>
                         }
                     />
