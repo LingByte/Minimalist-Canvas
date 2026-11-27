@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/tooltip";
 import { SmartImage } from "@/components/smart-image";
 import { useCanvasHost } from "@canvas/integration/canvas-host-context";
+import { isObjectStorageConfigured } from "@canvas/lib/object-storage/types";
 import { DEFAULT_LOGO, DEFAULT_SYSTEM_NAME } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useConfigStore } from "@canvas/stores/use-config-store";
@@ -41,10 +42,12 @@ export function CanvasToolsSidebar(props: { className?: string }) {
     const { embedded, homeHref, logo, brandName } = useCanvasHost();
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
+    const objectStorage = useConfigStore((state) => state.objectStorage);
     const theme = useThemeStore((state) => state.theme);
     const setTheme = useThemeStore((state) => state.setTheme);
-    // Storage page also hosts Ops (desktop publishing); always keep the entry visible.
-    const visibleTools = navigationTools;
+    // Storage manager needs object storage; hide the rail entry until configured.
+    const storageReady = isObjectStorageConfigured(objectStorage);
+    const visibleTools = navigationTools.filter((tool) => tool.slug !== "storage" || storageReady);
 
     const activeToolSlug = activeToolFromPath(pathname);
     const brand = brandName || DEFAULT_SYSTEM_NAME;

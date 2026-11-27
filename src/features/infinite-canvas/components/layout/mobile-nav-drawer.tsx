@@ -3,7 +3,9 @@ import { Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { navigationTools, navigationToolActive, type NavigationToolSlug } from "@canvas/constant/navigation-tools";
+import { isObjectStorageConfigured } from "@canvas/lib/object-storage/types";
 import { cn } from "@canvas/lib/utils";
+import { useConfigStore } from "@canvas/stores/use-config-store";
 
 type MobileNavDrawerProps = {
     open: boolean;
@@ -15,7 +17,9 @@ export function MobileNavDrawer({ open, activeToolSlug, onClose }: MobileNavDraw
     const { t } = useTranslation();
     const { pathname } = useLocation();
     const pathSlug = pathname.split("/").filter(Boolean)[0];
-    const visibleTools = navigationTools;
+    const objectStorage = useConfigStore((state) => state.objectStorage);
+    const storageReady = isObjectStorageConfigured(objectStorage);
+    const visibleTools = navigationTools.filter((tool) => tool.slug !== "storage" || storageReady);
 
     return (
         <Drawer
