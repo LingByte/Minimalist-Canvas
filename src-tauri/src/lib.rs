@@ -1,5 +1,5 @@
 mod mcp;
-mod ops;
+mod tomato;
 
 use tauri::Manager;
 
@@ -13,7 +13,6 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .manage(ops::OpsState::default())
         .setup(|app| {
             #[cfg(desktop)]
             app.handle()
@@ -28,9 +27,18 @@ pub fn run() {
             mcp::mcp_registered,
             mcp::register_codex_mcp,
             mcp::open_codex_terminal,
-            ops::ops_runner_available,
-            ops::ops_run,
-            ops::ops_cancel,
+            tomato::library_get_settings,
+            tomato::library_set_settings,
+            tomato::library_list_local,
+            tomato::library_search,
+            tomato::library_download,
+            tomato::library_delete_local,
+            tomato::library_reveal_local,
+            tomato::library_open_local,
+            tomato::library_downloader_status,
+            tomato::library_install_downloader,
+            tomato::library_start_downloader,
+            tomato::library_stop_downloader,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

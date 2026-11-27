@@ -153,7 +153,6 @@ function EquationLine({ locale }: { locale: string }) {
         () => [
             { id: "skills", label: "Skills", icon: Blocks },
             { id: "meme", label: zh ? "梗包拉片" : "Meme pack", icon: Sparkles },
-            { id: "ops", label: zh ? "运营发布" : "Ops publish", icon: LayoutDashboard },
             { id: "local", label: zh ? "本地优先" : "Local-first", icon: Wand2 },
         ],
         [zh],

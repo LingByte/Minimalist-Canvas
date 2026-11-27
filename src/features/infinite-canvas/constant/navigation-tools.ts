@@ -1,4 +1,4 @@
-import { Blocks, FileText, HardDrive, Images, LayoutDashboard, Megaphone, Sparkles } from "lucide-react";
+import { Blocks, BookOpen, FileText, HardDrive, Images, LayoutDashboard, Sparkles } from "lucide-react";
 
 /**
  * Canvas tool rail. Image + video share one "generate" entry (/image);
@@ -29,8 +29,8 @@ export const navigationTools = [
         icon: Blocks,
     },
     {
-        slug: "ops",
-        icon: Megaphone,
+        slug: "novels",
+        icon: BookOpen,
     },
     {
         slug: "storage",
@@ -39,6 +39,10 @@ export const navigationTools = [
 ] as const;
 
 export type NavigationToolSlug = (typeof navigationTools)[number]["slug"];
+
+export function navigationToolHref(slug: NavigationToolSlug) {
+    return `/${slug}`;
+}
 
 export function navigationToolActive(slug: NavigationToolSlug, pathSlug: string | undefined) {
     if (!pathSlug) return false;

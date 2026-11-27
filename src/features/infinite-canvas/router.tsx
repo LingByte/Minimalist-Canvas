@@ -1,4 +1,4 @@
-import { Outlet, createBrowserRouter, type RouteObject } from "react-router-dom";
+import { Navigate, Outlet, createBrowserRouter, type RouteObject } from "react-router-dom";
 
 import { AnalyticsTracker } from "@canvas/components/layout/analytics-tracker";
 import { CanvasErrorBoundary, CanvasRouteError } from "@canvas/components/layout/canvas-error-boundary";
@@ -13,7 +13,7 @@ import ImagePage from "@canvas/pages/image";
 import NotFound from "@canvas/pages/not-found";
 import PromptsPage from "@canvas/pages/prompts";
 import SkillsPage from "@canvas/pages/skills";
-import OpsPage from "@canvas/pages/ops";
+import NovelsPage from "@canvas/pages/novels";
 import StoragePage from "@canvas/pages/storage";
 import VideoPage from "@canvas/pages/video";
 
@@ -21,14 +21,14 @@ import { CANVAS_BASENAME } from "./integration/constants";
 
 const appPages: RouteObject[] = [
     { index: true, element: <HomePage /> },
-    // Alias for older “/home” links from the canvas chrome.
     { path: "home", element: <HomePage /> },
     { path: "image", element: <ImagePage /> },
     { path: "video", element: <VideoPage /> },
     { path: "assets", element: <AssetsPage /> },
     { path: "prompts", element: <PromptsPage /> },
     { path: "skills", element: <SkillsPage /> },
-    { path: "ops", element: <OpsPage /> },
+    { path: "novels", element: <NovelsPage /> },
+    { path: "ops", element: <Navigate to="/canvas" replace /> },
     { path: "storage", element: <StoragePage /> },
     { path: "canvas", element: <CanvasPage /> },
     { path: "canvas/:id", element: <CanvasProjectPage /> },

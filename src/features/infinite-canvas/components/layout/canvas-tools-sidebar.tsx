@@ -3,7 +3,12 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { startTransition, useCallback, useState, type MouseEvent } from "react";
 
-import { navigationTools, navigationToolActive, type NavigationToolSlug } from "@canvas/constant/navigation-tools";
+import {
+    navigationTools,
+    navigationToolActive,
+    navigationToolHref,
+    type NavigationToolSlug,
+} from "@canvas/constant/navigation-tools";
 import { AppConfigModal } from "@canvas/components/layout/app-config-modal";
 import { MobileNavDrawer } from "@canvas/components/layout/mobile-nav-drawer";
 import { AnimatedThemeToggler } from "@canvas/components/ui/animated-theme-toggler";
@@ -18,6 +23,7 @@ import {
 import { SmartImage } from "@/components/smart-image";
 import { useCanvasHost } from "@canvas/integration/canvas-host-context";
 import { isObjectStorageConfigured } from "@canvas/lib/object-storage/types";
+import { isTauri } from "@canvas/services/fs-store";
 import { DEFAULT_LOGO, DEFAULT_SYSTEM_NAME } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useConfigStore } from "@canvas/stores/use-config-store";
@@ -25,7 +31,6 @@ import { useThemeStore } from "@canvas/stores/use-theme-store";
 
 function activeToolFromPath(pathname: string): NavigationToolSlug | undefined {
     const slug = pathname.split("/").filter(Boolean)[0];
-    if (!slug) return undefined;
     const matched = navigationTools.find((tool) => navigationToolActive(tool.slug, slug));
     return matched?.slug;
 }
@@ -46,8 +51,14 @@ export function CanvasToolsSidebar(props: { className?: string }) {
     const theme = useThemeStore((state) => state.theme);
     const setTheme = useThemeStore((state) => state.setTheme);
     // Storage manager needs object storage; hide the rail entry until configured.
+    // Novels require the desktop Tomato sidecar — hide on web preview.
     const storageReady = isObjectStorageConfigured(objectStorage);
-    const visibleTools = navigationTools.filter((tool) => tool.slug !== "storage" || storageReady);
+    const desktop = isTauri();
+    const visibleTools = navigationTools.filter((tool) => {
+        if (tool.slug === "storage") return storageReady;
+        if (tool.slug === "novels") return desktop;
+        return true;
+    });
 
     const activeToolSlug = activeToolFromPath(pathname);
     const brand = brandName || DEFAULT_SYSTEM_NAME;
@@ -96,7 +107,7 @@ export function CanvasToolsSidebar(props: { className?: string }) {
 
                 <nav className="flex w-full flex-1 flex-col items-center gap-1 overflow-y-auto px-1.5 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     {visibleTools.map((tool) => {
-                        const href = `/${tool.slug}`;
+                        const href = navigationToolHref(tool.slug);
                         return (
                             <SidebarNavItem
                                 key={tool.slug}

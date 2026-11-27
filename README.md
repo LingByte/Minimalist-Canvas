@@ -1,6 +1,6 @@
 # Minimalist Canvas
 
-至简未来桌面端：无限画布 + 本地 Agent / Skills + 对象存储 + 创作者运营（抖音 / 快手 / 小红书）。
+至简未来桌面端：无限画布 + 本地 Agent / Skills + 对象存储。
 
 基于 **Tauri 2 + React 19 + TypeScript**，默认按本机优先设计；网页 `bun run dev` 可预览，完整能力请用桌面端。
 
@@ -9,7 +9,6 @@
 - **无限画布**：节点、连线、分镜 Script、图/视频/音频生成与本地项目库
 - **Agent / Skills**：内置与本地技能、梗库检索、画布工具调用
 - **对象存储**：文件管理、CDN 趋势、本机数据目录可从配置页打开
-- **运营（桌面端）**：绑定创作者账号（应用内扫码）、发布视频、同步互动数据（仓库内 `ops-runner/`）
 - **自动更新（桌面端）**：启动后检查 GitHub Releases，可在应用内下载安装
 
 ## Tech Stack
@@ -20,20 +19,17 @@
 | Desktop | Tauri 2 (Rust) |
 | State | Zustand, TanStack Query |
 | i18n | i18next（en / zh / zh-TW / fr / ja / ru / vi） |
-| Ops automation | Bun + Playwright（仓库内 `ops-runner/`） |
 
 ## Prerequisites
 
 - [Bun](https://bun.sh/)
 - [Rust](https://rustup.rs/) stable
 - macOS：Xcode Command Line Tools
-- 运营模块：本机 Chrome / Edge；首次使用前在仓库内执行一次 `cd ops-runner && bun install`
 
 ## Getting Started
 
 ```bash
 bun install
-cd ops-runner && bun install && cd ..
 
 # Web preview
 bun run dev
@@ -45,16 +41,12 @@ bun run tauri:dev
 bun run tauri:build
 ```
 
-当前版本见 `package.json` / `src-tauri/tauri.conf.json`（例如 `0.1.12`）。构建产物大致在：
+当前版本见 `package.json` / `src-tauri/tauri.conf.json`。构建产物大致在：
 
 ```text
 src-tauri/target/release/bundle/dmg/
 src-tauri/target/release/bundle/nsis/
 ```
-
-## Ops runner
-
-运营自动化在本仓库 `ops-runner/`（Playwright）。Tauri 默认解析该目录；也可设 `OPS_RUNNER_DIR` / `CHROME_PATH`。登录用离屏 Chrome 提取二维码到应用内扫码，过程可取消。
 
 ## Auto-update
 

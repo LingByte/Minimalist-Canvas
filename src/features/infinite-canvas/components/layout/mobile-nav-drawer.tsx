@@ -2,8 +2,14 @@ import { Drawer } from "antd";
 import { Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
-import { navigationTools, navigationToolActive, type NavigationToolSlug } from "@canvas/constant/navigation-tools";
+import {
+    navigationTools,
+    navigationToolActive,
+    navigationToolHref,
+    type NavigationToolSlug,
+} from "@canvas/constant/navigation-tools";
 import { isObjectStorageConfigured } from "@canvas/lib/object-storage/types";
+import { isTauri } from "@canvas/services/fs-store";
 import { cn } from "@canvas/lib/utils";
 import { useConfigStore } from "@canvas/stores/use-config-store";
 
@@ -19,7 +25,12 @@ export function MobileNavDrawer({ open, activeToolSlug, onClose }: MobileNavDraw
     const pathSlug = pathname.split("/").filter(Boolean)[0];
     const objectStorage = useConfigStore((state) => state.objectStorage);
     const storageReady = isObjectStorageConfigured(objectStorage);
-    const visibleTools = navigationTools.filter((tool) => tool.slug !== "storage" || storageReady);
+    const desktop = isTauri();
+    const visibleTools = navigationTools.filter((tool) => {
+        if (tool.slug === "storage") return storageReady;
+        if (tool.slug === "novels") return desktop;
+        return true;
+    });
 
     return (
         <Drawer
@@ -39,7 +50,7 @@ export function MobileNavDrawer({ open, activeToolSlug, onClose }: MobileNavDraw
                     return (
                         <Link
                             key={tool.slug}
-                            to={`/${tool.slug}`}
+                            to={navigationToolHref(tool.slug)}
                             onClick={onClose}
                             className={cn(
                                 "relative flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium tracking-tight transition-colors duration-200",
