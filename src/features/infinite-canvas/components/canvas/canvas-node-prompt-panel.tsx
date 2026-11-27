@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUp, LoaderCircle, Maximize2, Sparkles } from "lucide-react";
-import { App, Button, Modal, Tooltip } from "antd";
+import { Button, Modal, Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
 
 import { ModelPicker } from "@canvas/components/model-picker";
+import { PromptOptimizeDialog } from "@canvas/components/workbench/prompt-optimize-dialog";
 import { defaultConfig, resolveModelForCapability, useConfigStore, useEffectiveConfig, type AiConfig } from "@canvas/stores/use-config-store";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
 import { resolveNodeTtsVoiceId } from "@canvas/lib/tts-voices";
@@ -13,7 +14,7 @@ import { CanvasModelPriceHint } from "./canvas-model-price-hint";
 import { CanvasPromptLibrary } from "./canvas-prompt-library";
 import { CanvasAudioSettingsPopover, type CanvasAudioSettingKey } from "./canvas-audio-settings-popover";
 import { CanvasPromptChipInput } from "./canvas-prompt-chip-input";
-import { optimizeCanvasPrompt, type OptimizablePromptMode } from "@canvas/services/prompt-optimizer";
+import type { OptimizablePromptMode } from "@canvas/services/prompt-optimizer";
 import { CanvasVideoSettingsPopover } from "./canvas-video-settings-popover";
 import { CanvasTextSettingsPopover } from "./canvas-text-settings-popover";
 import { CanvasNodeType, type CanvasGenerationMode, type CanvasNodeData } from "@canvas/types/canvas";
@@ -35,7 +36,6 @@ type CanvasNodePromptPanelProps = {
 
 export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfigChange, onGenerate, mentionReferences = [], onConnectResource, onImageSettingsOpenChange, modeOverride }: CanvasNodePromptPanelProps) {
     const { t } = useTranslation();
-    const { message, modal } = App.useApp();
     const globalConfig = useEffectiveConfig();
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
@@ -44,22 +44,23 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
     const hasTextContent = node.type === CanvasNodeType.Text && Boolean(node.metadata?.content?.trim());
     const hasImageContent = node.type === CanvasNodeType.Image && Boolean(node.metadata?.content);
     const isEditingExistingContent = hasTextContent || hasImageContent;
-    const [prompt, setPrompt] = useState(node.metadata?.composerContent ?? node.metadata?.prompt ?? "");
+    const remotePrompt = node.metadata?.composerContent ?? node.metadata?.prompt ?? "";
+    const [prompt, setPrompt] = useState(remotePrompt);
     const [expanded, setExpanded] = useState(false);
-    const [optimizing, setOptimizing] = useState(false);
-    const [optimizePreview, setOptimizePreview] = useState<{ draft: string; text: string; done: boolean } | null>(null);
-    const optimizeAbortRef = useRef<AbortController | null>(null);
+    const [optimizeOpen, setOptimizeOpen] = useState(false);
+    const remotePromptRef = useRef(remotePrompt);
 
-    useEffect(() => () => optimizeAbortRef.current?.abort(), []);
-
-    // Restore prompts only when switching nodes; preserve the current input after generation on the same node.
+    // Sync from store when switching nodes, or when Agent / other writers change metadata.
     useEffect(() => {
-        setPrompt(node.metadata?.composerContent ?? node.metadata?.prompt ?? "");
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [node.id]);
+        if (remotePrompt !== remotePromptRef.current) {
+            remotePromptRef.current = remotePrompt;
+            setPrompt(remotePrompt);
+        }
+    }, [node.id, remotePrompt]);
 
     const updatePrompt = (value: string) => {
         setPrompt(value);
+        remotePromptRef.current = value;
         if (isEditingExistingContent) onConfigChange(node.id, { composerContent: value });
         else onPromptChange(node.id, value);
     };
@@ -77,59 +78,12 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
     };
 
     const optimizable = mode === "image" || mode === "video" || mode === "audio";
-
-    const optimize = async () => {
-        const draft = prompt.trim();
-        if (!draft || optimizing) return;
-        const controller = new AbortController();
-        optimizeAbortRef.current = controller;
-        setOptimizing(true);
-        setOptimizePreview({ draft, text: "", done: false });
-        try {
-            const optimized = await optimizeCanvasPrompt(
-                globalConfig,
-                {
-                    mode: mode as OptimizablePromptMode,
-                    draft,
-                    seconds: mode === "video" ? Number(config.videoSeconds) || undefined : undefined,
-                    references: mentionReferences,
-                },
-                (text) => setOptimizePreview((current) => (current ? { ...current, text } : current)),
-                { signal: controller.signal },
-            );
-            if (!optimized) throw new Error(t("canvas.promptPanel.optimizeFailed"));
-            setOptimizePreview((current) => (current ? { ...current, text: optimized, done: true } : current));
-        } catch (error) {
-            if (!controller.signal.aborted) message.error(error instanceof Error ? error.message : t("canvas.promptPanel.optimizeFailed"));
-            setOptimizePreview(null);
-        } finally {
-            optimizeAbortRef.current = null;
-            setOptimizing(false);
-        }
-    };
-
-    const closeOptimizePreview = () => {
-        optimizeAbortRef.current?.abort();
-        optimizeAbortRef.current = null;
-        setOptimizePreview(null);
-        setOptimizing(false);
-    };
-
-    const applyOptimized = () => {
-        const text = optimizePreview?.text.trim();
-        if (!text) return;
-        updatePrompt(text);
-        setOptimizePreview(null);
-    };
-
-    const optimizeDisabled = optimizing || isRunning || !prompt.trim();
-    const optimizeTip = optimizing
-        ? t("canvas.promptPanel.optimizing")
-        : isRunning
-            ? t("canvas.promptPanel.optimizeWhileRunning")
-            : !prompt.trim()
-                ? t("canvas.promptPanel.optimizeNeedsPrompt")
-                : t("canvas.promptPanel.optimizePrompt");
+    const optimizeDisabled = isRunning || !prompt.trim();
+    const optimizeTip = isRunning
+        ? t("canvas.promptPanel.optimizeWhileRunning")
+        : !prompt.trim()
+            ? t("canvas.promptPanel.optimizeNeedsPrompt")
+            : t("canvas.promptPanel.optimizePrompt");
 
     return (
         <div
@@ -163,17 +117,15 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
                                     type="text"
                                     className="!h-8 !w-8 !min-w-8 shrink-0 !rounded-full !bg-transparent !p-0"
                                     style={{ color: theme.node.text }}
-                                    icon={optimizing ? <LoaderCircle className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+                                    icon={<Sparkles className="size-3.5" />}
                                     disabled={optimizeDisabled}
-                                    onClick={() =>
-                                        modal.confirm({
-                                            title: t("canvas.promptPanel.optimizeTitle"),
-                                            content: t("canvas.promptPanel.optimizeConfirm"),
-                                            okText: t("common.confirm"),
-                                            cancelText: t("common.cancel"),
-                                            onOk: () => void optimize(),
-                                        })
-                                    }
+                                    onClick={() => {
+                                        if (!resolveModelForCapability(globalConfig, undefined, "text")) {
+                                            openConfigDialog(true, "channels");
+                                            return;
+                                        }
+                                        setOptimizeOpen(true);
+                                    }}
                                     aria-label={optimizeTip}
                                 />
                             </span>
@@ -239,40 +191,17 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
                     />
                 </div>
             </Modal>
-            <Modal
-                title={t("canvas.promptPanel.optimizeTitle")}
-                open={Boolean(optimizePreview)}
-                centered
-                width={860}
-                footer={[
-                    <Button key="cancel" onClick={closeOptimizePreview}>
-                        {t("common.cancel")}
-                    </Button>,
-                    <Button key="apply" type="primary" disabled={!optimizePreview?.done || !optimizePreview.text.trim()} onClick={applyOptimized}>
-                        {t("canvas.promptPanel.optimizeApply")}
-                    </Button>,
-                ]}
-                onCancel={closeOptimizePreview}
-                destroyOnHidden
-            >
-                <div className="flex gap-3 pt-2">
-                    <div className="min-w-0 flex-1">
-                        <div className="pb-1 text-xs font-medium uppercase tracking-wide opacity-60">{t("canvas.promptPanel.optimizeOriginal")}</div>
-                        <div className="thin-scrollbar max-h-[55dvh] overflow-y-auto whitespace-pre-wrap break-words rounded-xl border p-3 text-sm leading-6 opacity-70" style={{ borderColor: theme.toolbar.border }}>
-                            {optimizePreview?.draft}
-                        </div>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 pb-1 text-xs font-medium uppercase tracking-wide opacity-60">
-                            {t("canvas.promptPanel.optimizeResult")}
-                            {!optimizePreview?.done ? <LoaderCircle className="size-3.5 animate-spin" /> : null}
-                        </div>
-                        <div className="thin-scrollbar max-h-[55dvh] overflow-y-auto whitespace-pre-wrap break-words rounded-xl border p-3 text-sm leading-6" style={{ borderColor: theme.toolbar.border }}>
-                            {optimizePreview?.text || "…"}
-                        </div>
-                    </div>
-                </div>
-            </Modal>
+            <PromptOptimizeDialog
+                open={optimizeOpen}
+                draft={prompt}
+                mode={mode as OptimizablePromptMode}
+                preset="default"
+                requireFeedback
+                seconds={mode === "video" ? Number(config.videoSeconds) || undefined : undefined}
+                references={mentionReferences}
+                onClose={() => setOptimizeOpen(false)}
+                onApply={updatePrompt}
+            />
         </div>
     );
 }

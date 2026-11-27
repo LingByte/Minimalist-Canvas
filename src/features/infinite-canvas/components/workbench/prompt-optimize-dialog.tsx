@@ -3,18 +3,38 @@ import { App, Button, Input, Modal } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { optimizeCanvasPrompt, type PromptOptimizePreset } from "@canvas/services/prompt-optimizer";
+import {
+    optimizeCanvasPrompt,
+    type OptimizablePromptMode,
+    type PromptOptimizePreset,
+} from "@canvas/services/prompt-optimizer";
+import type { CanvasResourceReference } from "@canvas/lib/canvas/canvas-resource-references";
 import { resolveModelForCapability, useConfigStore, useEffectiveConfig } from "@canvas/stores/use-config-store";
 
 type PromptOptimizeDialogProps = {
     open: boolean;
     draft: string;
     preset?: PromptOptimizePreset;
+    mode?: OptimizablePromptMode;
+    seconds?: number;
+    references?: CanvasResourceReference[];
+    /** When true, feedback is required before the first optimize run. */
+    requireFeedback?: boolean;
     onClose: () => void;
     onApply: (prompt: string) => void;
 };
 
-export function PromptOptimizeDialog({ open, draft, preset = "character-asset-sheet", onClose, onApply }: PromptOptimizeDialogProps) {
+export function PromptOptimizeDialog({
+    open,
+    draft,
+    preset = "character-asset-sheet",
+    mode = "image",
+    seconds,
+    references,
+    requireFeedback = false,
+    onClose,
+    onApply,
+}: PromptOptimizeDialogProps) {
     const { message } = App.useApp();
     const { t } = useTranslation();
     const config = useEffectiveConfig();
@@ -37,7 +57,7 @@ export function PromptOptimizeDialog({ open, draft, preset = "character-asset-sh
 
     useEffect(() => () => abortRef.current?.abort(), []);
 
-    const runOptimize = async (mode: "start" | "refine") => {
+    const runOptimize = async (runMode: "start" | "refine") => {
         const source = draft.trim();
         if (!source) {
             message.warning(t("canvas.promptPanel.optimizeNeedsPrompt"));
@@ -48,8 +68,16 @@ export function PromptOptimizeDialog({ open, draft, preset = "character-asset-sh
             message.warning(t("workbench.configFirst"));
             return;
         }
-        if (mode === "refine" && !result.trim()) {
+        if (runMode === "start" && requireFeedback && !feedback.trim()) {
+            message.warning(t("canvas.promptPanel.optimizeFeedbackRequired"));
+            return;
+        }
+        if (runMode === "refine" && !result.trim()) {
             message.warning(t("canvas.promptPanel.optimizeResultEmpty"));
+            return;
+        }
+        if (runMode === "refine" && !feedback.trim()) {
+            message.warning(t("canvas.promptPanel.optimizeFeedbackRequired"));
             return;
         }
         if (running) return;
@@ -59,17 +87,19 @@ export function PromptOptimizeDialog({ open, draft, preset = "character-asset-sh
         abortRef.current = controller;
         setRunning(true);
         setDone(false);
-        if (mode === "start") setResult("");
+        if (runMode === "start") setResult("");
 
         try {
             const optimized = await optimizeCanvasPrompt(
                 config,
                 {
-                    mode: "image",
+                    mode,
                     draft: source,
-                    previousResult: mode === "refine" ? result : undefined,
+                    previousResult: runMode === "refine" ? result : undefined,
                     feedback: feedback.trim() || undefined,
-                    preset,
+                    preset: mode === "image" ? preset : "default",
+                    seconds: mode === "video" ? seconds : undefined,
+                    references,
                 },
                 (text) => setResult(text),
                 { signal: controller.signal },
@@ -77,7 +107,7 @@ export function PromptOptimizeDialog({ open, draft, preset = "character-asset-sh
             if (!optimized) throw new Error(t("canvas.promptPanel.optimizeFailed"));
             setResult(optimized);
             setDone(true);
-            if (mode === "refine") setFeedback("");
+            if (runMode === "refine") setFeedback("");
         } catch (error) {
             if (!controller.signal.aborted) {
                 message.error(error instanceof Error ? error.message : t("canvas.promptPanel.optimizeFailed"));
@@ -95,6 +125,9 @@ export function PromptOptimizeDialog({ open, draft, preset = "character-asset-sh
         onClose();
     };
 
+    const startDisabled = running || !draft.trim() || (requireFeedback && !feedback.trim());
+    const refineDisabled = running || !done || !result.trim() || !feedback.trim();
+
     return (
         <Modal
             title={t("canvas.promptPanel.optimizeTitle")}
@@ -107,10 +140,10 @@ export function PromptOptimizeDialog({ open, draft, preset = "character-asset-sh
                 <Button key="cancel" onClick={handleClose}>
                     {t("common.cancel")}
                 </Button>,
-                <Button key="start" loading={running && !result} disabled={running || !draft.trim()} onClick={() => void runOptimize("start")}>
+                <Button key="start" loading={running && !result} disabled={startDisabled} onClick={() => void runOptimize("start")}>
                     {t("canvas.promptPanel.optimizeStart")}
                 </Button>,
-                <Button key="refine" disabled={running || !done || !result.trim()} onClick={() => void runOptimize("refine")}>
+                <Button key="refine" disabled={refineDisabled} onClick={() => void runOptimize("refine")}>
                     {t("canvas.promptPanel.optimizeRefine")}
                 </Button>,
                 <Button
@@ -130,9 +163,34 @@ export function PromptOptimizeDialog({ open, draft, preset = "character-asset-sh
         >
             <div className="space-y-3 pt-1">
                 <p className="m-0 text-xs text-stone-500">{t("canvas.promptPanel.optimizeCostHint")}</p>
+                <label className="block">
+                    <span className="mb-1 block text-sm font-medium">
+                        {done
+                            ? t("canvas.promptPanel.optimizeFeedbackRefineLabel")
+                            : requireFeedback
+                              ? t("canvas.promptPanel.optimizeFeedbackRequiredLabel")
+                              : t("canvas.promptPanel.optimizeFeedbackLabel")}
+                    </span>
+                    <Input.TextArea
+                        rows={3}
+                        value={feedback}
+                        disabled={running}
+                        autoFocus={requireFeedback && !done}
+                        onChange={(event) => setFeedback(event.target.value)}
+                        placeholder={
+                            done
+                                ? t("canvas.promptPanel.optimizeFeedbackRefinePlaceholder")
+                                : requireFeedback
+                                  ? t("canvas.promptPanel.optimizeFeedbackRequiredPlaceholder")
+                                  : t("canvas.promptPanel.optimizeFeedbackPlaceholder")
+                        }
+                    />
+                </label>
                 <div className="grid gap-3 md:grid-cols-2">
                     <div className="min-w-0">
-                        <div className="pb-1 text-xs font-medium uppercase tracking-wide text-stone-500">{t("canvas.promptPanel.optimizeOriginal")}</div>
+                        <div className="pb-1 text-xs font-medium uppercase tracking-wide text-stone-500">
+                            {t("canvas.promptPanel.optimizeOriginal")}
+                        </div>
                         <div className="thin-scrollbar max-h-[36dvh] overflow-y-auto whitespace-pre-wrap break-words rounded-xl border border-stone-200 p-3 text-sm leading-6 text-stone-600 dark:border-stone-700 dark:text-stone-300">
                             {draft || "—"}
                         </div>
@@ -147,22 +205,6 @@ export function PromptOptimizeDialog({ open, draft, preset = "character-asset-sh
                         </div>
                     </div>
                 </div>
-                <label className="block">
-                    <span className="mb-1 block text-sm font-medium">
-                        {done ? t("canvas.promptPanel.optimizeFeedbackRefineLabel") : t("canvas.promptPanel.optimizeFeedbackLabel")}
-                    </span>
-                    <Input.TextArea
-                        rows={3}
-                        value={feedback}
-                        disabled={running}
-                        onChange={(event) => setFeedback(event.target.value)}
-                        placeholder={
-                            done
-                                ? t("canvas.promptPanel.optimizeFeedbackRefinePlaceholder")
-                                : t("canvas.promptPanel.optimizeFeedbackPlaceholder")
-                        }
-                    />
-                </label>
             </div>
         </Modal>
     );
