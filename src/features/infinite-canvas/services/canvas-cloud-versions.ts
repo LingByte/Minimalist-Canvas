@@ -156,6 +156,23 @@ export async function getCanvasCloudVersion(projectId: string, versionId: string
     return project;
 }
 
+/** Delete one archived cloud version (does not touch the live tip). */
+export async function deleteCanvasCloudVersion(projectId: string, versionId: string) {
+    const config = assertConfigured();
+    const manifest = await readManifest(config, projectId);
+    const meta = manifest.versions.find((item) => item.id === versionId);
+    if (!meta) throw new Error(i18n.t("canvas.versions.loadFailed"));
+    try {
+        await deleteObjectAtKey(config, meta.key);
+    } catch {
+        // still drop from manifest if the object is already gone
+    }
+    manifest.versions = manifest.versions.filter((item) => item.id !== versionId);
+    manifest.updatedAt = new Date().toISOString();
+    await writeJson(config, manifestKey(config, projectId), manifest);
+    return manifest.versions;
+}
+
 /**
  * Archive the live canvas first (so restore is reversible), then return the selected history snapshot.
  */

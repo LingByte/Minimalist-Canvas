@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, Drawer, Empty, Modal, Spin } from "antd";
-import { History, RotateCcw } from "lucide-react";
+import { App, Button, Drawer, Empty, Spin } from "antd";
+import { History, RotateCcw, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toIntlLocale } from "@/i18n/languages";
 
 import {
     CANVAS_CLOUD_VERSION_LIMIT,
+    deleteCanvasCloudVersion,
     listCanvasCloudVersions,
     prepareCanvasCloudVersionRestore,
     type CanvasCloudVersionMeta,
@@ -31,7 +32,7 @@ export function CanvasVersionHistoryDrawer({
     onClose: () => void;
     onRestored: (project: CanvasProject) => void;
 }) {
-    const { message } = App.useApp();
+    const { message, modal } = App.useApp();
     const { t, i18n } = useTranslation();
     const objectStorage = useConfigStore((state) => state.objectStorage);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
@@ -39,6 +40,7 @@ export function CanvasVersionHistoryDrawer({
     const [loading, setLoading] = useState(false);
     const [versions, setVersions] = useState<CanvasCloudVersionMeta[]>([]);
     const [restoringId, setRestoringId] = useState<string | null>(null);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
 
     const refresh = useCallback(async () => {
         if (!configured) {
@@ -63,7 +65,7 @@ export function CanvasVersionHistoryDrawer({
     }, [open, refresh]);
 
     const restoreVersion = (version: CanvasCloudVersionMeta) => {
-        Modal.confirm({
+        modal.confirm({
             title: t("canvas.versions.restoreTitle"),
             content: t("canvas.versions.restoreDescription"),
             okText: t("canvas.versions.restore"),
@@ -81,6 +83,29 @@ export function CanvasVersionHistoryDrawer({
                     throw error;
                 } finally {
                     setRestoringId(null);
+                }
+            },
+        });
+    };
+
+    const deleteVersion = (version: CanvasCloudVersionMeta) => {
+        modal.confirm({
+            title: t("canvas.versions.deleteTitle"),
+            content: t("canvas.versions.deleteDescription"),
+            okText: t("canvas.versions.delete"),
+            okButtonProps: { danger: true },
+            cancelText: t("common.cancel"),
+            onOk: async () => {
+                setDeletingId(version.id);
+                try {
+                    setVersions(await deleteCanvasCloudVersion(projectId, version.id));
+                    message.success(t("canvas.versions.deleted"));
+                } catch (error) {
+                    console.error(error);
+                    message.error(error instanceof Error ? error.message : t("canvas.versions.deleteFailed"));
+                    throw error;
+                } finally {
+                    setDeletingId(null);
                 }
             },
         });
@@ -138,15 +163,26 @@ export function CanvasVersionHistoryDrawer({
                                     {index === 0 ? <span>{t("canvas.versions.latest")}</span> : null}
                                 </div>
                             </div>
-                            <Button
-                                size="small"
-                                icon={<RotateCcw className="size-3.5" />}
-                                loading={restoringId === version.id}
-                                disabled={Boolean(restoringId)}
-                                onClick={() => restoreVersion(version)}
-                            >
-                                {t("canvas.versions.restore")}
-                            </Button>
+                            <div className="flex shrink-0 items-center gap-1">
+                                <Button
+                                    size="small"
+                                    icon={<RotateCcw className="size-3.5" />}
+                                    loading={restoringId === version.id}
+                                    disabled={Boolean(restoringId || deletingId)}
+                                    onClick={() => restoreVersion(version)}
+                                >
+                                    {t("canvas.versions.restore")}
+                                </Button>
+                                <Button
+                                    size="small"
+                                    danger
+                                    icon={<Trash2 className="size-3.5" />}
+                                    loading={deletingId === version.id}
+                                    disabled={Boolean(restoringId || deletingId)}
+                                    onClick={() => deleteVersion(version)}
+                                    aria-label={t("canvas.versions.delete")}
+                                />
+                            </div>
                         </div>
                     ))}
                 </div>
