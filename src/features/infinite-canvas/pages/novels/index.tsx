@@ -28,6 +28,47 @@ import {
     type NovelSearchItem,
 } from "@canvas/services/novel-library";
 import { cn } from "@canvas/lib/utils";
+import { NovelBookStage, type NovelFlipDirection } from "./novel-book-stage";
+
+function paginateNovelText(text: string, maxChars = 980): string[] {
+    const normalized = text.replace(/\r\n/g, "\n").trim();
+    if (!normalized) return [""];
+    // Only split packing units on blank lines so single newlines stay single.
+    const blocks = normalized.split(/\n{2,}/).map((part) => part.replace(/^\n+|\n+$/g, "")).filter(Boolean);
+    if (!blocks.length) return [normalized];
+    const pages: string[] = [];
+    let buffer = "";
+    for (const block of blocks) {
+        if (!buffer) {
+            if (block.length <= maxChars) {
+                buffer = block;
+                continue;
+            }
+            for (let offset = 0; offset < block.length; offset += maxChars) {
+                pages.push(block.slice(offset, offset + maxChars));
+            }
+            buffer = "";
+            continue;
+        }
+        const next = `${buffer}\n\n${block}`;
+        if (next.length <= maxChars) {
+            buffer = next;
+            continue;
+        }
+        pages.push(buffer);
+        if (block.length <= maxChars) {
+            buffer = block;
+        } else {
+            for (let offset = 0; offset < block.length; offset += maxChars) {
+                const chunk = block.slice(offset, offset + maxChars);
+                if (offset + maxChars >= block.length) buffer = chunk;
+                else pages.push(chunk);
+            }
+        }
+    }
+    if (buffer) pages.push(buffer);
+    return pages.length ? pages : [""];
+}
 
 function searchCover(item: NovelSearchItem) {
     return item.coverDataUrl || item.coverUrl || "";
@@ -73,6 +114,9 @@ export default function NovelsPage() {
     const [readerChapter, setReaderChapter] = useState<NovelChapter | null>(null);
     const [readerIndex, setReaderIndex] = useState(0);
     const [tocOpen, setTocOpen] = useState(true);
+    const [pageIndex, setPageIndex] = useState(0);
+    const [flipDir, setFlipDir] = useState<NovelFlipDirection>("next");
+    const [readerFlipping, setReaderFlipping] = useState(false);
 
     const running = Boolean(downloader?.running) || downloader?.phase === "running";
     // Prefer running over install: a live local server may outlive the Child handle /
@@ -231,12 +275,15 @@ export default function NovelsPage() {
     };
 
     const loadChapter = useCallback(
-        async (bookPath: string, index: number) => {
+        async (bookPath: string, index: number, direction: NovelFlipDirection = "next", landing: "start" | "end" = "start") => {
+            setFlipDir(direction);
             setChapterLoading(true);
             try {
                 const chapter = await readNovelChapter(bookPath, index);
+                const pages = paginateNovelText(chapter.text);
                 setReaderChapter(chapter);
                 setReaderIndex(index);
+                setPageIndex(landing === "end" ? Math.max(0, pages.length - 1) : 0);
             } catch (error) {
                 message.error(error instanceof Error ? error.message : t("novels.local.chapterFailed"));
             } finally {
@@ -251,6 +298,8 @@ export default function NovelsPage() {
         setReaderLoading(true);
         setReaderBook(null);
         setReaderChapter(null);
+        setPageIndex(0);
+        setFlipDir("next");
         setTocOpen(true);
         try {
             const opened = await openNovelBook(book.path);
@@ -259,7 +308,7 @@ export default function NovelsPage() {
                 void refreshLocal();
             }
             const first = opened.chapters[0]?.index ?? 0;
-            await loadChapter(opened.path, first);
+            await loadChapter(opened.path, first, "next", "start");
         } catch (error) {
             message.error(error instanceof Error ? error.message : t("novels.local.readFailed"));
             setReaderOpen(false);
@@ -290,6 +339,62 @@ export default function NovelsPage() {
         if (!readerBook) return -1;
         return readerBook.chapters.findIndex((chapter) => chapter.index === readerIndex);
     }, [readerBook, readerIndex]);
+
+    const readerPages = useMemo(
+        () => paginateNovelText(readerChapter?.text || ""),
+        [readerChapter?.text],
+    );
+
+    const goReaderPage = useCallback(
+        (direction: NovelFlipDirection) => {
+            if (!readerBook || chapterLoading || readerFlipping) return;
+            if (direction === "next") {
+                if (pageIndex < readerPages.length - 1) {
+                    setFlipDir("next");
+                    setPageIndex((value) => value + 1);
+                    return;
+                }
+                const next = readerBook.chapters[chapterMetaIndex + 1];
+                if (next) void loadChapter(readerBook.path, next.index, "next", "start");
+                return;
+            }
+            if (pageIndex > 0) {
+                setFlipDir("prev");
+                setPageIndex((value) => value - 1);
+                return;
+            }
+            const prev = readerBook.chapters[chapterMetaIndex - 1];
+            if (prev) void loadChapter(readerBook.path, prev.index, "prev", "end");
+        },
+        [chapterLoading, chapterMetaIndex, loadChapter, pageIndex, readerBook, readerFlipping, readerPages.length],
+    );
+
+    useEffect(() => {
+        if (!readerOpen) return;
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "PageDown" && event.key !== "PageUp") {
+                return;
+            }
+            const scroller = document.querySelector<HTMLElement>('[data-novel-page-scroll="true"]');
+            if (scroller && (event.key === "PageDown" || event.key === "PageUp")) {
+                const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 4;
+                const atTop = scroller.scrollTop <= 4;
+                if (event.key === "PageDown" && !atBottom) return;
+                if (event.key === "PageUp" && !atTop) return;
+            }
+            event.preventDefault();
+            if (event.key === "ArrowRight" || event.key === "PageDown") goReaderPage("next");
+            else goReaderPage("prev");
+        };
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [goReaderPage, readerOpen]);
+
+    useEffect(() => {
+        if (pageIndex > 0 && pageIndex > readerPages.length - 1) {
+            setPageIndex(Math.max(0, readerPages.length - 1));
+        }
+    }, [pageIndex, readerPages.length]);
 
     const installProgress = useMemo(() => {
         if (downloader?.phase !== "installing") return null;
@@ -550,6 +655,12 @@ export default function NovelsPage() {
                                               total: readerBook.chapters.length,
                                           })}`
                                         : ""}
+                                    {readerPages.length > 1
+                                        ? ` · ${t("novels.local.pageProgress", {
+                                              current: pageIndex + 1,
+                                              total: readerPages.length,
+                                          })}`
+                                        : ""}
                                 </div>
                             </div>
                             <Button
@@ -561,70 +672,94 @@ export default function NovelsPage() {
                             </Button>
                             <Button
                                 size="small"
-                                disabled={chapterMetaIndex <= 0 || chapterLoading}
+                                disabled={chapterLoading || readerFlipping || (chapterMetaIndex <= 0 && pageIndex <= 0)}
                                 icon={<ChevronLeft className="size-3.5" />}
-                                onClick={() => {
-                                    const prev = readerBook.chapters[chapterMetaIndex - 1];
-                                    if (prev) void loadChapter(readerBook.path, prev.index);
-                                }}
+                                onClick={() => goReaderPage("prev")}
                             >
-                                {t("novels.local.prevChapter")}
+                                {t("novels.local.prevPage")}
                             </Button>
                             <Button
                                 size="small"
-                                disabled={chapterMetaIndex < 0 || chapterMetaIndex >= readerBook.chapters.length - 1 || chapterLoading}
+                                disabled={
+                                    chapterLoading ||
+                                    readerFlipping ||
+                                    (chapterMetaIndex >= readerBook.chapters.length - 1 && pageIndex >= readerPages.length - 1)
+                                }
                                 icon={<ChevronRight className="size-3.5" />}
-                                onClick={() => {
-                                    const next = readerBook.chapters[chapterMetaIndex + 1];
-                                    if (next) void loadChapter(readerBook.path, next.index);
-                                }}
+                                onClick={() => goReaderPage("next")}
                             >
-                                {t("novels.local.nextChapter")}
+                                {t("novels.local.nextPage")}
                             </Button>
                         </header>
                         <div className="flex min-h-0 flex-1">
                             {tocOpen ? (
-                                <aside className="flex w-56 shrink-0 flex-col border-r border-stone-200 dark:border-stone-800 sm:w-64">
+                                <aside className="flex w-56 shrink-0 flex-col border-r border-stone-200 bg-[#fbfaf7] dark:border-stone-800 dark:bg-stone-950 sm:w-64">
                                     <div className="shrink-0 px-3 py-2 text-xs font-medium text-stone-500">
                                         {t("novels.local.chapterList")}
                                     </div>
                                     <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3">
                                         {readerBook.chapters.length ? (
-                                            readerBook.chapters.map((chapter) => (
-                                                <button
-                                                    key={chapter.index}
-                                                    type="button"
-                                                    className={cn(
-                                                        "mb-0.5 w-full rounded-lg px-2.5 py-2 text-left text-sm transition-colors",
-                                                        chapter.index === readerIndex
-                                                            ? "bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900"
-                                                            : "text-stone-700 hover:bg-stone-100 dark:text-stone-200 dark:hover:bg-stone-800",
-                                                    )}
-                                                    onClick={() => void loadChapter(readerBook.path, chapter.index)}
-                                                >
-                                                    <span className="line-clamp-2">{chapter.title}</span>
-                                                </button>
-                                            ))
+                                            readerBook.chapters.map((chapter) => {
+                                                const active = chapter.index === readerIndex;
+                                                return (
+                                                    <button
+                                                        key={chapter.index}
+                                                        type="button"
+                                                        className={cn(
+                                                            "mb-0.5 w-full rounded-lg px-2.5 py-2 text-left text-sm transition-colors",
+                                                            active
+                                                                ? "bg-[#e8dfd0] font-medium !text-[#1c1917] ring-1 ring-[#d6c7b0] dark:bg-amber-950/55 dark:!text-amber-50 dark:ring-amber-800/70"
+                                                                : "text-stone-700 hover:bg-[#f1ebe1] dark:text-stone-200 dark:hover:bg-stone-900",
+                                                        )}
+                                                        onClick={() =>
+                                                            void loadChapter(
+                                                                readerBook.path,
+                                                                chapter.index,
+                                                                chapter.index >= readerIndex ? "next" : "prev",
+                                                                "start",
+                                                            )
+                                                        }
+                                                    >
+                                                        <span className="line-clamp-2">{chapter.title}</span>
+                                                    </button>
+                                                );
+                                            })
                                         ) : (
                                             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("novels.local.noChapters")} />
                                         )}
                                     </div>
                                 </aside>
                             ) : null}
-                            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-[#f7f4ef] px-5 py-6 dark:bg-stone-950 sm:px-10">
+                            <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-[linear-gradient(180deg,#ece4d6_0%,#e2d7c5_100%)] px-4 py-5 dark:bg-[linear-gradient(180deg,#1c1917_0%,#0c0a09_100%)] sm:px-8">
                                 {chapterLoading && !readerChapter ? (
-                                    <div className="flex justify-center py-20">
+                                    <div className="flex h-full items-center justify-center">
                                         <Spin />
                                     </div>
                                 ) : readerChapter ? (
-                                    <article className={cn("mx-auto max-w-2xl", chapterLoading && "opacity-60")}>
-                                        <h2 className="mb-5 text-xl font-semibold tracking-tight text-stone-900 dark:text-stone-50">
-                                            {readerChapter.title}
-                                        </h2>
-                                        <div className="whitespace-pre-wrap text-[15px] leading-8 text-stone-800 dark:text-stone-200">
-                                            {readerChapter.text}
-                                        </div>
-                                    </article>
+                                    <NovelBookStage
+                                        page={{
+                                            key: `${readerChapter.index}-${pageIndex}`,
+                                            title: readerChapter.title,
+                                            showTitle: pageIndex === 0,
+                                            body: readerPages[pageIndex] || "",
+                                            footerLeft: readerChapter.title,
+                                            footerRight: `${pageIndex + 1} / ${readerPages.length}`,
+                                        }}
+                                        flipDirection={flipDir}
+                                        busy={chapterLoading}
+                                        canPrev={!(chapterMetaIndex <= 0 && pageIndex <= 0)}
+                                        canNext={
+                                            !(
+                                                chapterMetaIndex >= readerBook.chapters.length - 1 &&
+                                                pageIndex >= readerPages.length - 1
+                                            )
+                                        }
+                                        prevLabel={t("novels.local.prevPage")}
+                                        nextLabel={t("novels.local.nextPage")}
+                                        onPrev={() => goReaderPage("prev")}
+                                        onNext={() => goReaderPage("next")}
+                                        onFlipChange={setReaderFlipping}
+                                    />
                                 ) : (
                                     <Empty className="py-20" description={t("novels.local.noChapters")} />
                                 )}
