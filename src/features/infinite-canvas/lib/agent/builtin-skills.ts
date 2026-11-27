@@ -3,6 +3,16 @@ import { unzipSync, strFromU8 } from "fflate";
 import i18n from "@canvas/i18n";
 import { isTauri, storageRoot } from "@canvas/services/fs-store";
 
+export type BuiltinSkillPackageRole = "skill" | "reference" | "script" | "asset" | "other";
+
+/** Inventory entry captured when a skill package is installed. */
+export type BuiltinSkillPackageEntry = {
+    path: string;
+    bytes: number;
+    role: BuiltinSkillPackageRole;
+    encoding: "text" | "base64" | "none";
+};
+
 export type BuiltinSkill = {
     name: string;
     description: string;
@@ -10,6 +20,8 @@ export type BuiltinSkill = {
     path: string;
     /** Extra package files relative to the skill root (references/, scripts/, …). */
     files?: Record<string, string>;
+    /** Package structure parsed at install time (includes SKILL.md). */
+    packageEntries?: BuiltinSkillPackageEntry[];
 };
 
 export type BuiltinSkillInput = {
@@ -17,7 +29,10 @@ export type BuiltinSkillInput = {
     description?: string;
     instructions: string;
     files?: Record<string, string>;
+    packageEntries?: BuiltinSkillPackageEntry[];
 };
+
+const PACKAGE_MANIFEST_NAME = "skill.package.json";
 
 export type BuiltinSkillInstallResult = BuiltinSkill & {
     warnings: string[];
@@ -75,10 +90,18 @@ export async function loadBuiltinSkills(): Promise<{ skills: BuiltinSkill[]; err
             const path = `${skillDir}/SKILL.md`;
             if (!(await exists(path))) continue;
             try {
-                const parsed = parseSkillFile(await readTextFile(path), entry.name);
+                const skillMd = await readTextFile(path);
+                const parsed = parseSkillFile(skillMd, entry.name);
                 if (!parsed) continue;
                 const files = await listSkillPackageFiles(skillDir);
-                skills.push({ ...parsed, path, ...(Object.keys(files).length ? { files } : {}) });
+                const packageEntries =
+                    (await readSkillPackageManifest(skillDir)) || buildPackageEntriesFromFiles(files, skillMd.length);
+                skills.push({
+                    ...parsed,
+                    path,
+                    ...(Object.keys(files).length ? { files } : {}),
+                    ...(packageEntries.length ? { packageEntries } : {}),
+                });
             } catch {
                 // skip unreadable skill files
             }
@@ -132,6 +155,9 @@ export async function installBuiltinSkill(input: BuiltinSkillInput): Promise<Bui
     const description = (input.description || "").trim();
     const content = serializeSkillFile({ name, description, instructions });
     const files = sanitizeSkillFiles(input.files);
+    const packageEntries = normalizePackageEntries(
+        input.packageEntries?.length ? input.packageEntries : buildPackageEntriesFromFiles(files, content.length),
+    );
 
     if (!isTauri()) {
         const skills = loadBrowserSkills().filter((skill) => skill.name !== name);
@@ -141,6 +167,7 @@ export async function installBuiltinSkill(input: BuiltinSkillInput): Promise<Bui
             instructions,
             path: `browser://${name}`,
             ...(Object.keys(files).length ? { files } : {}),
+            ...(packageEntries.length ? { packageEntries } : {}),
         };
         saveBrowserSkills([...skills, next].sort((a, b) => a.name.localeCompare(b.name)));
         return next;
@@ -156,6 +183,7 @@ export async function installBuiltinSkill(input: BuiltinSkillInput): Promise<Bui
     await mkdir(skillDir, { recursive: true });
     const path = `${skillDir}/SKILL.md`;
     await writeTextFile(path, content);
+    await writeTextFile(`${skillDir}/${PACKAGE_MANIFEST_NAME}`, JSON.stringify({ version: 1, entries: packageEntries }, null, 2));
     for (const [relative, body] of Object.entries(files)) {
         const target = joinUnderSkillDir(skillDir, relative);
         const parent = target.replace(/[/\\][^/\\]+$/, "");
@@ -166,7 +194,14 @@ export async function installBuiltinSkill(input: BuiltinSkillInput): Promise<Bui
             await writeFile(target, binary);
         }
     }
-    return { name, description, instructions, path, ...(Object.keys(files).length ? { files } : {}) };
+    return {
+        name,
+        description,
+        instructions,
+        path,
+        ...(Object.keys(files).length ? { files } : {}),
+        ...(packageEntries.length ? { packageEntries } : {}),
+    };
 }
 
 export async function installBuiltinSkillFromMarkdown(raw: string, fallbackName = "imported-skill") {
@@ -227,6 +262,14 @@ export async function installBuiltinSkillFromZip(bytes: Uint8Array, fallbackName
     if (!parsed) throw new Error(i18n.t("agent.state.skillParseFailed"));
 
     const packageFiles: Record<string, string> = {};
+    const packageEntries: BuiltinSkillPackageEntry[] = [
+        {
+            path: "SKILL.md",
+            bytes: skillMd.data.byteLength,
+            role: "skill",
+            encoding: "text",
+        },
+    ];
     const warnings = new Set<string>(scanDangerousContent(raw).map((key) => i18n.t(key)));
     const skippedPaths: string[] = [];
 
@@ -253,8 +296,20 @@ export async function installBuiltinSkillFromZip(bytes: Uint8Array, fallbackName
             }
             for (const key of scanDangerousContent(text)) warnings.add(i18n.t(key));
             packageFiles[relative] = text;
+            packageEntries.push({
+                path: relative,
+                bytes: file.data.byteLength,
+                role: packageRoleOf(relative),
+                encoding: "text",
+            });
         } else {
             packageFiles[relative] = bytesToBase64(file.data);
+            packageEntries.push({
+                path: relative,
+                bytes: file.data.byteLength,
+                role: packageRoleOf(relative),
+                encoding: "base64",
+            });
         }
     }
     for (const path of skippedPaths.slice(0, 3)) {
@@ -268,8 +323,45 @@ export async function installBuiltinSkillFromZip(bytes: Uint8Array, fallbackName
         warnings.add(i18n.t("skillsLibrary.warnScriptsStored"));
     }
 
-    const skill = await installBuiltinSkill({ ...parsed, files: packageFiles });
+    const skill = await installBuiltinSkill({ ...parsed, files: packageFiles, packageEntries });
     return { ...skill, warnings: [...warnings] };
+}
+
+/** ASCII tree for UI / prompts from install-time package inventory. */
+export function formatSkillPackageTree(skillName: string, entries?: BuiltinSkillPackageEntry[] | null) {
+    const paths = normalizePackageEntries(entries).map((item) => item.path);
+    if (!paths.some((path) => /^SKILL\.md$/i.test(path))) paths.unshift("SKILL.md");
+    const sorted = [...new Set(paths)].sort((a, b) => a.localeCompare(b));
+    type TreeNode = { name: string; children: Map<string, TreeNode>; file?: boolean };
+    const root: TreeNode = { name: skillName || "skill", children: new Map() };
+    for (const path of sorted) {
+        const parts = path.split("/").filter(Boolean);
+        let current = root;
+        parts.forEach((part, index) => {
+            const isFile = index === parts.length - 1;
+            const key = isFile ? part : `${part}/`;
+            if (!current.children.has(key)) current.children.set(key, { name: part, children: new Map(), file: isFile });
+            current = current.children.get(key)!;
+        });
+    }
+    const lines = [`${root.name}/`];
+    const walk = (node: TreeNode, prefix: string) => {
+        const children = [...node.children.values()];
+        children.forEach((child, index) => {
+            const last = index === children.length - 1;
+            const branch = last ? "└── " : "├── ";
+            const label = child.file ? child.name : `${child.name}/`;
+            lines.push(`${prefix}${branch}${label}`);
+            if (!child.file && child.children.size) walk(child, `${prefix}${last ? "    " : "│   "}`);
+        });
+    };
+    walk(root, "");
+    return lines.join("\n");
+}
+
+export function packageEntryCount(skill: Pick<BuiltinSkill, "packageEntries" | "files">) {
+    if (skill.packageEntries?.length) return skill.packageEntries.length;
+    return 1 + Object.keys(skill.files || {}).length;
 }
 
 export async function uninstallBuiltinSkill(name: string) {
@@ -403,7 +495,17 @@ function loadBrowserSkills(): BuiltinSkill[] {
         const raw = localStorage.getItem(BROWSER_SKILLS_KEY);
         if (!raw) return memoryBrowserSkills || [];
         const parsed = JSON.parse(raw) as BuiltinSkill[];
-        return Array.isArray(parsed) ? parsed.filter((item) => item?.name && item?.instructions) : [];
+        if (!Array.isArray(parsed)) return [];
+        return parsed
+            .filter((item) => item?.name && item?.instructions)
+            .map((item) => {
+                const files = item.files || {};
+                const packageEntries =
+                    normalizePackageEntries(item.packageEntries).length > 0
+                        ? normalizePackageEntries(item.packageEntries)
+                        : buildPackageEntriesFromFiles(files, item.instructions?.length || 0);
+                return { ...item, files, ...(packageEntries.length ? { packageEntries } : {}) };
+            });
     } catch {
         return memoryBrowserSkills || [];
     }
@@ -429,7 +531,7 @@ async function listSkillPackageFiles(skillDir: string) {
         const entries = await readDir(dir);
         for (const entry of entries) {
             const name = entry.name;
-            if (!name || name.startsWith(".") || name === "__MACOSX") continue;
+            if (!name || name.startsWith(".") || name === "__MACOSX" || name === PACKAGE_MANIFEST_NAME) continue;
             const relative = prefix ? `${prefix}/${name}` : name;
             if (/^SKILL\.md$/i.test(relative)) continue;
             const full = `${dir}/${name}`;
@@ -456,6 +558,64 @@ async function listSkillPackageFiles(skillDir: string) {
 
     await walk(skillDir, "");
     return files;
+}
+
+async function readSkillPackageManifest(skillDir: string): Promise<BuiltinSkillPackageEntry[] | null> {
+    const { readTextFile, exists } = await import("@tauri-apps/plugin-fs");
+    const path = `${skillDir}/${PACKAGE_MANIFEST_NAME}`;
+    if (!(await exists(path))) return null;
+    try {
+        const parsed = JSON.parse(await readTextFile(path)) as { entries?: BuiltinSkillPackageEntry[] };
+        const entries = normalizePackageEntries(parsed.entries);
+        return entries.length ? entries : null;
+    } catch {
+        return null;
+    }
+}
+
+function buildPackageEntriesFromFiles(files: Record<string, string>, skillMdBytes = 0): BuiltinSkillPackageEntry[] {
+    const entries: BuiltinSkillPackageEntry[] = [
+        { path: "SKILL.md", bytes: Math.max(0, skillMdBytes), role: "skill", encoding: "text" },
+    ];
+    for (const [path, body] of Object.entries(files)) {
+        const relative = normalizeZipEntryPath(path);
+        if (!relative || /^SKILL\.md$/i.test(relative)) continue;
+        entries.push({
+            path: relative,
+            bytes: typeof body === "string" ? body.length : 0,
+            role: packageRoleOf(relative),
+            encoding: TEXT_FILE_RE.test(relative) ? "text" : "base64",
+        });
+    }
+    return normalizePackageEntries(entries);
+}
+
+function normalizePackageEntries(entries?: BuiltinSkillPackageEntry[] | null) {
+    if (!entries?.length) return [] as BuiltinSkillPackageEntry[];
+    const seen = new Set<string>();
+    const next: BuiltinSkillPackageEntry[] = [];
+    for (const item of entries) {
+        const path = normalizeZipEntryPath(item.path || "");
+        if (!path || seen.has(path)) continue;
+        if (!/^SKILL\.md$/i.test(path) && !isAllowedSkillRelativePath(path)) continue;
+        seen.add(path);
+        next.push({
+            path: /^SKILL\.md$/i.test(path) ? "SKILL.md" : path,
+            bytes: Math.max(0, Number(item.bytes) || 0),
+            role: item.role || packageRoleOf(path),
+            encoding: item.encoding === "base64" || item.encoding === "none" ? item.encoding : "text",
+        });
+    }
+    return next.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+function packageRoleOf(path: string): BuiltinSkillPackageRole {
+    if (/^SKILL\.md$/i.test(path)) return "skill";
+    const top = path.split("/")[0]?.toLowerCase();
+    if (top === "references") return "reference";
+    if (top === "scripts") return "script";
+    if (top === "assets") return "asset";
+    return "other";
 }
 
 function sanitizeSkillFiles(files?: Record<string, string>) {

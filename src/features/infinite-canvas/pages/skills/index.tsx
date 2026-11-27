@@ -4,7 +4,7 @@ import { CircleHelp, FileArchive, RefreshCw, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
-import { isZipMagic, normalizeSkillName, SKILL_ZIP_LIMITS } from "@canvas/lib/agent/builtin-skills";
+import { formatSkillPackageTree, isZipMagic, normalizeSkillName, packageEntryCount, SKILL_ZIP_LIMITS } from "@canvas/lib/agent/builtin-skills";
 import { useBuiltinSkillStore } from "@canvas/stores/use-builtin-skill-store";
 import { useAgentStore } from "@canvas/stores/use-agent-store";
 
@@ -202,7 +202,8 @@ export default function SkillsPage() {
                             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                                 {filtered.map((skill) => {
                                     const active = skill.name === selectedName;
-                                    const extraCount = Object.keys(skill.files || {}).length;
+                                    const entryCount = packageEntryCount(skill);
+                                    const tree = formatSkillPackageTree(skill.name, skill.packageEntries);
                                     return (
                                         <div
                                             key={skill.path || skill.name}
@@ -215,18 +216,21 @@ export default function SkillsPage() {
                                                         {t("skillsLibrary.active")}
                                                     </span>
                                                 ) : null}
-                                                {extraCount ? (
-                                                    <span className="rounded-full bg-stone-500/10 px-2 py-0.5 text-[11px] text-stone-500">
-                                                        {t("skillsLibrary.extraFiles", { count: extraCount })}
-                                                    </span>
-                                                ) : null}
+                                                <span className="rounded-full bg-stone-500/10 px-2 py-0.5 text-[11px] text-stone-500">
+                                                    {t("skillsLibrary.packageEntryCount", { count: entryCount })}
+                                                </span>
                                             </div>
                                             <p className="mt-1 line-clamp-2 text-sm text-stone-500 dark:text-stone-400">
                                                 {skill.description || t("skillsLibrary.noDescription")}
                                             </p>
-                                            <p className="mt-2 line-clamp-4 flex-1 whitespace-pre-wrap text-xs leading-5 text-stone-400 dark:text-stone-500">
-                                                {skill.instructions}
-                                            </p>
+                                            <div className="mt-3 flex-1">
+                                                <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-stone-400">
+                                                    {t("skillsLibrary.packageStructure")}
+                                                </div>
+                                                <pre className="m-0 max-h-36 overflow-auto whitespace-pre rounded-xl bg-stone-100/80 px-3 py-2 font-mono text-[11px] leading-5 text-stone-600 dark:bg-stone-800/60 dark:text-stone-300">
+                                                    {tree}
+                                                </pre>
+                                            </div>
                                             <div className="mt-4 flex items-center gap-2">
                                                 <Button type={active ? "default" : "primary"} className="flex-1" onClick={() => useInAgent(skill.name)}>
                                                     {t("skillsLibrary.useInChat")}

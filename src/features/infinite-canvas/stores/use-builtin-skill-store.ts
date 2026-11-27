@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import {
+    formatSkillPackageTree,
     installBuiltinSkill,
     installBuiltinSkillFromZip,
     loadBuiltinSkills,
@@ -85,13 +86,8 @@ export function selectedBuiltinSkillPrompt(): string {
     const { skills, selectedName } = useBuiltinSkillStore.getState();
     const skill = skills.find((item) => item.name === selectedName);
     if (!skill) return "";
+    const tree = formatSkillPackageTree(skill.name, skill.packageEntries);
     const fileNames = Object.keys(skill.files || {});
-    const inventory = fileNames.length
-        ? `\n\nBundled package files (read-only inventory; scripts are never auto-executed):\n${fileNames
-              .slice(0, 40)
-              .map((name) => `- ${name}`)
-              .join("\n")}${fileNames.length > 40 ? `\n- …and ${fileNames.length - 40} more` : ""}`
-        : "";
     const referenceSnippets = fileNames
         .filter((name) => name.toLowerCase().startsWith("references/") && name.toLowerCase().endsWith(".md"))
         .slice(0, 3)
@@ -103,7 +99,7 @@ export function selectedBuiltinSkillPrompt(): string {
         })
         .filter(Boolean)
         .join("");
-    return `The user selected the "${skill.name}" skill. Follow these instructions:\n\n${skill.instructions}${inventory}${referenceSnippets}`;
+    return `The user selected the "${skill.name}" skill. Follow these instructions:\n\n${skill.instructions}\n\nPackage structure (read-only; scripts are never auto-executed):\n${tree}${referenceSnippets}`;
 }
 
 export function builtinSkillToSummary(skill: BuiltinSkill) {
