@@ -604,6 +604,7 @@ export default {
         estimated: "估算",
         range: { "7d": "近 7 天", "30d": "近 30 天", "90d": "近 90 天", all: "全部" },
         tabs: { overview: "总览", models: "模型", recent: "最近调用" },
+        recentTotal: "共 {{count}} 条",
         capability: { text: "大语言模型", image: "图片", video: "视频", audio: "音频" },
         capabilityShort: { text: "文本", image: "图片", video: "视频", audio: "音频" },
         status: { success: "成功", failed: "失败" },

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { App, Button, Empty, Popconfirm, Segmented, Spin, Table, Tag, Tooltip } from "antd";
 import { BarChart3, Image as ImageIcon, Mic, RefreshCw, Sparkles, Trash2, Type, Video } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -80,6 +80,8 @@ function UsagePieChart({
     emptyLabel: string;
     centerLabel?: string;
 }) {
+    const [activeKey, setActiveKey] = useState<string | null>(null);
+    const [tip, setTip] = useState<{ x: number; y: number; label: string; value: number; percent: number } | null>(null);
     const total = slices.reduce((sum, slice) => sum + slice.value, 0);
     if (!total) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyLabel} />;
     let angle = 0;
@@ -93,17 +95,49 @@ function UsagePieChart({
             return { ...slice, start, end, percent: (slice.value / total) * 100 };
         });
 
+    const showTip = (arc: (typeof arcs)[number], event: MouseEvent) => {
+        setActiveKey(arc.key);
+        setTip({
+            x: event.clientX,
+            y: event.clientY,
+            label: arc.label,
+            value: arc.value,
+            percent: arc.percent,
+        });
+    };
+
     return (
         <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
-            <div className="relative size-44 shrink-0">
+            <div className="relative size-44 shrink-0" onMouseLeave={() => { setActiveKey(null); setTip(null); }}>
                 <svg viewBox="0 0 120 120" className="size-full">
                     {arcs.length === 1 ? (
                         <>
-                            <circle cx="60" cy="60" r="48" fill={arcs[0].color} />
-                            <circle cx="60" cy="60" r="28" className="fill-white dark:fill-stone-950" />
+                            <circle
+                                cx="60"
+                                cy="60"
+                                r={activeKey === arcs[0].key ? 50 : 48}
+                                fill={arcs[0].color}
+                                className="cursor-pointer transition-all"
+                                onMouseEnter={(event) => showTip(arcs[0], event)}
+                                onMouseMove={(event) => showTip(arcs[0], event)}
+                            />
+                            <circle cx="60" cy="60" r="28" className="pointer-events-none fill-white dark:fill-stone-950" />
                         </>
                     ) : (
-                        arcs.map((arc) => <path key={arc.key} d={donutPath(60, 60, 48, 28, arc.start, arc.end)} fill={arc.color} />)
+                        arcs.map((arc) => {
+                            const active = activeKey === arc.key;
+                            return (
+                                <path
+                                    key={arc.key}
+                                    d={donutPath(60, 60, active ? 50 : 48, 28, arc.start, arc.end)}
+                                    fill={arc.color}
+                                    opacity={activeKey && !active ? 0.45 : 1}
+                                    className="cursor-pointer transition-opacity"
+                                    onMouseEnter={(event) => showTip(arc, event)}
+                                    onMouseMove={(event) => showTip(arc, event)}
+                                />
+                            );
+                        })
                     )}
                 </svg>
                 {centerLabel ? (
@@ -115,7 +149,16 @@ function UsagePieChart({
             </div>
             <div className="min-w-0 flex-1 space-y-2">
                 {arcs.map((arc) => (
-                    <div key={arc.key} className="flex items-center gap-2 text-sm">
+                    <button
+                        key={arc.key}
+                        type="button"
+                        className={cn(
+                            "flex w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left text-sm transition-colors",
+                            activeKey === arc.key ? "bg-stone-100 dark:bg-stone-800" : "hover:bg-stone-50 dark:hover:bg-stone-900",
+                        )}
+                        onMouseEnter={() => setActiveKey(arc.key)}
+                        onMouseLeave={() => setActiveKey(null)}
+                    >
                         <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: arc.color }} />
                         <span className="min-w-0 flex-1 truncate" title={arc.label}>
                             {arc.label}
@@ -123,9 +166,20 @@ function UsagePieChart({
                         <span className="shrink-0 tabular-nums text-xs text-stone-500">
                             {formatNumber(arc.value, locale)} · {arc.percent.toFixed(1)}%
                         </span>
-                    </div>
+                    </button>
                 ))}
             </div>
+            {tip ? (
+                <div
+                    className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs shadow-md dark:border-stone-700 dark:bg-stone-900"
+                    style={{ left: tip.x, top: tip.y - 12 }}
+                >
+                    <div className="max-w-48 truncate font-medium">{tip.label}</div>
+                    <div className="mt-0.5 tabular-nums text-stone-500">
+                        {formatNumber(tip.value, locale)} · {tip.percent.toFixed(1)}%
+                    </div>
+                </div>
+            ) : null}
         </div>
     );
 }
@@ -229,20 +283,29 @@ function DailyTrendChart({
                                 { key: "video", value: row.videoCalls },
                                 { key: "audio", value: row.audioCalls },
                             ];
+                            const active = hover?.index === index;
                             return (
                                 <button
                                     key={row.day}
                                     type="button"
-                                    className="group relative flex h-full min-w-0 items-end focus-visible:outline-none"
+                                    className="group relative z-[1] flex h-full min-w-0 items-end focus-visible:outline-none"
                                     onMouseEnter={(event) => {
+                                        const rect = event.currentTarget.getBoundingClientRect();
+                                        setHover({ index, x: rect.left + rect.width / 2, y: rect.top });
+                                    }}
+                                    onMouseMove={(event) => {
                                         const rect = event.currentTarget.getBoundingClientRect();
                                         setHover({ index, x: rect.left + rect.width / 2, y: rect.top });
                                     }}
                                     onMouseLeave={() => setHover(null)}
                                 >
+                                    <span className="absolute inset-0 rounded-sm" />
                                     <span
-                                        className="flex w-full min-w-[6px] flex-col-reverse overflow-hidden rounded-t-[3px]"
-                                        style={{ height: `${Math.max(row.calls > 0 ? 2 : 0, totalHeight)}%` }}
+                                        className={cn(
+                                            "relative flex w-full min-w-[6px] flex-col-reverse overflow-hidden rounded-t-[3px] transition-opacity",
+                                            active ? "opacity-100" : hover ? "opacity-55" : "opacity-100",
+                                        )}
+                                        style={{ height: `${Math.max(row.calls > 0 ? 4 : 2, totalHeight)}%` }}
                                     >
                                         {segments.map((segment) =>
                                             segment.value > 0 ? (
@@ -256,11 +319,12 @@ function DailyTrendChart({
                                                 />
                                             ) : null,
                                         )}
+                                        {row.calls === 0 ? <span className="block h-full bg-stone-200/70 dark:bg-stone-800" /> : null}
                                     </span>
                                 </button>
                             );
                         })}
-                        <svg className="pointer-events-none absolute inset-x-1 top-0 bottom-5" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        <svg className="pointer-events-none absolute inset-x-1 top-0 bottom-5 z-0" viewBox="0 0 100 100" preserveAspectRatio="none">
                             <polyline
                                 fill="none"
                                 stroke="#d97706"
@@ -270,6 +334,15 @@ function DailyTrendChart({
                                 vectorEffect="non-scaling-stroke"
                                 points={points.join(" ")}
                             />
+                            {hover ? (
+                                <circle
+                                    cx={daily.length <= 1 ? 50 : (hover.index / (daily.length - 1)) * 100}
+                                    cy={100 - (daily[hover.index].totalTokens / maxTokens) * 100}
+                                    r="1.6"
+                                    fill="#d97706"
+                                    vectorEffect="non-scaling-stroke"
+                                />
+                            ) : null}
                         </svg>
                     </div>
                 </div>
@@ -288,6 +361,25 @@ function DailyTrendChart({
                                 <div className="font-medium">{row.day}</div>
                                 <div className="mt-0.5 tabular-nums text-stone-500">
                                     {t("usage.callsCount", { count: formatNumber(row.calls, locale) })} · {t("usage.tokensCount", { count: formatTokens(row.totalTokens, locale) })}
+                                </div>
+                                <div className="mt-1 space-y-0.5 text-[11px] text-stone-500">
+                                    {(["text", "image", "video", "audio"] as const).map((capability) => {
+                                        const value =
+                                            capability === "text"
+                                                ? row.textCalls
+                                                : capability === "image"
+                                                  ? row.imageCalls
+                                                  : capability === "video"
+                                                    ? row.videoCalls
+                                                    : row.audioCalls;
+                                        if (!value) return null;
+                                        return (
+                                            <div key={capability} className="flex items-center justify-between gap-3">
+                                                <span>{t(`usage.capability.${capability}`)}</span>
+                                                <span className="tabular-nums">{formatNumber(value, locale)}</span>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </>
                         );
@@ -446,25 +538,48 @@ function UsageHeatmap({
 }
 
 function HourlyCurve({ hourly, locale, t }: { hourly: UsageSummary["hourly"]; locale?: string; t: (key: string, opts?: Record<string, unknown>) => string }) {
+    const [hover, setHover] = useState<{ index: number; x: number; y: number } | null>(null);
     const max = Math.max(1, ...hourly.map((row) => row.weight));
     const points = hourly.map((row, index) => {
         const x = (index / 23) * 100;
         const y = 100 - (row.weight / max) * 100;
-        return `${x},${y}`;
+        return { x, y, ...row };
     });
-    const area = `0,100 ${points.join(" ")} 100,100`;
+    const polyline = points.map((point) => `${point.x},${point.y}`).join(" ");
+    const area = `0,100 ${polyline} 100,100`;
+
+    const onMove = (event: MouseEvent<HTMLDivElement>) => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / Math.max(1, rect.width)));
+        const index = Math.min(23, Math.max(0, Math.round(ratio * 23)));
+        const point = points[index];
+        setHover({
+            index,
+            x: rect.left + (point.x / 100) * rect.width,
+            y: rect.top + (point.y / 100) * rect.height,
+        });
+    };
+
     return (
         <div className="space-y-2">
-            <svg viewBox="0 0 100 42" className="h-36 w-full" preserveAspectRatio="none">
-                <defs>
-                    <linearGradient id="usage-hourly-fill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#1c1917" stopOpacity="0.28" />
-                        <stop offset="100%" stopColor="#1c1917" stopOpacity="0.02" />
-                    </linearGradient>
-                </defs>
-                <polygon points={area} fill="url(#usage-hourly-fill)" />
-                <polyline fill="none" stroke="#1c1917" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" points={points.join(" ")} className="dark:stroke-stone-100" />
-            </svg>
+            <div className="relative h-36 w-full cursor-crosshair" onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+                <svg viewBox="0 0 100 100" className="size-full" preserveAspectRatio="none">
+                    <defs>
+                        <linearGradient id="usage-hourly-fill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#1c1917" stopOpacity="0.28" />
+                            <stop offset="100%" stopColor="#1c1917" stopOpacity="0.02" />
+                        </linearGradient>
+                    </defs>
+                    <polygon points={area} fill="url(#usage-hourly-fill)" />
+                    <polyline fill="none" stroke="#1c1917" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" points={polyline} className="dark:stroke-stone-100" />
+                    {hover ? (
+                        <>
+                            <line x1={points[hover.index].x} y1="0" x2={points[hover.index].x} y2="100" stroke="#a8a29e" strokeWidth="0.4" strokeDasharray="1.5 1.5" vectorEffect="non-scaling-stroke" />
+                            <circle cx={points[hover.index].x} cy={points[hover.index].y} r="1.8" fill="#1c1917" className="dark:fill-stone-100" vectorEffect="non-scaling-stroke" />
+                        </>
+                    ) : null}
+                </svg>
+            </div>
             <div className="flex justify-between text-[10px] tabular-nums text-stone-400">
                 <span>00</span>
                 <span>06</span>
@@ -478,6 +593,20 @@ function HourlyCurve({ hourly, locale, t }: { hourly: UsageSummary["hourly"]; lo
                     calls: formatNumber(hourly.reduce((sum, row) => sum + row.calls, 0), locale),
                 })}
             </div>
+            {hover ? (
+                <div
+                    className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs shadow-md dark:border-stone-700 dark:bg-stone-900"
+                    style={{ left: hover.x, top: hover.y - 10 }}
+                >
+                    <div className="font-medium">{String(hourly[hover.index].hour).padStart(2, "0")}:00</div>
+                    <div className="mt-0.5 tabular-nums text-stone-500">
+                        {t("usage.callsCount", { count: formatNumber(hourly[hover.index].calls, locale) })}
+                        {hourly[hover.index].totalTokens
+                            ? ` · ${t("usage.tokensCount", { count: formatTokens(hourly[hover.index].totalTokens, locale) })}`
+                            : null}
+                    </div>
+                </div>
+            ) : null}
         </div>
     );
 }
@@ -807,7 +936,17 @@ export default function UsagePage() {
                         </div>
                     ) : (
                         <div className="overflow-hidden rounded-2xl border border-stone-200 dark:border-stone-800">
-                            <Table rowKey="id" pagination={{ pageSize: 15, hideOnSinglePage: true }} dataSource={summary.recent} columns={recentColumns} />
+                            <Table
+                                rowKey="id"
+                                pagination={{
+                                    pageSize: 20,
+                                    showSizeChanger: true,
+                                    pageSizeOptions: [10, 20, 50, 100],
+                                    showTotal: (total) => t("usage.recentTotal", { count: formatNumber(total, locale) }),
+                                }}
+                                dataSource={summary.recent}
+                                columns={recentColumns}
+                            />
                         </div>
                     )}
                 </div>

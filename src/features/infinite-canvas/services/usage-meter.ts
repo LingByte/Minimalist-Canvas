@@ -117,7 +117,7 @@ export type UsageSummary = {
     daily: UsageDailyPoint[];
     /** 7×24 activity matrix flattened; weight blends tokens + media units. */
     heatmap: UsageHeatmapCell[];
-    hourly: Array<{ hour: number; weight: number; calls: number }>;
+    hourly: Array<{ hour: number; weight: number; calls: number; totalTokens: number }>;
     recent: UsageEvent[];
 };
 
@@ -410,13 +410,14 @@ export async function summarizeUsage(range: UsageDateRange = "30d"): Promise<Usa
     }
 
     const heatmap: UsageHeatmapCell[] = [];
-    const hourly = Array.from({ length: 24 }, (_, hour) => ({ hour, weight: 0, calls: 0 }));
+    const hourly = Array.from({ length: 24 }, (_, hour) => ({ hour, weight: 0, calls: 0, totalTokens: 0 }));
     for (let weekday = 0; weekday < 7; weekday += 1) {
         for (let hour = 0; hour < 24; hour += 1) {
             const cell = heatmapMatrix[weekday][hour];
             heatmap.push({ weekday, hour, ...cell });
             hourly[hour].weight += cell.weight;
             hourly[hour].calls += cell.calls;
+            hourly[hour].totalTokens += cell.totalTokens;
         }
     }
 
@@ -435,7 +436,7 @@ export async function summarizeUsage(range: UsageDateRange = "30d"): Promise<Usa
         daily: fillDailySeries(fromMs, now, dailyMap),
         heatmap,
         hourly,
-        recent: events.slice(0, 50),
+        recent: events,
     };
 }
 

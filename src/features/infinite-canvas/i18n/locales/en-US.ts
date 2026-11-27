@@ -602,6 +602,7 @@ export default {
         estimated: "estimated",
         range: { "7d": "7 days", "30d": "30 days", "90d": "90 days", all: "All" },
         tabs: { overview: "Overview", models: "Models", recent: "Recent" },
+        recentTotal: "{{count}} total",
         capability: { text: "LLM", image: "Image", video: "Video", audio: "Audio" },
         capabilityShort: { text: "Text", image: "Image", video: "Video", audio: "Audio" },
         status: { success: "Success", failed: "Failed" },
