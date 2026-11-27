@@ -10,9 +10,10 @@ import {
 import {
     requestBuiltinAgentChatTurn,
     type BuiltinAgentChatMessage,
+    type BuiltinAgentContentPart,
 } from "@canvas/services/api/builtin-agent-chat";
 import type { AiConfig } from "@canvas/stores/use-config-store";
-import type { AgentCanvasContext, AgentChatItem } from "@canvas/stores/use-agent-store";
+import type { AgentAttachment, AgentCanvasContext, AgentChatItem } from "@canvas/stores/use-agent-store";
 import { randomId } from "@canvas/lib/utils";
 
 export const BUILTIN_AGENT_MAX_TOOL_ROUNDS = 12;
@@ -29,12 +30,13 @@ export async function runBuiltinAgentHarness(options: {
     config: AiConfig;
     history: Array<{ role: "user" | "assistant"; content: string }>;
     userText: string;
+    attachments?: AgentAttachment[];
     canvasContext: AgentCanvasContext | null;
     navigate: NavigateFunction;
     signal?: AbortSignal;
     handlers: BuiltinAgentHarnessHandlers;
 }) {
-    const { config, history, userText, canvasContext, navigate, signal, handlers } = options;
+    const { config, history, userText, attachments = [], canvasContext, navigate, signal, handlers } = options;
     let liveSnapshot = canvasContext?.snapshot || null;
     const liveContext: AgentCanvasContext | null = canvasContext
         ? {
@@ -53,7 +55,7 @@ export async function runBuiltinAgentHarness(options: {
     const messages: BuiltinAgentChatMessage[] = [
         { role: "system", content: buildBuiltinAgentSystemPrompt(liveSnapshot) },
         ...history.map((item) => ({ role: item.role, content: item.content })),
-        { role: "user", content: userText },
+        { role: "user", content: buildUserContent(userText, attachments) },
     ];
 
     let finalText = "";
@@ -175,6 +177,22 @@ function safeJson(raw: string) {
     } catch {
         return raw;
     }
+}
+
+function buildUserContent(userText: string, attachments: AgentAttachment[]): string | BuiltinAgentContentPart[] {
+    const images = attachments.filter((item) => item.type.startsWith("image/") && item.url);
+    const files = attachments.filter((item) => !item.type.startsWith("image/") && item.url);
+    let text = userText.trim();
+    if (files.length) {
+        const lines = files.map((item) => `- ${item.name || "file"} (${item.type || "application/octet-stream"}): ${item.url}`).join("\n");
+        text = [text, text ? "" : null, "Attached files (object storage URLs):", lines].filter((item) => item !== null).join("\n");
+    }
+    if (!images.length) return text || userText;
+    const parts: BuiltinAgentContentPart[] = [
+        { type: "text", text: text || "Please review the attached image(s)." },
+        ...images.map((item) => ({ type: "image_url" as const, image_url: { url: item.url } })),
+    ];
+    return parts;
 }
 
 export type { BuiltinAgentToolCall };

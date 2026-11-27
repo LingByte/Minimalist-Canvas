@@ -4,9 +4,13 @@ import { buildApiUrl, resolveModelRequestConfig, type AiConfig } from "@canvas/s
 
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
 
+export type BuiltinAgentContentPart =
+    | { type: "text"; text: string }
+    | { type: "image_url"; image_url: { url: string } };
+
 export type BuiltinAgentChatMessage =
-    | { role: "system" | "user" | "assistant"; content: string }
-    | { role: "assistant"; content: string; tool_calls: BuiltinAgentToolCall[] }
+    | { role: "system" | "user" | "assistant"; content: string | BuiltinAgentContentPart[] }
+    | { role: "assistant"; content: string | BuiltinAgentContentPart[]; tool_calls: BuiltinAgentToolCall[] }
     | { role: "tool"; tool_call_id: string; content: string };
 
 export type BuiltinAgentChatTurn = {

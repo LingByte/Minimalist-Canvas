@@ -25,8 +25,12 @@ import {
 } from "@canvas/lib/canvas/builtin-agent-threads";
 import { useCanvasHost } from "@canvas/integration/canvas-host-context";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
+import { readImageMeta } from "@canvas/lib/image-utils";
+import { uploadToConfiguredObjectStorage } from "@canvas/lib/object-storage/client";
+import { isObjectStorageConfigured } from "@canvas/lib/object-storage/types";
 import { randomId } from "@canvas/lib/utils";
-import { useAgentStore, type AgentChatItem, type AgentModel, type AgentPanelTab } from "@canvas/stores/use-agent-store";
+import { assertCanvasMediaUploadSize, MAX_CANVAS_UPLOAD_BYTES } from "@canvas/services/object-storage";
+import { useAgentStore, type AgentAttachment, type AgentChatItem, type AgentModel, type AgentPanelTab } from "@canvas/stores/use-agent-store";
 import { useBuiltinSkillStore } from "@canvas/stores/use-builtin-skill-store";
 import {
     encodeChannelModel,
@@ -38,6 +42,8 @@ import {
 } from "@canvas/stores/use-config-store";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { SmartImage } from "@/components/smart-image";
+
+const MAX_BUILTIN_ATTACHMENTS = 8;
 
 /**
  * Built-in ReAct agent: Base URL + API Key, canvas tools, context, multi-turn local history.
@@ -53,8 +59,9 @@ export function BuiltinAgentPanel() {
     const isAiConfigReady = useConfigStore((state) => state.isAiConfigReady);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const updateConfig = useConfigStore((state) => state.updateConfig);
-    const { prompt, sending, waiting, messages, activeTab } = useAgentStore();
+    const { prompt, sending, waiting, messages, activeTab, attachments } = useAgentStore();
     const setAgentState = useAgentStore((state) => state.setAgentState);
+    const objectStorage = useConfigStore((state) => state.objectStorage);
     const loadBuiltinSkills = useBuiltinSkillStore((state) => state.load);
     const builtinSkills = useBuiltinSkillStore((state) => state.skills);
     const selectedBuiltinName = useBuiltinSkillStore((state) => state.selectedName);
@@ -170,7 +177,7 @@ export function BuiltinAgentPanel() {
         const nextId = randomId();
         setActiveThreadId(nextId);
         setSessionsOpen(false);
-        setAgentState({ messages: [], prompt: "", connectError: "", activeTab: "chat" });
+        setAgentState({ messages: [], prompt: "", attachments: [], connectError: "", activeTab: "chat" });
     };
 
     const resumeThread = (threadId: string) => {
@@ -186,6 +193,7 @@ export function BuiltinAgentPanel() {
         setAgentState({
             messages: thread?.messages || [],
             prompt: "",
+            attachments: [],
             connectError: "",
             activeTab: "chat",
         });
@@ -202,6 +210,7 @@ export function BuiltinAgentPanel() {
         setAgentState({
             messages: fallback?.messages || [],
             prompt: "",
+            attachments: [],
             connectError: "",
             activeTab: "chat",
         });
@@ -212,22 +221,102 @@ export function BuiltinAgentPanel() {
         updateConfig("model", next);
     };
 
+    const requireObjectStorage = () => {
+        if (isObjectStorageConfigured(objectStorage)) return true;
+        message.warning(t("agent.composer.objectStorageRequired"));
+        openConfigDialog(false, "object-storage");
+        return false;
+    };
+
+    const addAttachments = async (files: FileList | File[] | null) => {
+        if (!files?.length) return;
+        if (!requireObjectStorage()) return;
+        const prev = useAgentStore.getState().attachments;
+        const room = Math.max(0, MAX_BUILTIN_ATTACHMENTS - prev.length);
+        if (!room) {
+            message.warning(t("agent.composer.attachmentLimit", { count: MAX_BUILTIN_ATTACHMENTS }));
+            return;
+        }
+        const incoming = Array.from(files).slice(0, room);
+        if (incoming.length < Array.from(files).length) {
+            message.warning(t("agent.composer.attachmentLimit", { count: MAX_BUILTIN_ATTACHMENTS }));
+        }
+        const hide = message.loading(t("agent.composer.uploadingAttachments"), 0);
+        try {
+            const uploaded: AgentAttachment[] = [];
+            for (const file of incoming) {
+                assertCanvasMediaUploadSize(file.size, file.type, file.name, MAX_CANVAS_UPLOAD_BYTES);
+                const result = await uploadToConfiguredObjectStorage(objectStorage, file, {
+                    filename: file.name,
+                    contentType: file.type || undefined,
+                });
+                let width = 0;
+                let height = 0;
+                if ((result.mimeType || file.type).startsWith("image/")) {
+                    try {
+                        const meta = await readImageMeta(result.accessUrl);
+                        width = meta.width;
+                        height = meta.height;
+                    } catch {
+                        // Vision meta is optional for chat attachments.
+                    }
+                }
+                uploaded.push({
+                    id: randomId(),
+                    name: file.name,
+                    type: result.mimeType || file.type || "application/octet-stream",
+                    size: result.bytes || file.size,
+                    width,
+                    height,
+                    url: result.accessUrl,
+                    dataUrl: result.accessUrl,
+                });
+            }
+            if (uploaded.length) setAgentState({ attachments: [...prev, ...uploaded] });
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : t("agent.composer.uploadFailed"));
+        } finally {
+            hide();
+        }
+    };
+
+    const removeAttachment = (id: string) => {
+        setAgentState({ attachments: useAgentStore.getState().attachments.filter((item) => item.id !== id) });
+    };
+
     const sendPrompt = async (overrideText?: string) => {
         const text = (overrideText ?? prompt).trim();
-        if (!text || sending || waiting) return;
+        const files = useAgentStore.getState().attachments;
+        if ((!text && !files.length) || sending || waiting) return;
         if (!ready || !textModel) {
             openConfigDialog(false, "channels");
             message.warning(t("agent.connect.configureAiFirst"));
             setAgentState({ activeTab: "chat" });
             return;
         }
+        if (files.length && !requireObjectStorage()) return;
 
         const selectedSkill = builtinSkills.find((skill) => skill.name === selectedBuiltinName);
+        const displayText =
+            text ||
+            t(files.some((item) => item.type.startsWith("image/")) ? "agent.runtime.imagesSent" : "agent.runtime.attachmentCount", {
+                count: files.length,
+            });
         const userMessage: AgentChatItem = {
             id: randomId(),
             role: "user",
-            text,
+            text: displayText,
             threadId: activeThreadId,
+            attachments: files.map(({ id, name, url, type, size, width, height, dataUrl }) => ({
+                id,
+                name,
+                url,
+                type,
+                size,
+                width,
+                height,
+                dataUrl,
+            })),
             skill: selectedSkill
                 ? { name: selectedSkill.name, path: selectedSkill.path, displayName: selectedSkill.name }
                 : undefined,
@@ -241,6 +330,7 @@ export function BuiltinAgentPanel() {
         abortRef.current = controller;
         setAgentState({
             prompt: "",
+            attachments: [],
             sending: true,
             waiting: true,
             messages: [...messages, userMessage],
@@ -255,6 +345,7 @@ export function BuiltinAgentPanel() {
                 config: { ...config, model: textModel, textModel },
                 history,
                 userText: text,
+                attachments: files,
                 canvasContext,
                 navigate,
                 signal: controller.signal,
@@ -325,12 +416,15 @@ export function BuiltinAgentPanel() {
                 ...latest,
                 { id: randomId(), role: "error", text: errText, threadId: activeThreadId },
             ];
+            const draft = useAgentStore.getState();
             setAgentState({
                 messages: withError,
                 sending: false,
                 waiting: false,
                 connectError: errText,
                 activity: t("agent.status.failed"),
+                // Restore draft if user hasn't started a new one during the failed turn.
+                ...(draft.prompt || draft.attachments.length ? {} : { prompt: text, attachments: files }),
             });
             persistCurrentThread(withError);
             message.error(errText);
@@ -549,6 +643,7 @@ export function BuiltinAgentPanel() {
                     <div className="shrink-0 px-1 pb-1 pt-1">
                         <AgentChatComposer
                             prompt={prompt}
+                            attachments={attachments.map(({ id, name, url, type }) => ({ id, name, url, type }))}
                             disabled={!ready}
                             sending={sending || waiting}
                             placeholder={
@@ -561,7 +656,8 @@ export function BuiltinAgentPanel() {
                             onPromptChange={(next) => setAgentState({ prompt: next })}
                             onSubmit={() => void sendPrompt()}
                             onStop={stopTurn}
-                            hint={ready ? t("skillsLibrary.composerHint") : undefined}
+                            onAddFiles={addAttachments}
+                            onRemoveAttachment={removeAttachment}
                         />
                     </div>
                 </>

@@ -89,7 +89,7 @@ function localFilePath(value: string) {
     return /^\/(?:Users|home|private|tmp|Volumes|var\/folders)\//.test(pathname) ? decodeURIComponent(pathname) : "";
 }
 
-export type AgentChatAttachment = { id: string; name: string; url: string };
+export type AgentChatAttachment = { id: string; name: string; url: string; type?: string };
 export type AgentChatMessageItem = {
     id: string;
     role: "user" | "assistant" | "system" | "tool" | "error";
@@ -579,18 +579,35 @@ function AgentMessageAttachments({ attachments, alignRight }: { attachments: Age
     return (
         <>
             <div className={`mt-1.5 flex flex-wrap gap-1.5 ${alignRight ? "justify-end" : "justify-start"}`}>
-                {attachments.map((item) => (
-                    <SmartImage
-                        key={item.id}
-                        src={item.url}
-                        alt={item.name}
-                        title={t("agent.message.viewLarge")}
-                        className="size-10 cursor-zoom-in rounded-lg object-cover"
-                        draggable={false}
-                        fallbackIconClassName="size-4"
-                        onClick={() => setPreviewUrl(item.url)}
-                    />
-                ))}
+                {attachments.map((item) => {
+                    const isImage = (item.type || "").startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(item.url);
+                    if (isImage) {
+                        return (
+                            <SmartImage
+                                key={item.id}
+                                src={item.url}
+                                alt={item.name}
+                                title={t("agent.message.viewLarge")}
+                                className="size-10 cursor-zoom-in rounded-lg object-cover"
+                                draggable={false}
+                                fallbackIconClassName="size-4"
+                                onClick={() => setPreviewUrl(item.url)}
+                            />
+                        );
+                    }
+                    return (
+                        <a
+                            key={item.id}
+                            href={item.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex max-w-[10rem] items-center gap-1 truncate rounded-lg border px-2 py-1 text-[11px] leading-4 opacity-90 transition hover:opacity-100"
+                            title={item.name}
+                        >
+                            {item.name || t("agent.message.attachmentFile")}
+                        </a>
+                    );
+                })}
             </div>
             {previewUrl ? (
                 <div className="hidden">
