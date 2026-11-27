@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { App, Button, Empty, Input, Progress, Segmented, Spin, Tooltip } from "antd";
-import { BookOpen, Download, FolderOpen, HardDriveDownload, Play, RefreshCw, Search, Square, Trash2 } from "lucide-react";
+import { App, Button, Empty, Input, Modal, Progress, Segmented, Spin, Tag, Tooltip } from "antd";
+import { BookOpen, Download, FolderOpen, HardDriveDownload, Info, Play, RefreshCw, Search, Square, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { isTauri } from "@canvas/services/fs-store";
@@ -13,6 +13,7 @@ import {
     listenNovelDownloadProgress,
     listLocalNovels,
     openLocalNovel,
+    previewNovel,
     revealLocalNovel,
     searchNovels,
     startDownloader,
@@ -20,9 +21,14 @@ import {
     type DownloaderStatus,
     type LocalNovel,
     type NovelDownloadProgress,
+    type NovelPreview,
     type NovelSearchItem,
 } from "@canvas/services/novel-library";
 import { cn } from "@canvas/lib/utils";
+
+function searchCover(item: NovelSearchItem) {
+    return item.coverDataUrl || item.coverUrl || "";
+}
 
 type Mode = "local" | "search";
 
@@ -53,9 +59,16 @@ export default function NovelsPage() {
     const [busyAction, setBusyAction] = useState<string | null>(null);
     const [downloadingId, setDownloadingId] = useState<string | null>(null);
     const [progress, setProgress] = useState<NovelDownloadProgress | null>(null);
+    const [detailOpen, setDetailOpen] = useState(false);
+    const [detailLoading, setDetailLoading] = useState(false);
+    const [detailItem, setDetailItem] = useState<NovelSearchItem | null>(null);
+    const [detail, setDetail] = useState<NovelPreview | null>(null);
 
     const running = Boolean(downloader?.running) || downloader?.phase === "running";
-    const needsInstall = !downloader?.installed || downloader.phase === "missing";
+    // Prefer running over install: a live local server may outlive the Child handle /
+    // app restart, and `installed` can briefly read false while the port is still up.
+    const needsInstall =
+        !running && (!downloader?.installed || downloader.phase === "missing");
     const downloaderBusy = ["installing", "starting", "stopping"].includes(downloader?.phase || "");
 
     const refreshDownloader = useCallback(async () => {
@@ -168,6 +181,7 @@ export default function NovelsPage() {
         try {
             const result = await downloadNovel({ bookId: item.bookId, preferredName: item.title });
             message.success(t("novels.download.success", { title: result.title || item.title }));
+            setDetailOpen(false);
             setMode("local");
             await refreshLocal();
         } catch (error) {
@@ -175,6 +189,35 @@ export default function NovelsPage() {
         } finally {
             setDownloadingId(null);
         }
+    };
+
+    const onOpenDetail = (item: NovelSearchItem) => {
+        if (!running) {
+            message.warning(t("novels.downloader.needRunning"));
+            return;
+        }
+        // Show search payload immediately; preview enrichment is optional/background.
+        setDetailItem(item);
+        setDetail(null);
+        setDetailOpen(true);
+        setDetailLoading(true);
+        void previewNovel(item.bookId)
+            .then((preview) => {
+                setDetail(preview);
+                if (preview.coverDataUrl) {
+                    setSearchItems((prev) =>
+                        prev.map((entry) =>
+                            entry.bookId === item.bookId
+                                ? { ...entry, coverDataUrl: entry.coverDataUrl || preview.coverDataUrl }
+                                : entry,
+                        ),
+                    );
+                }
+            })
+            .catch(() => {
+                // Search metadata is already enough for the modal.
+            })
+            .finally(() => setDetailLoading(false));
     };
 
     const onDelete = (book: LocalNovel) => {
@@ -246,16 +289,7 @@ export default function NovelsPage() {
                                 </div>
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
-                                {needsInstall ? (
-                                    <Button
-                                        type="primary"
-                                        loading={busyAction === "install"}
-                                        icon={<HardDriveDownload className="size-3.5" />}
-                                        onClick={() => void runDownloader("install")}
-                                    >
-                                        {t("novels.downloader.install")}
-                                    </Button>
-                                ) : running ? (
+                                {running ? (
                                     <Button
                                         danger
                                         loading={busyAction === "stop"}
@@ -263,6 +297,15 @@ export default function NovelsPage() {
                                         onClick={() => void runDownloader("stop")}
                                     >
                                         {t("novels.downloader.stop")}
+                                    </Button>
+                                ) : needsInstall ? (
+                                    <Button
+                                        type="primary"
+                                        loading={busyAction === "install"}
+                                        icon={<HardDriveDownload className="size-3.5" />}
+                                        onClick={() => void runDownloader("install")}
+                                    >
+                                        {t("novels.downloader.install")}
                                     </Button>
                                 ) : (
                                     <Button
@@ -360,26 +403,57 @@ export default function NovelsPage() {
                         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                             {searchItems.map((item) => {
                                 const busy = downloadingId === item.bookId;
+                                const cover = searchCover(item);
                                 return (
                                     <article
                                         key={item.bookId}
                                         className={cn(
-                                            "flex flex-col rounded-2xl border border-stone-200/80 bg-white/80 p-4 dark:border-stone-700/80 dark:bg-stone-900/50",
+                                            "flex gap-3 rounded-2xl border border-stone-200/80 bg-white/80 p-3 dark:border-stone-700/80 dark:bg-stone-900/50",
                                         )}
                                     >
-                                        <div className="truncate text-base font-semibold">{item.title}</div>
-                                        <div className="mt-1 text-sm text-stone-500">{item.author || t("novels.search.unknownAuthor")}</div>
-                                        <div className="mt-4">
-                                            <Button
-                                                type="primary"
-                                                block
-                                                loading={busy}
-                                                disabled={!running || Boolean(downloadingId)}
-                                                icon={<Download className="size-3.5" />}
-                                                onClick={() => void onDownload(item)}
-                                            >
-                                                {busy ? t("novels.download.downloading") : t("novels.download.action")}
-                                            </Button>
+                                        <div className="grid h-[7.5rem] w-[5.25rem] shrink-0 place-items-center overflow-hidden rounded-xl bg-stone-100 dark:bg-stone-800">
+                                            {cover ? (
+                                                <img src={cover} alt="" className="size-full object-cover" loading="lazy" />
+                                            ) : (
+                                                <BookOpen className="size-5 text-stone-400" />
+                                            )}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="truncate text-base font-semibold">{item.title}</div>
+                                            <div className="mt-0.5 text-sm text-stone-500">
+                                                {item.author || t("novels.search.unknownAuthor")}
+                                            </div>
+                                            <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] text-stone-500">
+                                                {item.chapterNumber ? (
+                                                    <span>{t("novels.search.chapters", { count: item.chapterNumber })}</span>
+                                                ) : null}
+                                                {typeof item.finished === "boolean" ? (
+                                                    <span>{item.finished ? t("novels.search.finished") : t("novels.search.ongoing")}</span>
+                                                ) : null}
+                                                {item.category ? <span className="truncate">{item.category}</span> : null}
+                                            </div>
+                                            {item.abstractText ? (
+                                                <p className="mt-1 line-clamp-2 text-xs leading-5 text-stone-500">{item.abstractText}</p>
+                                            ) : null}
+                                            <div className="mt-2 flex flex-wrap gap-1.5">
+                                                <Button
+                                                    size="small"
+                                                    icon={<Info className="size-3.5" />}
+                                                    onClick={() => onOpenDetail(item)}
+                                                >
+                                                    {t("novels.search.detail")}
+                                                </Button>
+                                                <Button
+                                                    type="primary"
+                                                    size="small"
+                                                    loading={busy}
+                                                    disabled={!running || Boolean(downloadingId)}
+                                                    icon={<Download className="size-3.5" />}
+                                                    onClick={() => void onDownload(item)}
+                                                >
+                                                    {busy ? t("novels.download.downloading") : t("novels.download.action")}
+                                                </Button>
+                                            </div>
                                         </div>
                                     </article>
                                 );
@@ -390,6 +464,96 @@ export default function NovelsPage() {
                     )}
                 </div>
             </main>
+
+            <Modal
+                open={detailOpen}
+                title={t("novels.search.detailTitle")}
+                onCancel={() => setDetailOpen(false)}
+                footer={
+                    detailItem ? (
+                        <div className="flex justify-end gap-2">
+                            <Button onClick={() => setDetailOpen(false)}>{t("common.cancel")}</Button>
+                            <Button
+                                type="primary"
+                                loading={downloadingId === detailItem.bookId}
+                                disabled={!running || Boolean(downloadingId)}
+                                icon={<Download className="size-3.5" />}
+                                onClick={() => void onDownload(detailItem)}
+                            >
+                                {t("novels.download.action")}
+                            </Button>
+                        </div>
+                    ) : null
+                }
+                width={720}
+                destroyOnHidden
+            >
+                {detailItem ? (
+                    <div className="flex flex-col gap-4 sm:flex-row">
+                        <div className="mx-auto grid h-48 w-32 shrink-0 place-items-center overflow-hidden rounded-xl bg-stone-100 dark:bg-stone-800 sm:mx-0">
+                            {detail?.coverDataUrl || searchCover(detailItem) ? (
+                                <img
+                                    src={detail?.coverDataUrl || searchCover(detailItem)}
+                                    alt=""
+                                    className="size-full object-cover"
+                                />
+                            ) : (
+                                <BookOpen className="size-8 text-stone-400" />
+                            )}
+                        </div>
+                        <div className="min-w-0 flex-1 space-y-2">
+                            <div className="flex items-start justify-between gap-2">
+                                <div>
+                                    <div className="text-xl font-semibold">{detail?.title || detailItem.title}</div>
+                                    <div className="mt-1 text-sm text-stone-500">
+                                        {detail?.author || detailItem.author || t("novels.search.unknownAuthor")}
+                                    </div>
+                                </div>
+                                {detailLoading ? <Spin size="small" /> : null}
+                            </div>
+                            <div className="flex flex-wrap gap-2 text-xs text-stone-500">
+                                {(detail?.chapterCount || detailItem.chapterNumber) ? (
+                                    <span>
+                                        {t("novels.search.chapters", {
+                                            count: detail?.chapterCount || detailItem.chapterNumber,
+                                        })}
+                                    </span>
+                                ) : null}
+                                {typeof (detail?.finished ?? detailItem.finished) === "boolean" ? (
+                                    <span>
+                                        {(detail?.finished ?? detailItem.finished)
+                                            ? t("novels.search.finished")
+                                            : t("novels.search.ongoing")}
+                                    </span>
+                                ) : null}
+                                {detail?.wordCount ? (
+                                    <span>{t("novels.search.words", { count: detail.wordCount })}</span>
+                                ) : detailItem.wordNumber ? (
+                                    <span>{t("novels.search.words", { count: detailItem.wordNumber })}</span>
+                                ) : null}
+                                {detail?.score ? <span>{t("novels.search.score", { score: detail.score })}</span> : null}
+                                {detail?.readCountText ? <span>{detail.readCountText}</span> : null}
+                            </div>
+                            {(detail?.category || detailItem.category) ? (
+                                <div className="text-sm">
+                                    <span className="text-stone-500">{t("novels.search.category")}：</span>
+                                    {detail?.category || detailItem.category}
+                                </div>
+                            ) : null}
+                            {(detail?.tags?.length || detailItem.tags?.length) ? (
+                                <div className="flex flex-wrap gap-1.5">
+                                    {(detail?.tags?.length ? detail.tags : detailItem.tags || []).map((tag) => (
+                                        <Tag key={tag}>{tag}</Tag>
+                                    ))}
+                                </div>
+                            ) : null}
+                            <p className="whitespace-pre-wrap text-sm leading-6 text-stone-600 dark:text-stone-300">
+                                {detail?.description || detailItem.abstractText || t("novels.search.noDescription")}
+                            </p>
+                        </div>
+                    </div>
+                ) : null}
+            </Modal>
         </div>
     );
 }

@@ -63,17 +63,49 @@ impl TomatoLibraryConfig {
     }
 }
 
+/// Default novel library folder (downloaded books).
+///
+/// - macOS: `~/Documents/Minimalist-Canvas/Library`
+/// - Windows: `%USERPROFILE%\Documents\Minimalist-Canvas\Library`
+///   (falls back to `%LOCALAPPDATA%\Minimalist-Canvas\Library`)
+/// - Linux: `~/Documents/Minimalist-Canvas/Library`
 pub fn default_library_path() -> Result<PathBuf> {
-    let docs = dirs::document_dir().context("Cannot determine Documents directory")?;
-    Ok(docs.join("Minimalist-Canvas").join("Library"))
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(docs) = dirs::document_dir() {
+            return Ok(docs.join("Minimalist-Canvas").join("Library"));
+        }
+        let local = dirs::data_local_dir().context("无法确定 LOCALAPPDATA")?;
+        return Ok(local.join("Minimalist-Canvas").join("Library"));
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let docs = dirs::document_dir().context("无法确定 Documents 目录")?;
+        Ok(docs.join("Minimalist-Canvas").join("Library"))
+    }
 }
 
 pub struct TomatoLibraryConfigManager;
 
 impl TomatoLibraryConfigManager {
     fn config_path() -> Result<PathBuf> {
-        let base = dirs::config_dir().context("Cannot determine config directory")?;
-        Ok(base.join("minimalist-canvas").join("tomato-library.json"))
+        // Prefer the Tauri app data root; keep reading the legacy path if present.
+        let preferred = {
+            let base = dirs::data_local_dir().context("无法确定本机数据目录")?;
+            base.join("com.lingbyte.minimalist-canvas")
+                .join("tomato-library.json")
+        };
+        if preferred.exists() {
+            return Ok(preferred);
+        }
+        let legacy = {
+            let base = dirs::config_dir().context("无法确定配置目录")?;
+            base.join("minimalist-canvas").join("tomato-library.json")
+        };
+        if legacy.exists() {
+            return Ok(legacy);
+        }
+        Ok(preferred)
     }
 
     pub fn load() -> Result<TomatoLibraryConfig> {

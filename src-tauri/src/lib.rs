@@ -31,6 +31,8 @@ pub fn run() {
             tomato::library_set_settings,
             tomato::library_list_local,
             tomato::library_search,
+            tomato::library_preview,
+            tomato::library_cover_data_url,
             tomato::library_download,
             tomato::library_delete_local,
             tomato::library_reveal_local,

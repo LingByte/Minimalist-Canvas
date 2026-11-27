@@ -37,19 +37,19 @@ pub struct PreviewResponse {
     pub original_book_name: String,
     #[serde(default)]
     pub author: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_null_default")]
     pub chapter_count: u64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_null_default")]
     pub finished: bool,
     #[serde(default)]
     pub first_chapter_title: String,
     #[serde(default)]
     pub last_chapter_title: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_null_default")]
     pub word_count: u64,
     #[serde(default)]
     pub category: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_null_default")]
     pub score: f64,
     #[serde(default)]
     pub read_count_text: String,
@@ -59,6 +59,14 @@ pub struct PreviewResponse {
     pub tags: Vec<String>,
     #[serde(default)]
     pub cover_url: String,
+}
+
+fn deserialize_null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Default + Deserialize<'de>,
+{
+    Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -339,6 +347,48 @@ impl TomatoClient {
         Ok((bytes.to_vec(), content_type))
     }
 
+    /// Fetch a Fanqie CDN cover with browser-like headers (no Tomato auth).
+    /// Prefer `audio_thumb_uri` / origin JPEG URLs — HEIC thumbs are slow and hard to render.
+    pub async fn fetch_public_image(&self, url: &str) -> Result<(Vec<u8>, String)> {
+        let url = url.trim();
+        if url.is_empty() {
+            bail!("empty cover url");
+        }
+        let request = self
+            .http
+            .get(url)
+            .header(
+                reqwest::header::USER_AGENT,
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+            )
+            .header(reqwest::header::REFERER, "https://fanqienovel.com/")
+            .header(
+                reqwest::header::ACCEPT,
+                "image/avif,image/webp,image/apng,image/jpeg,image/png,image/*,*/*;q=0.8",
+            )
+            .timeout(std::time::Duration::from_secs(8));
+        let resp = request.send().await.context("public cover request failed")?;
+        let status = resp.status();
+        if !status.is_success() {
+            bail!("public cover HTTP {status}");
+        }
+        let content_type = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("image/jpeg")
+            .to_string();
+        let bytes = resp.bytes().await.context("Failed to read public cover body")?;
+        if bytes.is_empty() {
+            bail!("empty cover body");
+        }
+        // Reject HTML error pages masquerading as images.
+        if content_type.contains("text/html") {
+            bail!("cover url returned HTML");
+        }
+        Ok((bytes.to_vec(), content_type))
+    }
+
     pub async fn download_file(&self, rel_path: &str) -> Result<(Vec<u8>, Option<String>)> {
         let encoded = encode_rel_path(rel_path);
         let url = format!("{}/download/{encoded}", self.base);
@@ -432,25 +482,60 @@ fn percent_decode(input: &str) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
-/// Prefer Fanqie-style `thumb_url` (and common aliases) from search `raw`.
+/// Prefer Fanqie-style cover fields from search `raw`.
+/// Prefer origin JPEG (`audio_thumb_uri`) over signed HEIC thumbs.
 pub fn cover_url_from_raw(raw: &serde_json::Value) -> Option<String> {
     const KEYS: &[&str] = &[
+        "audio_thumb_uri",
+        "horiz_thumb_url",
         "thumb_url",
+        "detail_page_thumb_url",
+        "expand_thumb_url",
+        "audio_thumb_url_hd",
         "cover_url",
         "cover",
         "book_cover",
         "novel_cover",
         "thumbUrl",
         "coverUrl",
-        "audio_thumb_uri",
     ];
 
+    fn normalize_cover_url(url: &str) -> Option<String> {
+        let url = url.trim();
+        if url.is_empty() {
+            return None;
+        }
+        // Origin byteimg paths are JPEG without extension; keep as-is.
+        if url.contains("byteimg.com/origin/") {
+            return Some(url.to_string());
+        }
+        // Prefer non-HEIC variants when the signed URL embeds `.heic`.
+        if url.contains(".heic") {
+            let image = url.replace(".heic", ".image");
+            if image.starts_with("http") {
+                return Some(image);
+            }
+        }
+        Some(url.to_string())
+    }
+
     fn from_object(obj: &serde_json::Map<String, serde_json::Value>) -> Option<String> {
+        // Two-pass: first non-HEIC-ish keys, then anything else.
         for key in KEYS {
             if let Some(url) = obj.get(*key).and_then(|v| v.as_str()) {
-                let url = url.trim();
-                if !url.is_empty() {
-                    return Some(url.to_string());
+                let lower = url.to_ascii_lowercase();
+                if lower.contains(".heic") {
+                    continue;
+                }
+                if let Some(normalized) = normalize_cover_url(url) {
+                    return Some(normalized);
+                }
+            }
+        }
+        for key in KEYS {
+            if let Some(url) = obj.get(*key).and_then(|v| v.as_str()) {
+                if let Some(normalized) = normalize_cover_url(url) {
+                    return Some(normalized);
                 }
             }
         }

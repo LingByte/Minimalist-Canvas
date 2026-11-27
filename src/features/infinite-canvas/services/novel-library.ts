@@ -37,6 +37,32 @@ export type NovelSearchItem = {
     author: string;
     bookId: string;
     coverUrl?: string | null;
+    coverDataUrl?: string | null;
+    abstractText?: string | null;
+    category?: string | null;
+    chapterNumber?: string | null;
+    wordNumber?: string | null;
+    score?: string | null;
+    tags?: string[];
+    finished?: boolean | null;
+};
+
+export type NovelPreview = {
+    bookId: string;
+    title: string;
+    author: string;
+    description: string;
+    category: string;
+    tags: string[];
+    chapterCount: number;
+    wordCount: number;
+    score: number;
+    readCountText: string;
+    finished: boolean;
+    firstChapterTitle: string;
+    lastChapterTitle: string;
+    coverUrl?: string | null;
+    coverDataUrl?: string | null;
 };
 
 export type NovelDownloadProgress = {
@@ -82,6 +108,21 @@ export async function searchNovels(query: string) {
     requireDesktop();
     const result = await invoke<{ items: NovelSearchItem[] }>("library_search", { query });
     return result.items;
+}
+
+export async function previewNovel(bookId: string) {
+    requireDesktop();
+    return invoke<NovelPreview>("library_preview", { bookId });
+}
+
+export async function fetchNovelCoverDataUrl(args: { bookId?: string; coverUrl?: string | null }) {
+    requireDesktop();
+    return invoke<string | null>("library_cover_data_url", {
+        args: {
+            bookId: args.bookId,
+            coverUrl: args.coverUrl || undefined,
+        },
+    });
 }
 
 export async function downloadNovel(args: {

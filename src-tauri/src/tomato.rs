@@ -74,6 +74,15 @@ pub struct LibrarySearchItemView {
     pub author: String,
     pub book_id: String,
     pub cover_url: Option<String>,
+    /// Inlined JPEG/PNG data URL fetched from Fanqie CDN during search (fast path).
+    pub cover_data_url: Option<String>,
+    pub abstract_text: Option<String>,
+    pub category: Option<String>,
+    pub chapter_number: Option<String>,
+    pub word_number: Option<String>,
+    pub score: Option<String>,
+    pub tags: Vec<String>,
+    pub finished: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -82,26 +91,257 @@ pub struct LibrarySearchResponseView {
     pub items: Vec<LibrarySearchItemView>,
 }
 
-#[tauri::command]
-pub async fn library_search(query: String) -> Result<LibrarySearchResponseView, String> {
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryPreviewView {
+    pub book_id: String,
+    pub title: String,
+    pub author: String,
+    pub description: String,
+    pub category: String,
+    pub tags: Vec<String>,
+    pub chapter_count: u64,
+    pub word_count: u64,
+    pub score: f64,
+    pub read_count_text: String,
+    pub finished: bool,
+    pub first_chapter_title: String,
+    pub last_chapter_title: String,
+    pub cover_url: Option<String>,
+    pub cover_data_url: Option<String>,
+}
+
+fn raw_string(raw: &serde_json::Value, keys: &[&str]) -> Option<String> {
+    let obj = raw.as_object()?;
+    for key in keys {
+        if let Some(value) = obj.get(*key) {
+            if let Some(text) = value.as_str().map(str::trim).filter(|v| !v.is_empty()) {
+                return Some(text.to_string());
+            }
+            if let Some(number) = value.as_i64().or_else(|| value.as_u64().map(|v| v as i64)) {
+                return Some(number.to_string());
+            }
+            if let Some(number) = value.as_f64() {
+                return Some(format!("{number}"));
+            }
+        }
+    }
+    None
+}
+
+fn raw_tags(raw: &serde_json::Value) -> Vec<String> {
+    let Some(obj) = raw.as_object() else {
+        return Vec::new();
+    };
+    if let Some(serde_json::Value::Array(arr)) = obj.get("tags") {
+        return arr
+            .iter()
+            .filter_map(|value| value.as_str().map(str::trim).filter(|v| !v.is_empty()))
+            .map(str::to_string)
+            .collect();
+    }
+    if let Some(category) = raw_string(raw, &["category", "complete_category"]) {
+        return category
+            .split(['/', ',', '、'])
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(str::to_string)
+            .collect();
+    }
+    Vec::new()
+}
+
+fn raw_finished(raw: &serde_json::Value) -> Option<bool> {
+    let obj = raw.as_object()?;
+    if let Some(status) = obj.get("creation_status").and_then(|v| v.as_str()) {
+        // Fanqie: "0" finished, "1" serializing (common convention in their payloads).
+        return Some(status == "0");
+    }
+    if let Some(status) = obj.get("tomato_book_status").and_then(|v| v.as_str()) {
+        if status.contains('完') {
+            return Some(true);
+        }
+        if status.contains('连') {
+            return Some(false);
+        }
+    }
+    None
+}
+
+fn absolute_local_url(path_or_url: &str) -> Option<String> {
+    let value = path_or_url.trim();
+    if value.is_empty() {
+        return None;
+    }
+    if value.starts_with("http://") || value.starts_with("https://") {
+        return Some(value.to_string());
+    }
+    let base = tomato_library::LOCAL_API_BASE.trim_end_matches('/');
+    if value.starts_with('/') {
+        Some(format!("{base}{value}"))
+    } else {
+        Some(format!("{base}/{value}"))
+    }
+}
+
+fn bytes_to_data_url(bytes: &[u8], content_type: &str) -> String {
+    let mime = content_type
+        .split(';')
+        .next()
+        .unwrap_or("image/jpeg")
+        .trim();
+    let mime = if mime.starts_with("image/") {
+        mime
+    } else {
+        "image/jpeg"
+    };
+    format!("data:{mime};base64,{}", data_encoding_base64(bytes))
+}
+
+fn data_encoding_base64(bytes: &[u8]) -> String {
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD.encode(bytes)
+}
+
+async fn tomato_client() -> Result<TomatoClient, String> {
     let cfg = load_cfg()?;
-    let client = TomatoClient::new(
+    TomatoClient::new(
         cfg.resolve_api_base(),
         cfg.resolve_api_password().map_err(|e| e.to_string())?,
     )
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| e.to_string())
+}
+
+async fn cdn_cover_data_url(client: &TomatoClient, cover_url: &str) -> Option<String> {
+    match client.fetch_public_image(cover_url).await {
+        Ok((bytes, content_type)) if !bytes.is_empty() => Some(bytes_to_data_url(&bytes, &content_type)),
+        _ => None,
+    }
+}
+
+#[tauri::command]
+pub async fn library_search(query: String) -> Result<LibrarySearchResponseView, String> {
+    let client = tomato_client().await?;
     let search = client.search(query.trim()).await.map_err(|e| e.to_string())?;
-    let items = search
+    let mut items: Vec<LibrarySearchItemView> = search
         .items
         .into_iter()
         .map(|item| LibrarySearchItemView {
             cover_url: cover_url_from_raw(&item.raw),
+            cover_data_url: None,
+            abstract_text: raw_string(&item.raw, &["abstract", "book_abstract_v2", "sub_info"]),
+            category: raw_string(&item.raw, &["category", "complete_category"]),
+            chapter_number: raw_string(&item.raw, &["chapter_number", "serial_count"]),
+            word_number: raw_string(&item.raw, &["word_number"]),
+            score: raw_string(&item.raw, &["score"]),
+            tags: raw_tags(&item.raw),
+            finished: raw_finished(&item.raw),
             title: item.title,
             author: item.author,
             book_id: item.book_id,
         })
         .collect();
+
+    // Parallel CDN cover fetch (~0.5–1s). Avoid Tomato `/api/preview` here — it is ~6s/book.
+    let mut join_set = tokio::task::JoinSet::new();
+    for (index, item) in items.iter().enumerate() {
+        let Some(cover_url) = item.cover_url.clone() else {
+            continue;
+        };
+        let client = client.clone();
+        join_set.spawn(async move {
+            let data_url = cdn_cover_data_url(&client, &cover_url).await;
+            (index, data_url)
+        });
+    }
+    while let Some(joined) = join_set.join_next().await {
+        if let Ok((index, Some(data_url))) = joined {
+            if let Some(item) = items.get_mut(index) {
+                item.cover_data_url = Some(data_url);
+            }
+        }
+    }
+
     Ok(LibrarySearchResponseView { items })
+}
+
+#[tauri::command]
+pub async fn library_preview(book_id: String) -> Result<LibraryPreviewView, String> {
+    let book_id = book_id.trim().to_string();
+    if book_id.is_empty() {
+        return Err("bookId 不能为空".into());
+    }
+    let client = tomato_client().await?;
+    let preview = client.preview(&book_id).await.map_err(|e| e.to_string())?;
+    let cover_data_url = if preview.cover_url.trim().is_empty() {
+        None
+    } else {
+        match client.fetch_authenticated_bytes(&preview.cover_url).await {
+            Ok((bytes, content_type)) if !bytes.is_empty() => {
+                Some(bytes_to_data_url(&bytes, &content_type))
+            }
+            _ => None,
+        }
+    };
+    let cover_url = absolute_local_url(&preview.cover_url);
+    let _ = client.preview_cleanup(&book_id).await;
+    Ok(LibraryPreviewView {
+        book_id: preview.book_id,
+        title: preview.book_name,
+        author: preview.author,
+        description: preview.description,
+        category: preview.category,
+        tags: preview.tags,
+        chapter_count: preview.chapter_count,
+        word_count: preview.word_count,
+        score: preview.score,
+        read_count_text: preview.read_count_text,
+        finished: preview.finished,
+        first_chapter_title: preview.first_chapter_title,
+        last_chapter_title: preview.last_chapter_title,
+        cover_url,
+        cover_data_url,
+    })
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryCoverArgs {
+    pub book_id: Option<String>,
+    pub cover_url: Option<String>,
+}
+
+#[tauri::command]
+pub async fn library_cover_data_url(args: LibraryCoverArgs) -> Result<Option<String>, String> {
+    let client = tomato_client().await?;
+    if let Some(cover_url) = args.cover_url.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+        if let Some(data_url) = cdn_cover_data_url(&client, cover_url).await {
+            return Ok(Some(data_url));
+        }
+    }
+    // Slow fallback only when CDN URL is missing/blocked.
+    let book_id = args.book_id.unwrap_or_default();
+    let book_id = book_id.trim();
+    if book_id.is_empty() {
+        return Ok(None);
+    }
+    let preview = match client.preview(book_id).await {
+        Ok(preview) => preview,
+        Err(_) => return Ok(None),
+    };
+    let cover = preview.cover_url.trim().to_string();
+    let data_url = if cover.is_empty() {
+        None
+    } else {
+        match client.fetch_authenticated_bytes(&cover).await {
+            Ok((bytes, content_type)) if !bytes.is_empty() => {
+                Some(bytes_to_data_url(&bytes, &content_type))
+            }
+            _ => None,
+        }
+    };
+    let _ = client.preview_cleanup(book_id).await;
+    Ok(data_url)
 }
 
 #[derive(Debug, Deserialize)]

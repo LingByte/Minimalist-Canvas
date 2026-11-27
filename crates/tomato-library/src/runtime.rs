@@ -250,11 +250,8 @@ impl TomatoDownloaderRuntime {
             let mut permissions = fs::metadata(&final_path)?.permissions();
             permissions.set_mode(0o755);
             fs::set_permissions(&final_path, permissions)?;
-            let _ = Command::new("xattr")
-                .args(["-d", "com.apple.quarantine"])
-                .arg(&final_path)
-                .status();
         }
+        clear_macos_quarantine(&final_path);
 
         let manifest = InstallManifest {
             version: version.clone(),
@@ -651,9 +648,34 @@ fn kill_local_server_listeners() -> Result<()> {
     Ok(())
 }
 
-fn install_dir() -> Result<PathBuf> {
+/// App-scoped data root (matches Tauri identifier).
+///
+/// - macOS: `~/Library/Application Support/com.lingbyte.minimalist-canvas`
+/// - Windows: `%LOCALAPPDATA%\com.lingbyte.minimalist-canvas`
+/// - Linux: `~/.local/share/com.lingbyte.minimalist-canvas`
+fn preferred_data_root() -> Result<PathBuf> {
     let base = dirs::data_local_dir().context("无法确定本机数据目录")?;
-    Ok(base.join("minimalist-canvas").join("tomato-novel-downloader"))
+    Ok(base.join("com.lingbyte.minimalist-canvas"))
+}
+
+/// Legacy root used by the first tomato port (`…/minimalist-canvas/…`).
+fn legacy_data_root() -> Result<PathBuf> {
+    let base = dirs::data_local_dir().context("无法确定本机数据目录")?;
+    Ok(base.join("minimalist-canvas"))
+}
+
+fn dir_has_platform_binary(dir: &Path) -> bool {
+    resolve_binary_in_dir(dir).is_ok()
+}
+
+fn install_dir() -> Result<PathBuf> {
+    let primary = preferred_data_root()?.join("tomato-novel-downloader");
+    let legacy = legacy_data_root()?.join("tomato-novel-downloader");
+    // Keep serving an existing legacy install so users aren't forced to re-download.
+    if !dir_has_platform_binary(&primary) && dir_has_platform_binary(&legacy) {
+        return Ok(legacy);
+    }
+    Ok(primary)
 }
 
 fn manifest_path() -> Result<PathBuf> {
@@ -666,25 +688,29 @@ fn read_manifest() -> Result<InstallManifest> {
 }
 
 fn resolve_binary_path() -> Result<PathBuf> {
-    let dir = install_dir()?;
-    if let Ok(manifest) = read_manifest() {
-        let path = dir.join(&manifest.binary_name);
-        if path.is_file() {
-            return Ok(path);
-        }
+    resolve_binary_in_dir(&install_dir()?)
+}
+
+fn resolve_binary_in_dir(dir: &Path) -> Result<PathBuf> {
+    let expected = platform_binary_name()?;
+    let expected_path = dir.join(&expected);
+    if expected_path.is_file() {
+        return Ok(expected_path);
     }
 
-    // Fall back to any known platform binary sitting in the install dir.
-    if let Ok(entries) = fs::read_dir(&dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let name = path.file_name().and_then(|value| value.to_str()).unwrap_or("");
-            if name.starts_with("TomatoNovelDownloader-") && path.is_file() {
-                return Ok(path);
+    // Manifest may point at the same host binary after a rename; ignore cross-OS names.
+    if let Ok(data) = fs::read_to_string(dir.join("manifest.json")) {
+        if let Ok(manifest) = serde_json::from_str::<InstallManifest>(&data) {
+            if manifest.binary_name == expected {
+                let path = dir.join(&manifest.binary_name);
+                if path.is_file() {
+                    return Ok(path);
+                }
             }
         }
     }
-    bail!("binary missing");
+
+    bail!("binary missing for {}", expected);
 }
 
 fn canonical_binary_name(asset: &str) -> String {
@@ -697,6 +723,11 @@ fn canonical_binary_name(asset: &str) -> String {
         return stem.to_string();
     }
     asset.to_string()
+}
+
+/// Installed binary filename for the current host (no version suffix).
+fn platform_binary_name() -> Result<String> {
+    Ok(canonical_binary_name(&platform_asset_name("0.0.0")?))
 }
 
 fn platform_asset_name(version: &str) -> Result<String> {
@@ -712,6 +743,35 @@ fn platform_asset_name(version: &str) -> Result<String> {
         _ => bail!("当前系统暂不支持自动安装番茄下载器（{os}/{arch}）"),
     };
     Ok(name)
+}
+
+/// Clear Gatekeeper quarantine only on macOS, and only when the attr exists.
+/// Missing `com.apple.quarantine` is normal for locally written files — don't spam stderr.
+fn clear_macos_quarantine(path: &Path) {
+    #[cfg(target_os = "macos")]
+    {
+        let has_attr = Command::new("xattr")
+            .args(["-p", "com.apple.quarantine"])
+            .arg(path)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false);
+        if !has_attr {
+            return;
+        }
+        let _ = Command::new("xattr")
+            .args(["-d", "com.apple.quarantine"])
+            .arg(path)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = path;
+    }
 }
 
 async fn fetch_latest_tag() -> Result<String> {
