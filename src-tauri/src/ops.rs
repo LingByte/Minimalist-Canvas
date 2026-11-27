@@ -42,19 +42,13 @@ fn env_ops_runner_dir() -> Option<PathBuf> {
     None
 }
 
-fn sibling_ops_runner_dir() -> Option<PathBuf> {
-    // App repo: …/Minimalist-Canvas/src-tauri → sibling …/minimalist-canvas-ops-runner
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let desktop = manifest_dir.join("..").join("..");
-    for name in [
-        "minimalist-canvas-ops-runner",
-        "Minimalist-Canvas-Ops",
-        "ops-runner",
-    ] {
-        let candidate = desktop.join(name);
-        if candidate.join("cli.ts").exists() {
-            return Some(candidate);
-        }
+fn in_repo_ops_runner_dir() -> Option<PathBuf> {
+    // App repo: …/Minimalist-Canvas/src-tauri → …/Minimalist-Canvas/ops-runner
+    let candidate = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("ops-runner");
+    if candidate.join("cli.ts").exists() {
+        return Some(candidate);
     }
     None
 }
@@ -63,11 +57,11 @@ fn resolve_ops_runner(_app: &AppHandle) -> Result<PathBuf, String> {
     if let Some(dir) = env_ops_runner_dir() {
         return Ok(dir);
     }
-    if let Some(dir) = sibling_ops_runner_dir() {
+    if let Some(dir) = in_repo_ops_runner_dir() {
         return Ok(dir);
     }
     Err(
-        "Ops runner not found. Clone/keep `minimalist-canvas-ops-runner` as a Desktop sibling of Minimalist-Canvas, or set OPS_RUNNER_DIR."
+        "Ops runner not found. Expected `ops-runner/` next to `src-tauri` in this repo (or set OPS_RUNNER_DIR)."
             .into(),
     )
 }

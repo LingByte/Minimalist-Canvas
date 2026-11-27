@@ -616,7 +616,7 @@ export default {
         tabOps: "Ops",
         ops: {
             desktopOnly: "Ops requires the Tauri desktop app. Launch with bun run tauri:dev.",
-            runnerMissing: "External ops runner missing (keep minimalist-canvas-ops-runner beside the app, or set OPS_RUNNER_DIR).",
+            runnerMissing: "Ops runner missing. Install deps in-repo: cd ops-runner && bun install.",
             loadFailed: "Failed to load ops data",
             bindAccount: "Bind account",
             accounts: "Accounts",

@@ -618,7 +618,7 @@ export default {
         tabOps: "运营",
         ops: {
             desktopOnly: "运营模块需要 Tauri 桌面端。请用 bun run tauri:dev 打开应用。",
-            runnerMissing: "未找到外部 ops runner（请在 Desktop 旁放置 minimalist-canvas-ops-runner，或设置 OPS_RUNNER_DIR）。",
+            runnerMissing: "未找到运营自动化（请确认仓库内 ops-runner 已安装依赖：cd ops-runner && bun install）。",
             loadFailed: "加载运营数据失败",
             bindAccount: "绑定账号",
             accounts: "账号",

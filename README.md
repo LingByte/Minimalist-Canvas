@@ -1,61 +1,100 @@
 # Minimalist Canvas
 
-Infinite canvas desktop app built with Tauri 2 + React 19 + TypeScript.
+至简未来桌面端：无限画布 + 本地 Agent / Skills + 对象存储 + 创作者运营（抖音 / 快手 / 小红书）。
+
+基于 **Tauri 2 + React 19 + TypeScript**，默认按本机优先设计；网页 `bun run dev` 可预览，完整能力请用桌面端。
+
+## Features
+
+- **无限画布**：节点、连线、分镜 Script、图/视频/音频生成与本地项目库
+- **Agent / Skills**：内置与本地技能、梗库检索、画布工具调用
+- **对象存储**：文件管理、CDN 趋势、本机数据目录可从配置页打开
+- **运营（桌面端）**：绑定创作者账号（应用内扫码）、发布视频、同步互动数据（仓库内 `ops-runner/`）
+- **自动更新（桌面端）**：启动后检查 GitHub Releases，可在应用内下载安装
 
 ## Tech Stack
 
-- **Frontend**: React 19, TypeScript, Rsbuild, Ant Design, Tailwind CSS
-- **Desktop**: Tauri 2 (Rust backend)
-- **State**: Zustand, TanStack Query
-- **i18n**: i18next (en, zh, zh-TW, fr, ja, ru, vi)
+| Layer | Stack |
+| --- | --- |
+| Frontend | React 19, TypeScript, Rsbuild, Ant Design, Tailwind |
+| Desktop | Tauri 2 (Rust) |
+| State | Zustand, TanStack Query |
+| i18n | i18next（en / zh / zh-TW / fr / ja / ru / vi） |
+| Ops automation | Bun + Playwright（仓库内 `ops-runner/`） |
 
 ## Prerequisites
 
-- [Bun](https://bun.sh/) (package manager)
-- [Rust](https://rustup.rs/) (stable toolchain)
-- macOS: Xcode Command Line Tools
+- [Bun](https://bun.sh/)
+- [Rust](https://rustup.rs/) stable
+- macOS：Xcode Command Line Tools
+- 运营模块：本机 Chrome / Edge；首次使用前在仓库内执行一次 `cd ops-runner && bun install`
 
 ## Getting Started
 
 ```bash
-# Install dependencies
 bun install
+cd ops-runner && bun install && cd ..
 
-# Run in development (web only)
+# Web preview
 bun run dev
 
-# Run as desktop app (Tauri)
+# Desktop (recommended)
 bun run tauri:dev
 
-# Build desktop app (produces DMG)
+# Production desktop build (DMG / NSIS)
 bun run tauri:build
 ```
 
-## Build Output
+当前版本见 `package.json` / `src-tauri/tauri.conf.json`（例如 `0.1.12`）。构建产物大致在：
 
-After `bun run tauri:build`, the DMG will be at:
+```text
+src-tauri/target/release/bundle/dmg/
+src-tauri/target/release/bundle/nsis/
 ```
-src-tauri/target/release/bundle/dmg/Minimalist Canvas_0.1.0_aarch64.dmg
-```
+
+## Ops runner
+
+运营自动化在本仓库 `ops-runner/`（Playwright）。Tauri 默认解析该目录；也可设 `OPS_RUNNER_DIR` / `CHROME_PATH`。登录用离屏 Chrome 提取二维码到应用内扫码，过程可取消。
 
 ## Auto-update
 
-Desktop builds can check GitHub Releases and install updates in-app (Tauri updater).
+**有。** 桌面端已接入 `tauri-plugin-updater`：
 
-See [docs/AUTO_UPDATE.md](docs/AUTO_UPDATE.md) for signing keys, CI secrets, and release steps.
+| 能力 | 说明 |
+| --- | --- |
+| 启动检查 | `UserLayout` → `scheduleAutoUpdateCheck()`，约 4s 后静默检查 |
+| 提示安装 | 发现新版本后 toast「立即更新」，下载完成后可 relaunch |
+| 更新源 | `https://github.com/LingByte/Minimalist-Canvas/releases/latest/download/latest.json` |
+| 签名 | `src-tauri/tauri.conf.json` → `plugins.updater.pubkey`；私钥仅存 CI / `.tauri/updater.key` |
 
-## macOS Distribution
+相关实现：
 
-The app is built with ad-hoc signing (no Apple Developer account required).
+- `src/features/infinite-canvas/services/app-updater.ts`（启动 toast 流程，**当前在用**）
+- `src/features/infinite-canvas/hooks/use-version-check.ts` + `version-release-modal.tsx`（版本弹窗能力已写好，需挂到 UI 才可见手动「检查更新」）
 
-Users on macOS 15+ will need to:
-1. Open System Settings → Privacy & Security
-2. Click "Open Anyway" for the first launch
+发版与密钥细节见：
 
-Or run:
-```bash
-xattr -d com.apple.quarantine "/Applications/Minimalist Canvas.app"
-```
+- [docs/AUTO_UPDATE.md](docs/AUTO_UPDATE.md)
+- [docs/RELEASE.md](docs/RELEASE.md)
+
+> 说明：`bun run tauri:dev` 开发态一般不会走完整安装更新；需正式 Release 包 + 对应平台产物在 `latest.json` 里。macOS 目前为 ad-hoc 签名，首次打开可能被 Gatekeeper 拦截。
+
+## macOS first launch
+
+若系统拦截未公证安装包：
+
+1. 系统设置 → 隐私与安全性 → 仍要打开  
+2. 或：`xattr -d com.apple.quarantine "/Applications/Minimalist Canvas.app"`
+
+## Scripts
+
+| Command | Purpose |
+| --- | --- |
+| `bun run dev` | Rsbuild web |
+| `bun run tauri:dev` | Tauri desktop |
+| `bun run tauri:build` | Signed updater artifacts + installers |
+| `bun run typecheck` | `tsc --noEmit` |
+| `bun run lint` | oxlint |
 
 ## License
 
