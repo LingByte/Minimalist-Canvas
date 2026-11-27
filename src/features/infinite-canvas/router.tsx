@@ -13,6 +13,7 @@ import ImagePage from "@canvas/pages/image";
 import NotFound from "@canvas/pages/not-found";
 import PromptsPage from "@canvas/pages/prompts";
 import SkillsPage from "@canvas/pages/skills";
+import OpsPage from "@canvas/pages/ops";
 import StoragePage from "@canvas/pages/storage";
 import VideoPage from "@canvas/pages/video";
 
@@ -27,6 +28,7 @@ const appPages: RouteObject[] = [
     { path: "assets", element: <AssetsPage /> },
     { path: "prompts", element: <PromptsPage /> },
     { path: "skills", element: <SkillsPage /> },
+    { path: "ops", element: <OpsPage /> },
     { path: "storage", element: <StoragePage /> },
     { path: "canvas", element: <CanvasPage /> },
     { path: "canvas/:id", element: <CanvasProjectPage /> },

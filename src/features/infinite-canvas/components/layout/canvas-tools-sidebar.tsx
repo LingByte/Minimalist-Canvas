@@ -19,7 +19,7 @@ import { SmartImage } from "@/components/smart-image";
 import { useCanvasHost } from "@canvas/integration/canvas-host-context";
 import { DEFAULT_LOGO, DEFAULT_SYSTEM_NAME } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { isObjectStorageConfigured, useConfigStore } from "@canvas/stores/use-config-store";
+import { useConfigStore } from "@canvas/stores/use-config-store";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 
 function activeToolFromPath(pathname: string): NavigationToolSlug | undefined {
@@ -41,11 +41,10 @@ export function CanvasToolsSidebar(props: { className?: string }) {
     const { embedded, homeHref, logo, brandName } = useCanvasHost();
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
-    const objectStorage = useConfigStore((state) => state.objectStorage);
     const theme = useThemeStore((state) => state.theme);
     const setTheme = useThemeStore((state) => state.setTheme);
-    const storageConfigured = isObjectStorageConfigured(objectStorage);
-    const visibleTools = navigationTools.filter((tool) => tool.slug !== "storage" || storageConfigured);
+    // Storage page also hosts Ops (desktop publishing); always keep the entry visible.
+    const visibleTools = navigationTools;
 
     const activeToolSlug = activeToolFromPath(pathname);
     const brand = brandName || DEFAULT_SYSTEM_NAME;
