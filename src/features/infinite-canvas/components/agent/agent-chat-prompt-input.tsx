@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import { Popover } from "antd";
-import { Sparkles } from "lucide-react";
+import { Sparkles, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { canvasThemes } from "@canvas/lib/canvas-theme";
@@ -29,6 +29,7 @@ export function AgentChatPromptInput({ value, disabled, placeholder, theme, onCh
     onSubmit: () => void;
     onAddFiles?: (files: FileList | File[] | null) => void | Promise<void>;
 }) {
+    const { t } = useTranslation();
     const containerRef = useRef<HTMLDivElement>(null);
     const editorRef = useRef<HTMLDivElement>(null);
     const composingRef = useRef(false);
@@ -62,7 +63,17 @@ export function AgentChatPromptInput({ value, disabled, placeholder, theme, onCh
         }
         return undefined;
     }, [selectedBuiltinSkill, selectedCodexSkill]);
-    const tokens = useMemo(() => parseAgentInlineTokens(value, canvasReferences, messageSkill), [canvasReferences, messageSkill, value]);
+    // Builtin selection is shown as a chip only — never also render an inline @$ token for the same skill.
+    const tokens = useMemo(() => {
+        const inlineSkill = selectedBuiltinSkill ? undefined : messageSkill;
+        return parseAgentInlineTokens(stripBuiltinSkillMarker(value, selectedBuiltinSkill?.name), canvasReferences, inlineSkill);
+    }, [canvasReferences, messageSkill, selectedBuiltinSkill, value]);
+
+    useEffect(() => {
+        if (!selectedBuiltinSkill) return;
+        const cleaned = stripBuiltinSkillMarker(value, selectedBuiltinSkill.name);
+        if (cleaned !== value) onChange(cleaned);
+    }, [onChange, selectedBuiltinSkill, value]);
     const selectedReferenceIds = useMemo(() => new Set(canvasReferences.map((item) => item.nodeId)), [canvasReferences]);
     const skillCandidates = useMemo<ComposerCandidate[]>(() => {
         const query = command?.query.trim().toLowerCase() || "";
@@ -89,7 +100,10 @@ export function AgentChatPromptInput({ value, disabled, placeholder, theme, onCh
 
     useEffect(() => {
         const editor = editorRef.current;
-        if (!editor || document.activeElement === editor && value === lastEmittedRef.current) return;
+        if (!editor) return;
+        // Never clobber the live caret while the user is typing in this editor.
+        if (document.activeElement === editor && value === lastEmittedRef.current) return;
+        const selection = saveSelection(editor);
         editor.replaceChildren(...tokens.map((token) => {
             if (token.type === "text") return document.createTextNode(token.value);
             return token.type === "skill"
@@ -97,6 +111,7 @@ export function AgentChatPromptInput({ value, disabled, placeholder, theme, onCh
                 : createReferenceToken(token.reference, theme);
         }));
         lastEmittedRef.current = value;
+        if (document.activeElement === editor) restoreSelection(editor, selection);
     }, [theme, tokens, value]);
 
     const emit = (next: string) => {
@@ -144,27 +159,32 @@ export function AgentChatPromptInput({ value, disabled, placeholder, theme, onCh
     const insertCandidate = (candidate: ComposerCandidate) => {
         const editor = editorRef.current;
         if (!editor || !command) return;
-        if (candidate.type === "skill") editor.querySelector<HTMLElement>("[data-agent-token-kind='skill']")?.remove();
+        if (candidate.type === "skill") editor.querySelectorAll<HTMLElement>("[data-agent-token-kind='skill']").forEach((node) => node.remove());
         removeTextBeforeCaret(command.length);
 
         if (candidate.type === "skill") {
-            const base = serializeEditor(editor);
-            const defaultPrompt = candidate.skill.interface?.defaultPrompt?.trim();
             if (candidate.source === "builtin") {
                 useBuiltinSkillStore.getState().select(candidate.skill.name);
                 useAgentSkillStore.getState().clearSelection();
-            } else {
-                useBuiltinSkillStore.getState().select("");
-                useAgentSkillStore.getState().selectSkill(candidate.skill);
+                // Builtin skills use the chip + system prompt — avoid a second inline @token.
+                const next = serializeEditor(editor)
+                    .replace(new RegExp(`\\$${candidate.skill.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "g"), "")
+                    .replace(/[ \t]{2,}/g, " ");
+                emit(next.trimStart());
+                closeCommand();
+                return;
             }
+            useBuiltinSkillStore.getState().select("");
+            useAgentSkillStore.getState().selectSkill(candidate.skill);
+            const base = serializeEditor(editor);
+            const defaultPrompt = candidate.skill.interface?.defaultPrompt?.trim();
             if (!base.trim() && defaultPrompt) {
                 emit("");
                 closeCommand();
                 return;
             }
             insertTokenAtCaret(editor, createSkillToken({ name: candidate.skill.name, path: candidate.skill.path, displayName: candidate.skill.interface?.displayName || undefined }, theme));
-            const next = serializeEditor(editor);
-            emit(next);
+            emit(serializeEditor(editor));
         } else {
             const current = useAgentStore.getState().canvasReferences;
             if (!current.some((item) => item.nodeId === candidate.reference.nodeId)) useAgentStore.getState().setAgentState({ canvasReferences: [...current, candidate.reference] });
@@ -205,67 +225,110 @@ export function AgentChatPromptInput({ value, disabled, placeholder, theme, onCh
         setReferenceHover({ reference, left: tokenRect.left - containerRect.left, top: tokenRect.top - containerRect.top, width: tokenRect.width, height: tokenRect.height });
     };
 
+    const showPlaceholder = !stripBuiltinSkillMarker(value, selectedBuiltinSkill?.name).trim();
+    const clearBuiltinSkill = () => {
+        useBuiltinSkillStore.getState().select("");
+        const editor = editorRef.current;
+        if (!editor) return;
+        editor.querySelectorAll<HTMLElement>("[data-agent-token-kind='skill']").forEach((node) => node.remove());
+        emit(stripBuiltinSkillMarker(serializeEditor(editor)));
+    };
+
     return (
         <div ref={containerRef} className="relative">
-            {!value.trim() ? (
-                <div className="pointer-events-none absolute inset-x-1 top-1 line-clamp-3 text-sm leading-6" style={{ color: theme.node.placeholder }}>
-                    {placeholder}
+            {selectedBuiltinSkill ? (
+                <div className="mb-1.5 flex flex-wrap items-center gap-1.5 px-0.5">
+                    <span
+                        className="inline-flex max-w-full items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] leading-4"
+                        style={{ background: theme.toolbar.activeBg, borderColor: theme.node.stroke, color: theme.node.text }}
+                        title={selectedBuiltinSkill.path}
+                    >
+                        <Sparkles className="size-3 shrink-0 opacity-70" />
+                        <span className="truncate">@{selectedBuiltinSkill.name}</span>
+                        <button
+                            type="button"
+                            className="grid size-4 shrink-0 place-items-center rounded-sm opacity-60 transition hover:opacity-100"
+                            aria-label={t("agent.composer.removeSkill")}
+                            onClick={clearBuiltinSkill}
+                        >
+                            <X className="size-3" />
+                        </button>
+                    </span>
                 </div>
             ) : null}
-            <div
-                ref={editorRef}
-                contentEditable={!disabled}
-                suppressContentEditableWarning
-                role="textbox"
-                aria-multiline="true"
-                aria-label={placeholder}
-                className="thin-scrollbar max-h-32 min-h-20 w-full overflow-y-auto whitespace-pre-wrap break-words bg-transparent px-1 py-1 text-sm leading-6 outline-none"
-                style={{ color: theme.node.text, cursor: disabled ? "default" : "text" }}
-                onInput={() => {
-                    if (!composingRef.current) syncFromEditor();
-                }}
-                onCompositionStart={() => { composingRef.current = true; }}
-                onCompositionEnd={() => {
-                    composingRef.current = false;
-                    syncFromEditor();
-                }}
-                onPaste={(event) => {
-                    const images = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/"));
-                    if (images.length && onAddFiles) {
+            <div className="relative">
+                {showPlaceholder ? (
+                    <div
+                        className="pointer-events-none absolute inset-x-0 top-0 line-clamp-2 select-none px-1 py-1 text-sm leading-6"
+                        style={{ color: theme.node.placeholder }}
+                    >
+                        {placeholder}
+                    </div>
+                ) : null}
+                <div
+                    ref={editorRef}
+                    contentEditable={!disabled}
+                    suppressContentEditableWarning
+                    role="textbox"
+                    aria-multiline="true"
+                    aria-placeholder={placeholder}
+                    aria-label={placeholder}
+                    className="thin-scrollbar max-h-28 min-h-[2.75rem] w-full overflow-y-auto whitespace-pre-wrap break-words bg-transparent px-1 py-1 text-sm leading-6 outline-none focus-visible:outline-none"
+                    style={{ color: theme.node.text, caretColor: theme.node.text, cursor: disabled ? "default" : "text" }}
+                    onInput={() => {
+                        if (!composingRef.current) syncFromEditor();
+                    }}
+                    onCompositionStart={() => { composingRef.current = true; }}
+                    onCompositionEnd={() => {
+                        composingRef.current = false;
+                        syncFromEditor();
+                    }}
+                    onPaste={(event) => {
+                        const files = Array.from(event.clipboardData.files);
+                        if (files.length && onAddFiles) {
+                            event.preventDefault();
+                            void onAddFiles(files);
+                            return;
+                        }
                         event.preventDefault();
-                        void onAddFiles(images);
-                        return;
-                    }
-                    event.preventDefault();
-                    insertTextAtCaret(event.clipboardData.getData("text/plain"));
-                    syncFromEditor();
-                }}
-                onKeyDown={(event) => {
-                    event.stopPropagation();
-                    if (isImeComposing(event) || handleCommandKey(event)) return;
-                    if ((event.key === "Backspace" || event.key === "Delete") && deleteAdjacentToken(event.key)) {
+                        insertTextAtCaret(event.clipboardData.getData("text/plain"));
+                        syncFromEditor();
+                    }}
+                    onKeyDown={(event) => {
+                        event.stopPropagation();
+                        if (isImeComposing(event) || handleCommandKey(event)) return;
+                        if ((event.key === "Backspace" || event.key === "Delete") && deleteAdjacentToken(event.key)) {
+                            event.preventDefault();
+                            requestAnimationFrame(syncFromEditor);
+                            return;
+                        }
+                        if (isPlainEnterKey(event)) {
+                            event.preventDefault();
+                            onSubmit();
+                            return;
+                        }
+                        requestAnimationFrame(syncCommand);
+                    }}
+                    onKeyUp={(event) => {
+                        if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) syncCommand();
+                    }}
+                    onMouseDown={(event) => {
+                        if (disabled || !showPlaceholder) return;
+                        if (document.activeElement === editorRef.current) return;
+                        // Empty editors often fail to show a caret on first click in WebKit.
                         event.preventDefault();
-                        requestAnimationFrame(syncFromEditor);
-                        return;
-                    }
-                    if (isPlainEnterKey(event)) {
-                        event.preventDefault();
-                        onSubmit();
-                        return;
-                    }
-                    requestAnimationFrame(syncCommand);
-                }}
-                onKeyUp={(event) => {
-                    if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) syncCommand();
-                }}
-                onClick={syncCommand}
-                onMouseOver={showReferencePreview}
-                onMouseLeave={() => setReferenceHover(null)}
-                onBlur={(event) => {
-                    if (event.relatedTarget instanceof HTMLElement && event.relatedTarget.closest("[data-agent-command-menu]")) return;
-                    window.setTimeout(closeCommand, 120);
-                }}
-            />
+                        editorRef.current?.focus();
+                        placeCaretAtEnd(editorRef.current);
+                    }}
+                    onClick={syncCommand}
+                    onMouseOver={showReferencePreview}
+                    onMouseLeave={() => setReferenceHover(null)}
+                    onBlur={(event) => {
+                        if (event.relatedTarget instanceof HTMLElement && event.relatedTarget.closest("[data-agent-command-menu]")) return;
+                        window.setTimeout(closeCommand, 120);
+                    }}
+                />
+            </div>
             {referenceHover ? (
                 <Popover
                     open
@@ -327,6 +390,12 @@ function ReferencePreview({ reference }: { reference: CanvasResourceReference })
     if (reference.kind === "image" && reference.previewUrl) return <SmartImage src={reference.previewUrl} alt="" className="size-9 rounded-md object-cover" fallbackIconClassName="size-4" />;
     const Icon = canvasReferenceIcon(reference.kind);
     return <span className="grid size-9 shrink-0 place-items-center"><Icon className="size-4" /></span>;
+}
+
+function stripBuiltinSkillMarker(text: string, skillName?: string) {
+    if (!skillName) return text;
+    const escaped = skillName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return text.replace(new RegExp(`\\$${escaped}\\b`, "g"), "").replace(/[ \t]{2,}/g, " ");
 }
 
 function createSkillToken(skill: AgentSkillReference, theme: (typeof canvasThemes)[keyof typeof canvasThemes]) {
@@ -394,6 +463,68 @@ function placeCaretAfter(node: Node) {
     range.collapse(true);
     selection?.removeAllRanges();
     selection?.addRange(range);
+}
+
+function placeCaretAtEnd(editor: HTMLElement | null) {
+    if (!editor) return;
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+}
+
+function saveSelection(editor: HTMLElement): { start: number; end: number } | null {
+    const selection = window.getSelection();
+    if (!selection?.rangeCount || !editor.contains(selection.anchorNode)) return null;
+    const range = selection.getRangeAt(0);
+    const pre = range.cloneRange();
+    pre.selectNodeContents(editor);
+    pre.setEnd(range.startContainer, range.startOffset);
+    const start = pre.toString().length;
+    return { start, end: start + range.toString().length };
+}
+
+function restoreSelection(editor: HTMLElement, saved: { start: number; end: number } | null) {
+    if (!saved) {
+        placeCaretAtEnd(editor);
+        return;
+    }
+    const selection = window.getSelection();
+    if (!selection) return;
+    let startNode: Node | null = null;
+    let startOffset = 0;
+    let endNode: Node | null = null;
+    let endOffset = 0;
+    let index = 0;
+    const walk = (node: Node) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+            const length = node.textContent?.length || 0;
+            if (!startNode && index + length >= saved.start) {
+                startNode = node;
+                startOffset = saved.start - index;
+            }
+            if (!endNode && index + length >= saved.end) {
+                endNode = node;
+                endOffset = saved.end - index;
+            }
+            index += length;
+            return;
+        }
+        node.childNodes.forEach(walk);
+    };
+    walk(editor);
+    const range = document.createRange();
+    if (startNode) range.setStart(startNode, startOffset);
+    else {
+        range.selectNodeContents(editor);
+        range.collapse(false);
+    }
+    if (endNode) range.setEnd(endNode, endOffset);
+    else range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
 }
 
 function removeTextBeforeCaret(length: number) {

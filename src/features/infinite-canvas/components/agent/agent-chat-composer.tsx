@@ -1,6 +1,6 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type DragEvent, type ReactNode } from "react";
 import { Button, Dropdown, Tooltip } from "antd";
-import { ArrowUp, Check, ChevronUp, Cpu, Gauge, Hand, ImagePlus, LoaderCircle, RefreshCw, ShieldAlert, ShieldCheck, ShieldOff, Square, X } from "lucide-react";
+import { ArrowUp, Check, ChevronUp, Cpu, FileText, Gauge, Hand, LoaderCircle, Paperclip, RefreshCw, ShieldAlert, ShieldCheck, ShieldOff, Square, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@canvas/components/ui/select";
@@ -9,6 +9,10 @@ import { useAgentStore, type AgentModel, type AgentPermissionMode, type AgentRea
 import type { AgentChatAttachment } from "./agent-chat-message";
 import { AgentChatPromptInput } from "./agent-chat-prompt-input";
 import { SmartImage } from "@/components/smart-image";
+
+function isImageAttachment(item: AgentChatAttachment) {
+    return (item.type || "").startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(item.url || item.name || "");
+}
 
 export function AgentChatComposer({
     prompt,
@@ -59,18 +63,74 @@ export function AgentChatComposer({
 }) {
     const { t } = useTranslation();
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [dragging, setDragging] = useState(false);
+    const dragDepthRef = useRef(0);
     const canvasReferences = useAgentStore((state) => state.canvasReferences);
     const canSubmit = !disabled && !sending && Boolean(prompt.trim() || attachments.length || canvasReferences.length);
+    const canDrop = Boolean(onAddFiles) && !disabled && !sending;
+
+    const onDragEnter = (event: DragEvent<HTMLDivElement>) => {
+        if (!canDrop || !event.dataTransfer.types.includes("Files")) return;
+        event.preventDefault();
+        dragDepthRef.current += 1;
+        setDragging(true);
+    };
+    const onDragOver = (event: DragEvent<HTMLDivElement>) => {
+        if (!canDrop || !event.dataTransfer.types.includes("Files")) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+    };
+    const onDragLeave = (event: DragEvent<HTMLDivElement>) => {
+        if (!canDrop) return;
+        event.preventDefault();
+        dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+        if (dragDepthRef.current === 0) setDragging(false);
+    };
+    const onDrop = (event: DragEvent<HTMLDivElement>) => {
+        if (!canDrop) return;
+        event.preventDefault();
+        dragDepthRef.current = 0;
+        setDragging(false);
+        const files = event.dataTransfer.files;
+        if (files?.length) void onAddFiles?.(files);
+    };
+
     return (
-        <div className="px-2 pb-2 pt-2" onWheelCapture={(event) => event.stopPropagation()}>
-            <div className="rounded-[24px] border px-3 pb-3 pt-3 shadow-lg" style={{ background: theme.toolbar.panel, borderColor: theme.node.stroke }}>
+        <div className="px-2 pb-2 pt-1.5" onWheelCapture={(event) => event.stopPropagation()}>
+            <div
+                className="relative rounded-2xl border px-2.5 pb-2 pt-2 shadow-sm transition-[box-shadow,border-color] focus-within:shadow-md"
+                style={{
+                    background: theme.toolbar.panel,
+                    borderColor: dragging ? theme.node.text : theme.node.stroke,
+                    boxShadow: dragging ? `0 0 0 1px ${theme.node.text}` : undefined,
+                }}
+                onDragEnter={onDragEnter}
+                onDragOver={onDragOver}
+                onDragLeave={onDragLeave}
+                onDrop={onDrop}
+            >
+                {dragging ? (
+                    <div
+                        className="pointer-events-none absolute inset-0 z-10 grid place-items-center rounded-2xl text-xs font-medium"
+                        style={{ background: "rgba(28,25,23,.06)", color: theme.node.text }}
+                    >
+                        {t("agent.composer.dropAttachments")}
+                    </div>
+                ) : null}
                 {attachments.length ? (
                     <div className="thin-scrollbar mb-2 flex gap-2 overflow-x-auto pb-1">
                         {attachments.map((item) => (
-                            <div key={item.id} className="group relative size-14 shrink-0 overflow-hidden rounded-xl border" style={{ borderColor: theme.node.stroke }} title={item.name}>
-                                <SmartImage src={item.url} alt={item.name} className="size-full object-cover" fallbackClassName="size-full" fallbackIconClassName="size-4" />
+                            <div key={item.id} className="group relative size-12 shrink-0 overflow-hidden rounded-lg border" style={{ borderColor: theme.node.stroke }} title={item.name}>
+                                {isImageAttachment(item) ? (
+                                    <SmartImage src={item.url} alt={item.name} className="size-full object-cover" fallbackClassName="size-full" fallbackIconClassName="size-4" />
+                                ) : (
+                                    <div className="flex size-full flex-col items-center justify-center gap-0.5 px-1 text-center" style={{ color: theme.node.muted, background: theme.toolbar.activeBg }}>
+                                        <FileText className="size-4" />
+                                        <span className="w-full truncate text-[9px] leading-3">{item.name}</span>
+                                    </div>
+                                )}
                                 {onRemoveAttachment ? (
-                                    <button type="button" className="absolute right-1 top-1 grid size-5 place-items-center rounded-full border opacity-0 shadow-sm transition group-hover:opacity-100" style={{ background: theme.toolbar.panel, borderColor: theme.node.stroke, color: theme.node.text }} onClick={() => onRemoveAttachment(item.id)} aria-label={t("agent.composer.removeImage")}>
+                                    <button type="button" className="absolute right-0.5 top-0.5 grid size-5 place-items-center rounded-full border opacity-0 shadow-sm transition group-hover:opacity-100" style={{ background: theme.toolbar.panel, borderColor: theme.node.stroke, color: theme.node.text }} onClick={() => onRemoveAttachment(item.id)} aria-label={t("agent.composer.removeAttachment")}>
                                         <X className="size-3" />
                                     </button>
                                 ) : null}
@@ -79,16 +139,16 @@ export function AgentChatComposer({
                     </div>
                 ) : null}
                 <AgentChatPromptInput value={prompt} disabled={disabled || sending} placeholder={placeholder} theme={theme} onChange={onPromptChange} onSubmit={() => { if (canSubmit) void onSubmit(); }} onAddFiles={onAddFiles} />
-                <div className="@container mt-2 flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-1">
+                <div className="@container mt-1.5 flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-0.5">
                         {onAddFiles ? (
                             <>
-                                <input ref={fileInputRef} hidden type="file" accept="image/*" multiple onChange={(event) => {
+                                <input ref={fileInputRef} hidden type="file" accept="image/*,video/*,audio/*,.pdf,.txt,.md,.json,.csv,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip" multiple onChange={(event) => {
                                     void onAddFiles(event.target.files);
                                     event.target.value = "";
                                 }} />
-                                <Tooltip title={t("agent.composer.uploadImage")}>
-                                    <Button type="text" shape="circle" className="!h-9 !w-9 !min-w-9" disabled={disabled || sending} style={{ color: theme.node.muted }} icon={<ImagePlus className="size-4" />} onClick={() => fileInputRef.current?.click()} aria-label={t("agent.composer.uploadImage")} />
+                                <Tooltip title={t("agent.composer.uploadAttachment")}>
+                                    <Button type="text" shape="circle" className="!h-8 !w-8 !min-w-8" disabled={disabled || sending} style={{ color: theme.node.muted }} icon={<Paperclip className="size-3.5" />} onClick={() => fileInputRef.current?.click()} aria-label={t("agent.composer.uploadAttachment")} />
                                 </Tooltip>
                             </>
                         ) : null}
@@ -103,16 +163,20 @@ export function AgentChatComposer({
                         ) : null}
                         {left}
                     </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
+                    <div className="flex shrink-0 items-center">
                         {sending && onStop ? (
-                            <Tooltip title={t("agent.composer.stop")} placement="top"><Button danger shape="circle" className="!h-10 !w-10 !min-w-10" icon={<Square className="size-4" />} onClick={() => void onStop()} aria-label={t("agent.composer.stop")} /></Tooltip>
+                            <Tooltip title={t("agent.composer.stop")} placement="top">
+                                <Button danger shape="circle" className="!h-8 !w-8 !min-w-8" icon={<Square className="size-3.5" />} onClick={() => void onStop()} aria-label={t("agent.composer.stop")} />
+                            </Tooltip>
                         ) : (
-                            <Tooltip title={t("agent.composer.send")} placement="top"><Button type="primary" shape="circle" className="!h-10 !w-10 !min-w-10" disabled={!canSubmit} icon={sending ? <LoaderCircle className="size-4 animate-spin" /> : <ArrowUp className="size-4" />} onClick={() => void onSubmit()} aria-label={t("agent.composer.send")} /></Tooltip>
+                            <Tooltip title={t("agent.composer.send")} placement="top">
+                                <Button type="primary" shape="circle" className="!h-8 !w-8 !min-w-8" disabled={!canSubmit} icon={sending ? <LoaderCircle className="size-3.5 animate-spin" /> : <ArrowUp className="size-3.5" />} onClick={() => void onSubmit()} aria-label={t("agent.composer.send")} />
+                            </Tooltip>
                         )}
                     </div>
                 </div>
                 {hint ? (
-                    <div className="mt-2 px-1 text-[11px] leading-4" style={{ color: theme.node.muted }}>
+                    <div className="mt-1.5 px-1 text-[11px] leading-4" style={{ color: theme.node.muted }}>
                         {hint}
                     </div>
                 ) : null}
@@ -132,7 +196,7 @@ function AgentModelOnlyControl({ models, model, onModelChange }: { models: Agent
                 <Select value={model} open={modelOpen} onOpenChange={setModelOpen} onValueChange={onModelChange}>
                     <SelectTrigger
                         hideChevron
-                        className="h-9 max-w-[12rem] min-w-0 justify-start gap-1.5 rounded-full border-0 bg-transparent px-2.5 text-xs font-medium shadow-none hover:bg-black/5 focus:ring-0 dark:bg-transparent dark:hover:bg-white/10"
+                        className="h-8 max-w-[11rem] min-w-0 justify-start gap-1.5 rounded-lg border-0 bg-transparent px-2 text-xs font-medium shadow-none hover:bg-black/5 focus:ring-0 dark:bg-transparent dark:hover:bg-white/10"
                         aria-label={t("agent.composer.selectModel", { model: label })}
                     >
                         <Cpu className="size-3.5 shrink-0 opacity-70" />
@@ -159,13 +223,13 @@ function AgentModelControls({ models, model, reasoningEffort, onModelChange, onR
     const [modelOpen, setModelOpen] = useState(false);
     const [reasoningOpen, setReasoningOpen] = useState(false);
     return (
-        <div className="flex min-w-0 items-center gap-1">
+        <div className="flex min-w-0 items-center gap-0.5">
             <Tooltip title={t("agent.composer.model", { model: current.displayName || current.model })} placement="top" open={modelOpen ? false : undefined}>
                 <span className="inline-flex min-w-0 shrink">
                     <Select value={model} open={modelOpen} onOpenChange={setModelOpen} onValueChange={onModelChange}>
                         <SelectTrigger
                             hideChevron
-                            className="h-9 max-w-[12rem] min-w-0 justify-start gap-1.5 rounded-full border-0 bg-transparent px-2.5 text-xs font-medium shadow-none hover:bg-black/5 focus:ring-0 dark:bg-transparent dark:hover:bg-white/10"
+                            className="h-8 max-w-[11rem] min-w-0 justify-start gap-1.5 rounded-lg border-0 bg-transparent px-2 text-xs font-medium shadow-none hover:bg-black/5 focus:ring-0 dark:bg-transparent dark:hover:bg-white/10"
                             aria-label={t("agent.composer.selectModel", { model: current.displayName || current.model })}
                         >
                             <Cpu className="size-3.5 shrink-0 opacity-70" />
@@ -181,7 +245,7 @@ function AgentModelControls({ models, model, reasoningEffort, onModelChange, onR
             <Tooltip title={t("agent.composer.reasoning", { effort: effortLabel(reasoningEffort) })} placement="top" open={reasoningOpen ? false : undefined}>
                 <span className="inline-flex shrink-0">
                     <Select value={reasoningEffort} open={reasoningOpen} onOpenChange={setReasoningOpen} onValueChange={(value) => onReasoningEffortChange(value as AgentReasoningEffort)}>
-                        <SelectTrigger hideChevron className="h-9 w-9 min-w-9 justify-center gap-0 rounded-full border-0 bg-transparent px-0 text-xs font-medium shadow-none hover:bg-black/5 focus:ring-0 @min-[660px]:w-auto @min-[660px]:min-w-[4.5rem] @min-[660px]:justify-start @min-[660px]:gap-1.5 @min-[660px]:px-2.5 dark:bg-transparent dark:hover:bg-white/10" aria-label={t("agent.composer.selectReasoning", { effort: effortLabel(reasoningEffort) })}>
+                        <SelectTrigger hideChevron className="h-8 w-8 min-w-8 justify-center gap-0 rounded-lg border-0 bg-transparent px-0 text-xs font-medium shadow-none hover:bg-black/5 focus:ring-0 @min-[660px]:w-auto @min-[660px]:min-w-[4.5rem] @min-[660px]:justify-start @min-[660px]:gap-1.5 @min-[660px]:px-2 dark:bg-transparent dark:hover:bg-white/10" aria-label={t("agent.composer.selectReasoning", { effort: effortLabel(reasoningEffort) })}>
                             <Gauge className="size-3.5 opacity-70" />
                             <span className="hidden @min-[660px]:inline">{effortLabel(reasoningEffort)}</span>
                             <ChevronUp className="hidden size-3 opacity-50 @min-[660px]:block" />
@@ -221,7 +285,7 @@ function PermissionModeMenu({ permissionMode, theme, onChange }: { permissionMod
                         })),
                     }}
                 >
-                    <button type="button" className="flex h-9 w-9 min-w-9 shrink-0 items-center justify-center gap-0 rounded-full px-0 text-xs font-medium transition hover:bg-black/5 @min-[660px]:h-9 @min-[660px]:w-auto @min-[660px]:min-w-0 @min-[660px]:justify-start @min-[660px]:gap-1.5 @min-[660px]:px-2.5 dark:hover:bg-white/10" style={{ color: permissionMode === "full" ? "#ea580c" : theme.node.text }} aria-label={t("agent.composer.selectPermission", { mode: current.title })}>
+                    <button type="button" className="flex h-8 w-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-lg px-0 text-xs font-medium transition hover:bg-black/5 @min-[660px]:h-8 @min-[660px]:w-auto @min-[660px]:min-w-0 @min-[660px]:justify-start @min-[660px]:gap-1.5 @min-[660px]:px-2 dark:hover:bg-white/10" style={{ color: permissionMode === "full" ? "#ea580c" : theme.node.text }} aria-label={t("agent.composer.selectPermission", { mode: current.title })}>
                         {current.icon}
                         <span className="hidden @min-[660px]:inline">{current.shortTitle}</span>
                         <ChevronUp className="hidden size-3 opacity-50 @min-[660px]:block" />
@@ -259,7 +323,7 @@ function ToolConfirmationMenu({ confirmTools, theme, onChange }: { confirmTools:
                         ],
                     }}
                 >
-                    <button type="button" className="flex h-9 w-9 min-w-9 shrink-0 items-center justify-center gap-0 rounded-full px-0 text-xs font-medium transition hover:bg-black/5 @min-[660px]:w-auto @min-[660px]:min-w-0 @min-[660px]:justify-start @min-[660px]:gap-1.5 @min-[660px]:px-2.5 dark:hover:bg-white/10" style={{ color: theme.node.text }} aria-label={t("agent.composer.tools.select", { mode })}>
+                    <button type="button" className="flex h-8 w-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-lg px-0 text-xs font-medium transition hover:bg-black/5 @min-[660px]:w-auto @min-[660px]:min-w-0 @min-[660px]:justify-start @min-[660px]:gap-1.5 @min-[660px]:px-2 dark:hover:bg-white/10" style={{ color: theme.node.text }} aria-label={t("agent.composer.tools.select", { mode })}>
                         {confirmTools ? <Hand className="size-3.5" /> : <RefreshCw className="size-3.5" />}
                         <span className="hidden @min-[660px]:inline">{mode}</span>
                         <ChevronUp className="hidden size-3 opacity-50 @min-[660px]:block" />
