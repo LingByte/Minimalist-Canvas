@@ -1,19 +1,21 @@
-import { useEffect, useRef } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { App, Button } from "antd";
-import { Download, FileUp, Plus, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { App, Button, Input, Modal } from "antd";
+import { AudioLines, FileUp, Image as ImageIcon, Layers3, Plus, Video } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { readZip } from "@canvas/lib/zip";
 import { setMediaBlob } from "@canvas/services/file-storage";
 import { setImageBlob } from "@canvas/services/image-storage";
 import { CanvasDeleteProjectsDialog } from "@canvas/components/canvas/canvas-delete-projects-dialog";
-import { CanvasEmptyPreview } from "@canvas/components/canvas/canvas-project-preview";
 import { CanvasProjectCard } from "@canvas/components/canvas/canvas-project-card";
+import { CanvasRefreshShell } from "@canvas/components/canvas/canvas-refresh-shell";
 import type { CanvasExportFile } from "@canvas/types/canvas-export";
 import { useCanvasStore } from "@canvas/stores/canvas/use-canvas-store";
 import { useCanvasUiStore } from "@canvas/stores/canvas/use-canvas-ui-store";
 import { exportCanvasProjects } from "@canvas/lib/canvas/canvas-export";
+
+import "./canvas-home.css";
 
 export default function CanvasPage() {
     const { message } = App.useApp();
@@ -23,19 +25,55 @@ export default function CanvasPage() {
     const inputRef = useRef<HTMLInputElement>(null);
     const autoOpenRef = useRef(false);
     const hydrated = useCanvasStore((state) => state.hydrated);
+    const cloudSynced = useCanvasStore((state) => state.cloudSynced);
+    const projectsReady = hydrated && cloudSynced;
     const projects = useCanvasStore((state) => state.projects);
     const createProject = useCanvasStore((state) => state.createProject);
     const importProject = useCanvasStore((state) => state.importProject);
     const selectedIds = useCanvasUiStore((state) => state.selectedProjectIds);
     const setDeleteIds = useCanvasUiStore((state) => state.setDeleteProjectIds);
-    const clearSelected = useCanvasUiStore((state) => state.clearSelectedProjectIds);
+    const [createOpen, setCreateOpen] = useState(false);
+    const [createTitle, setCreateTitle] = useState("");
+    const [creating, setCreating] = useState(false);
+
     const mode = searchParams.get("mode");
     const agentMode = mode === "new" || mode === "recent" || mode === "choose";
     const agentQuery = agentMode ? `?${searchParams.toString()}` : "";
     const enterProject = (id: string) => {
         navigate(`/canvas/${id}${agentQuery}`);
     };
-    const createAndEnter = () => enterProject(createProject(t("canvas.defaultTitle", { count: projects.length + 1 })));
+    const defaultTitle = () => t("canvas.defaultTitle", { count: projects.length + 1 });
+    const openCreateDialog = () => {
+        setCreateTitle(defaultTitle());
+        setCreateOpen(true);
+    };
+    const confirmCreate = () => {
+        const title = createTitle.trim() || defaultTitle();
+        setCreating(true);
+        try {
+            const id = createProject(title);
+            setCreateOpen(false);
+            enterProject(id);
+        } finally {
+            setCreating(false);
+        }
+    };
+
+    const sortedProjects = useMemo(
+        () =>
+            [...projects].sort(
+                (a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime(),
+            ),
+        [projects],
+    );
+
+    const capabilityItems = [
+        { id: "canvas", label: t("canvas.homeCapabilities.canvas"), icon: Layers3, action: () => openCreateDialog() },
+        { id: "video", label: t("canvas.homeCapabilities.video"), icon: Video, to: "/video" },
+        { id: "image", label: t("canvas.homeCapabilities.image"), icon: ImageIcon, to: "/image" },
+        { id: "audio", label: t("canvas.homeCapabilities.audio"), icon: AudioLines, action: () => openCreateDialog() },
+    ] as const;
+
     const importCanvas = async (file?: File) => {
         if (!file) return;
         try {
@@ -63,117 +101,142 @@ export default function CanvasPage() {
     };
 
     useEffect(() => {
-        if (!hydrated || autoOpenRef.current || (mode !== "new" && mode !== "recent")) return;
+        if (!projectsReady || autoOpenRef.current || (mode !== "new" && mode !== "recent")) return;
         autoOpenRef.current = true;
-        enterProject(mode === "new" ? createProject(t("canvas.defaultTitle", { count: projects.length + 1 })) : projects[0]?.id || createProject(t("canvas.defaultTitle", { count: projects.length + 1 })));
-    }, [createProject, hydrated, mode, projects, t]);
+        enterProject(
+            mode === "new"
+                ? createProject(t("canvas.defaultTitle", { count: projects.length + 1 }))
+                : projects[0]?.id || createProject(t("canvas.defaultTitle", { count: projects.length + 1 })),
+        );
+    }, [createProject, mode, projects, projectsReady, t]);
 
-    if (hydrated && (mode === "new" || mode === "recent")) {
-        return <main className="flex h-full items-center justify-center bg-background text-sm text-stone-500">{t("canvas.opening")}</main>;
+    if (!projectsReady) {
+        return <CanvasRefreshShell title={t("canvas.loading")} description={t("canvas.projectLoadingHint")} />;
     }
 
-    const selectedProjects = projects.filter((project) => selectedIds.includes(project.id));
+    if (mode === "new" || mode === "recent") {
+        return <main className="text-muted-foreground flex h-full items-center justify-center bg-background text-sm">{t("canvas.opening")}</main>;
+    }
 
     return (
-        <main className="relative h-full overflow-auto text-stone-950 dark:text-stone-100">
-            <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0 -z-10"
-                style={{
-                    background:
-                        "radial-gradient(ellipse 80% 45% at 50% -5%, rgba(120,113,108,0.18), transparent 55%), radial-gradient(ellipse 45% 35% at 90% 20%, rgba(68,64,60,0.1), transparent 50%), linear-gradient(180deg, #f7f5f0 0%, #f4f2ed 42%, #f7f5f0 100%)",
-                }}
-            />
-            <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0 -z-10 opacity-[0.35] dark:opacity-[0.22]"
-                style={{
-                    backgroundImage: "radial-gradient(rgba(28,25,23,0.18) 1px, transparent 1px)",
-                    backgroundSize: "22px 22px",
-                    maskImage: "radial-gradient(ellipse 75% 55% at 50% 12%, black, transparent)",
-                }}
-            />
-            <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0 -z-10 hidden dark:block"
-                style={{
-                    background:
-                        "radial-gradient(ellipse 80% 45% at 50% -5%, rgba(168,162,158,0.14), transparent 55%), linear-gradient(180deg, #0c0a09 0%, #181715 48%, #0c0a09 100%)",
-                }}
-            />
+        <main className="canvas-home" aria-label={t("canvas.title")}>
+            <section className="canvas-home-hero" aria-label={t("canvas.create")}>
+                <span className="canvas-home-dot-base" aria-hidden />
+                <span className="canvas-home-dot-flow" aria-hidden />
+                <span className="canvas-home-dot-flow canvas-home-dot-flow-delay" aria-hidden />
+                <button type="button" className="canvas-home-create" onClick={openCreateDialog}>
+                    <span className="canvas-home-create-icon">
+                        <Plus />
+                    </span>
+                    <span className="canvas-home-create-title">{t("canvas.homeCreate")}</span>
+                </button>
+            </section>
 
-            <div className="mx-auto flex w-full max-w-6xl flex-col px-5 pt-7 pb-12 md:px-6 md:pt-9">
-                <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                    <div className="min-w-0 max-w-xl">
-                        <p className="text-[10px] font-semibold tracking-[0.2em] text-stone-500 uppercase dark:text-stone-400">{t("canvas.library")}</p>
-                        <h1 className="mt-1.5 text-2xl font-semibold tracking-tight text-stone-950 sm:text-3xl dark:text-stone-50">{t("canvas.title")}</h1>
-                        <p className="mt-1.5 text-sm leading-5 text-stone-500 dark:text-stone-400">{t("canvas.libraryDescription")}</p>
-                    </div>
-                    <div className="flex shrink-0 flex-wrap items-center gap-2">
-                        <Button disabled={!hydrated} type="primary" className="!h-9 !rounded-full !px-4" icon={<Plus className="size-3.5" />} onClick={createAndEnter}>
-                            {t("canvas.create")}
-                        </Button>
-                        <Button disabled={!hydrated} className="!h-9 !rounded-full !px-3.5" icon={<FileUp className="size-3.5" />} onClick={() => inputRef.current?.click()}>
-                            {t("canvas.import")}
-                        </Button>
+            <nav className="canvas-home-capabilities" aria-label={t("canvas.homeCapabilitiesLabel")}>
+                {capabilityItems.map((item) => {
+                    const Icon = item.icon;
+                    if ("to" in item && item.to) {
+                        return (
+                            <Link key={item.id} to={item.to} className="canvas-home-capability">
+                                <span className="canvas-home-capability-icon">
+                                    <Icon />
+                                </span>
+                                <strong>{item.label}</strong>
+                            </Link>
+                        );
+                    }
+                    return (
+                        <button key={item.id} type="button" className="canvas-home-capability" onClick={item.action}>
+                            <span className="canvas-home-capability-icon">
+                                <Icon />
+                            </span>
+                            <strong>{item.label}</strong>
+                        </button>
+                    );
+                })}
+            </nav>
+
+            <section className="canvas-home-section">
+                <header className="canvas-home-section-heading">
+                    <h2>
+                        {t("canvas.library")}
                         {projects.length ? (
-                            <Button disabled={!hydrated} type="text" size="small" className="!text-stone-500" onClick={() => setDeleteIds(projects.map((project) => project.id))}>
+                            <span className="canvas-home-count">{t("canvas.libraryCount", { count: projects.length })}</span>
+                        ) : null}
+                    </h2>
+                    <div className="canvas-home-section-actions">
+                        {selectedIds.length ? (
+                            <>
+                                <Button
+                                    size="small"
+                                    onClick={() => {
+                                        void exportCanvasProjects(
+                                            projects.filter((project) => selectedIds.includes(project.id)),
+                                            `${t("canvas.title")}-${selectedIds.length}`,
+                                        ).catch(() => {
+                                            message.error(t("canvas.sidePanel.exportFailed"));
+                                        });
+                                    }}
+                                >
+                                    {t("canvas.exportSelected")}
+                                </Button>
+                                <Button size="small" onClick={() => setDeleteIds(selectedIds)}>
+                                    {t("canvas.deleteSelected")}
+                                </Button>
+                            </>
+                        ) : null}
+                        {projects.length ? (
+                            <Button size="small" onClick={() => setDeleteIds(projects.map((project) => project.id))}>
                                 {t("canvas.deleteAll")}
                             </Button>
                         ) : null}
+                        <Button size="small" icon={<FileUp className="size-3.5" />} onClick={() => inputRef.current?.click()}>
+                            {t("canvas.import")}
+                        </Button>
                     </div>
                 </header>
 
-                {selectedIds.length ? (
-                    <div className="sticky top-2 z-20 mt-5 flex items-center justify-between gap-3 rounded-xl border border-stone-300/80 bg-white/85 px-3 py-2 shadow-sm backdrop-blur transition duration-200 dark:border-stone-700 dark:bg-stone-950/85">
-                        <p className="text-sm font-medium text-stone-800 dark:text-stone-100">{t("canvas.selectedCount", { count: selectedIds.length })}</p>
-                        <div className="flex flex-wrap items-center gap-1.5">
-                            <Button
-                                size="small"
-                                disabled={!hydrated}
-                                icon={<Download className="size-3.5" />}
-                                onClick={() => void exportCanvasProjects(selectedProjects, `${t("canvas.title")}-${selectedIds.length}`)}
-                            >
-                                {t("canvas.exportSelected")}
-                            </Button>
-                            <Button size="small" disabled={!hydrated} danger icon={<Trash2 className="size-3.5" />} onClick={() => setDeleteIds(selectedIds)}>
-                                {t("canvas.deleteSelected")}
-                            </Button>
-                            <Button type="text" size="small" icon={<X className="size-3.5" />} onClick={clearSelected} aria-label={t("canvas.clearSelection")}>
-                                {t("canvas.clearSelection")}
-                            </Button>
-                        </div>
+                {sortedProjects.length ? (
+                    <div className="canvas-home-card-grid">
+                        {sortedProjects.map((project) => (
+                            <CanvasProjectCard key={project.id} project={project} />
+                        ))}
                     </div>
-                ) : null}
-
-                <section className="mt-6">
-                    <div className="mb-3 flex items-center gap-2">
-                        <h2 className="text-sm font-semibold tracking-tight text-stone-700 dark:text-stone-200">{t("canvas.localSection")}</h2>
-                        <span className="text-xs text-stone-400">{projects.length}</span>
-                    </div>
-                    {!hydrated ? (
-                        <div className="flex min-h-[200px] items-center justify-center text-sm text-stone-500">{t("canvas.loading")}</div>
-                    ) : projects.length ? (
-                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                            {projects.map((project) => (
-                                <CanvasProjectCard key={project.id} project={project} />
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="mx-auto flex max-w-sm flex-col items-center py-8 text-center">
-                            <CanvasEmptyPreview />
-                            <h2 className="mt-5 text-lg font-semibold tracking-tight">{t("canvas.empty")}</h2>
-                            <p className="mt-1.5 text-sm leading-5 text-stone-500">{t("canvas.emptyDescription")}</p>
-                            <Button type="primary" className="mt-5 !h-9 !rounded-full !px-4" icon={<Plus className="size-3.5" />} onClick={createAndEnter}>
-                                {t("canvas.create")}
-                            </Button>
-                        </div>
-                    )}
-                </section>
-            </div>
+                ) : (
+                    <button type="button" className="canvas-home-empty" onClick={openCreateDialog}>
+                        <Plus className="size-5" />
+                        <span>
+                            <strong>{t("canvas.emptyFirstTitle")}</strong>
+                            <small>{t("canvas.emptyFirstHint")}</small>
+                        </span>
+                    </button>
+                )}
+            </section>
 
             <input ref={inputRef} type="file" accept="application/zip,.zip" className="hidden" onChange={(event) => void importCanvas(event.target.files?.[0])} />
             <CanvasDeleteProjectsDialog />
+            <Modal
+                open={createOpen}
+                title={t("canvas.create")}
+                okText={t("canvas.create")}
+                cancelText={t("canvas.cancel")}
+                confirmLoading={creating}
+                onOk={confirmCreate}
+                onCancel={() => setCreateOpen(false)}
+                destroyOnHidden
+            >
+                <div className="space-y-2 py-1">
+                    <div className="text-muted-foreground text-sm">{t("canvas.createTitleHint")}</div>
+                    <Input
+                        autoFocus
+                        value={createTitle}
+                        maxLength={80}
+                        placeholder={defaultTitle()}
+                        onChange={(event) => setCreateTitle(event.target.value)}
+                        onPressEnter={() => confirmCreate()}
+                    />
+                </div>
+            </Modal>
         </main>
     );
 }

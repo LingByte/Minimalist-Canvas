@@ -7,9 +7,9 @@ import { toIntlLocale } from "@/i18n/languages";
 
 import { CanvasProjectPreview } from "@canvas/components/canvas/canvas-project-preview";
 import { cn } from "@canvas/lib/utils";
+import { exportCanvasProjects } from "@canvas/lib/canvas/canvas-export";
 import { useCanvasStore, type CanvasProject } from "@canvas/stores/canvas/use-canvas-store";
 import { useCanvasUiStore } from "@canvas/stores/canvas/use-canvas-ui-store";
-import { exportCanvasProjects } from "@canvas/lib/canvas/canvas-export";
 
 export function CanvasProjectCard({ project }: { project: CanvasProject }) {
     const { i18n, t } = useTranslation();
@@ -31,34 +31,25 @@ export function CanvasProjectCard({ project }: { project: CanvasProject }) {
         renameProject(project.id, editingTitle);
         stopEditing();
     };
-    const formatDate = (value: string) =>
-        new Date(value).toLocaleString(toIntlLocale(i18n.resolvedLanguage), {
-            month: "2-digit",
-            day: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
-        });
 
     return (
         <article
             className={cn(
-                "group relative flex cursor-pointer flex-col overflow-hidden rounded-xl border bg-white/55 shadow-sm backdrop-blur-sm transition duration-300 ease-out",
-                "hover:-translate-y-0.5 hover:shadow-md dark:bg-stone-900/55",
-                selected
-                    ? "border-stone-900/40 ring-1 ring-stone-900/15 dark:border-stone-100/40 dark:ring-stone-100/15"
-                    : "border-stone-200/80 dark:border-stone-800",
+                "group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border bg-card transition duration-200",
+                "hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_18px_50px_rgba(15,23,42,0.10)]",
+                selected ? "border-primary ring-1 ring-primary/20" : "border-border/80",
             )}
             onClick={() => !editing && open()}
         >
-            <div className="relative p-2 pb-0">
+            <div className="relative p-2.5 pb-0">
                 <CanvasProjectPreview project={project} />
                 <label
                     className={cn(
-                        "absolute left-3.5 top-3.5 z-10 inline-flex size-6 items-center justify-center rounded-full border bg-white/90 shadow-sm transition dark:bg-stone-950/90",
+                        "absolute left-4 top-4 z-10 inline-flex size-6 items-center justify-center rounded-md border bg-white/90 shadow-sm transition dark:bg-stone-950/90",
                         selected || "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
                         selected
-                            ? "border-stone-900 text-stone-950 dark:border-stone-100 dark:text-stone-50"
-                            : "border-stone-300 text-stone-500 dark:border-stone-600",
+                            ? "border-primary text-primary"
+                            : "border-border text-muted-foreground",
                     )}
                     onClick={(event) => event.stopPropagation()}
                 >
@@ -66,17 +57,16 @@ export function CanvasProjectCard({ project }: { project: CanvasProject }) {
                         type="checkbox"
                         checked={selected}
                         onChange={(event) => toggleSelected(project.id, event.target.checked)}
-                        className="size-3 accent-stone-950 dark:accent-stone-100"
+                        className="accent-primary size-3.5"
                         aria-label={t("canvas.project.select", { name: project.title })}
                     />
                 </label>
             </div>
 
-            <div className="flex flex-1 flex-col gap-2 px-3 py-2.5">
+            <div className="flex flex-1 flex-col gap-4 p-4">
                 <div className="min-w-0">
                     {editing ? (
                         <Input
-                            size="small"
                             className="min-w-0"
                             value={editingTitle}
                             onClick={(event) => event.stopPropagation()}
@@ -87,14 +77,14 @@ export function CanvasProjectCard({ project }: { project: CanvasProject }) {
                     ) : (
                         <button
                             type="button"
-                            className="min-w-0 cursor-pointer text-left"
+                            className="min-w-0 w-full cursor-pointer text-left"
                             onClick={(event) => {
                                 event.stopPropagation();
                                 open();
                             }}
                         >
-                            <h2 className="truncate text-sm font-semibold tracking-tight text-stone-950 dark:text-stone-50">{project.title}</h2>
-                            <p className="mt-0.5 text-xs text-stone-500 dark:text-stone-400">
+                            <h2 className="text-foreground truncate text-[15px] font-semibold tracking-tight">{project.title}</h2>
+                            <p className="text-muted-foreground mt-1 text-xs">
                                 {t("canvas.project.stats", { nodes: project.nodes.length, connections: project.connections.length })}
                             </p>
                         </button>
@@ -102,16 +92,18 @@ export function CanvasProjectCard({ project }: { project: CanvasProject }) {
                 </div>
 
                 <div className="mt-auto flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                        <p className="truncate text-[11px] text-stone-500">
-                            {t("canvas.project.updated", { date: formatDate(project.updatedAt) })}
-                        </p>
-                    </div>
+                    <p className="text-muted-foreground text-[11px] tabular-nums">
+                        {t("canvas.project.updated", {
+                            date: new Date(project.updatedAt).toLocaleString(toIntlLocale(i18n.resolvedLanguage), {
+                                month: "2-digit",
+                                day: "2-digit",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                            }),
+                        })}
+                    </p>
                     <div
-                        className={cn(
-                            "flex shrink-0 items-center gap-0 transition",
-                            editing ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
-                        )}
+                        className="flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100"
                         onClick={(event) => event.stopPropagation()}
                     >
                         {editing ? (

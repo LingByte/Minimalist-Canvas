@@ -1,33 +1,59 @@
-export function CanvasRefreshShell() {
+import { useTranslation } from "react-i18next";
+
+import "./canvas-refresh-shell.css";
+
+type CanvasRefreshShellProps = {
+    title?: string;
+    description?: string;
+};
+
+/** Full-viewport load shell while canvas projects hydrate. */
+export function CanvasRefreshShell({ title, description }: CanvasRefreshShellProps = {}) {
+    const { t } = useTranslation();
+    const heading = title ?? t("canvas.projectLoading");
+    const hint = description ?? t("canvas.projectLoadingHint");
+
     return (
-        <main className="relative h-full min-h-0 overflow-hidden bg-background text-foreground">
-            <div
-                className="absolute inset-0 opacity-60"
-                style={{
-                    backgroundImage: "radial-gradient(circle, var(--border) 1px, transparent 1px)",
-                    backgroundSize: "28px 28px",
-                }}
-            />
+        <main className="canvas-load">
+            <div className="canvas-load-aura" aria-hidden="true" />
+            <div className="canvas-load-grid" aria-hidden="true" />
 
-            <div className="absolute bottom-5 left-1/2 z-50 flex h-14 -translate-x-1/2 items-center gap-1 rounded-xl border px-2 shadow-lg backdrop-blur" style={{ background: "var(--background)", borderColor: "var(--border)" }} aria-hidden="true">
-                {Array.from({ length: 7 }).map((_, index) => (
-                    <div key={index} className="size-8 rounded-md bg-current opacity-10" />
-                ))}
+            <div className="canvas-load-stage canvas-load-stage--board" aria-hidden="true">
+                <div className="canvas-load-board">
+                    <svg className="canvas-load-wires" viewBox="0 0 760 220" preserveAspectRatio="none">
+                        <path className="canvas-load-wire" d="M150 100 C230 100 250 64 320 64" />
+                        <path className="canvas-load-wire canvas-load-wire--lag" d="M440 64 C510 64 530 124 610 124" />
+                        <circle className="canvas-load-packet" r="3.5" />
+                        <circle className="canvas-load-packet canvas-load-packet--lag" r="3.5" />
+                    </svg>
+                    {(["node-0", "node-1", "node-2"] as const).map((name) => (
+                        <div key={name} className={`canvas-load-node ${name}`}>
+                            <div className="canvas-load-node-sheen" />
+                            <div className="canvas-load-node-bar">
+                                <i />
+                                <span />
+                            </div>
+                            <div className="canvas-load-node-body">
+                                <span className="canvas-load-line mid" />
+                                <span className="canvas-load-line short" />
+                            </div>
+                        </div>
+                    ))}
+                </div>
             </div>
 
-            <div className="absolute bottom-24 left-6 z-50 h-40 w-[240px] rounded-lg border shadow-2xl backdrop-blur-sm" style={{ background: "var(--background)", borderColor: "var(--border)" }} aria-hidden="true">
-                <div className="absolute left-7 top-7 h-5 w-12 rounded-sm bg-current opacity-10" />
-                <div className="absolute left-28 top-16 h-6 w-16 rounded-sm bg-current opacity-10" />
-                <div className="absolute bottom-7 left-16 h-8 w-20 rounded-sm bg-current opacity-10" />
-                <div className="absolute inset-5 rounded border border-current opacity-15" />
-            </div>
-
-            <div className="absolute bottom-5 left-5 z-50 flex h-14 w-[260px] items-center gap-2 rounded-xl border px-2 shadow-lg backdrop-blur" style={{ background: "var(--background)", borderColor: "var(--border)" }} aria-hidden="true">
-                <div className="size-8 rounded-md bg-current opacity-10" />
-                <div className="size-8 rounded-md bg-current opacity-10" />
-                <div className="h-1 flex-1 rounded-full bg-current opacity-10" />
-                <div className="h-4 w-10 rounded bg-current opacity-10" />
-                <div className="size-8 rounded-md bg-current opacity-10" />
+            <div className="canvas-load-stage canvas-load-stage--card">
+                <div className="canvas-load-card" role="status" aria-live="polite" aria-busy="true">
+                    <p className="canvas-load-kicker">
+                        <span className="canvas-load-dot" />
+                        {t("canvas.projectLoadingKicker")}
+                    </p>
+                    <h1>{heading}</h1>
+                    <p>{hint}</p>
+                    <div className="canvas-load-track" aria-hidden="true">
+                        <span />
+                    </div>
+                </div>
             </div>
         </main>
     );
