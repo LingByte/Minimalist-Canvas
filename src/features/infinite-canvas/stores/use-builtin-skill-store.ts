@@ -6,6 +6,7 @@ import {
     installBuiltinSkillFromZip,
     loadBuiltinSkills,
     uninstallBuiltinSkill,
+    isShippedBuiltinSkill,
     type BuiltinSkill,
     type BuiltinSkillInput,
     type BuiltinSkillInstallResult,
@@ -75,6 +76,10 @@ export const useBuiltinSkillStore = create<BuiltinSkillStore>((set, get) => ({
         return skill;
     },
     uninstall: async (name) => {
+        const skill = get().skills.find((item) => item.name === name);
+        if (skill && isShippedBuiltinSkill(skill)) {
+            throw new Error("shipped skills cannot be uninstalled");
+        }
         await uninstallBuiltinSkill(name);
         if (get().selectedName === name) get().select("");
         await get().load(true);

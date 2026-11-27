@@ -4,7 +4,7 @@ import { CircleHelp, FileArchive, RefreshCw, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
-import { formatSkillPackageTree, isZipMagic, normalizeSkillName, packageEntryCount, SKILL_ZIP_LIMITS } from "@canvas/lib/agent/builtin-skills";
+import { formatSkillPackageTree, isShippedBuiltinSkill, isZipMagic, normalizeSkillName, packageEntryCount, SKILL_ZIP_LIMITS } from "@canvas/lib/agent/builtin-skills";
 import { useBuiltinSkillStore } from "@canvas/stores/use-builtin-skill-store";
 import { useAgentStore } from "@canvas/stores/use-agent-store";
 
@@ -232,13 +232,17 @@ export default function SkillsPage() {
                                                 <Button type={active ? "default" : "primary"} className="flex-1" onClick={() => useInAgent(skill.name)}>
                                                     {t("skillsLibrary.useInChat")}
                                                 </Button>
-                                                <Button
-                                                    danger
-                                                    type="text"
-                                                    icon={<Trash2 className="size-3.5" />}
-                                                    aria-label={t("skillsLibrary.delete")}
-                                                    onClick={() => removeSkill(skill.name)}
-                                                />
+                                                {isShippedBuiltinSkill(skill) ? (
+                                                    <span className="px-2 text-[11px] text-stone-400">{t("skillsLibrary.shipped", { defaultValue: "内置" })}</span>
+                                                ) : (
+                                                    <Button
+                                                        danger
+                                                        type="text"
+                                                        icon={<Trash2 className="size-3.5" />}
+                                                        aria-label={t("skillsLibrary.delete")}
+                                                        onClick={() => removeSkill(skill.name)}
+                                                    />
+                                                )}
                                             </div>
                                         </div>
                                     );

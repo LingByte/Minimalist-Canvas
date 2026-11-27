@@ -69,19 +69,55 @@ const DANGEROUS_PATTERNS: Array<{ re: RegExp; key: string }> = [
 
 let memoryBrowserSkills: BuiltinSkill[] | null = null;
 
+/** Always-available skills shipped with the app (merged after user installs). */
+const SHIPPED_BUILTIN_SKILLS: BuiltinSkill[] = [
+    {
+        name: "meme-storyboard",
+        description: "用网络梗写短剧分镜：先组梗包，再落到 Script 节点。",
+        path: "shipped:meme-storyboard",
+        instructions: [
+            "当用户想写梗短剧、玩抽象、把网络梗写进剧本时，按这个流程做。",
+            "",
+            "1. 先 update_plan（选题材 → 组梗包 → 写分镜 → 可选生图）。",
+            "2. 调用 search_meme_wiki：",
+            "   - mode=pack，query=校园/职场/抽象/短视频 等题材，limit=6~8",
+            "   - 或 mode=search 用关键词搜多条",
+            "   - 单个词义不清时再用 mode=lookup",
+            "3. 从结果里只挑 2~4 个主梗，说明每个梗怎么进剧情（接梗方式），不要堆百科。",
+            "4. canvas_get_state 后，用 canvas_apply_ops 创建/更新 ONE Script 节点：",
+            "   metadata.storyboard.rows[] = [{shotNumber,durationSeconds,plotDescription}]",
+            "   每镜 plotDescription 写清：动作 + 对白怎么接梗 + 镜头意图；一镜最多绑一个主梗。",
+            "5. 回复要短：列出选用梗 + 分镜结构；用户没要求就不要强行 run_generation。",
+        ].join("\n"),
+    },
+];
+
+function mergeShippedSkills(skills: BuiltinSkill[]) {
+    const byName = new Map(skills.map((skill) => [skill.name, skill]));
+    for (const shipped of SHIPPED_BUILTIN_SKILLS) {
+        if (!byName.has(shipped.name)) byName.set(shipped.name, shipped);
+    }
+    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function isShippedBuiltinSkill(skill: Pick<BuiltinSkill, "path" | "name">) {
+    if (skill.path?.startsWith("shipped:")) return true;
+    return SHIPPED_BUILTIN_SKILLS.some((item) => item.name === skill.name && skill.path === item.path);
+}
+
 /**
  * Load local skills from {storageRoot}/skills/{name}/SKILL.md.
  * Format mirrors Claude Code skills: YAML-like frontmatter (name, description)
  * followed by markdown instructions. Browser builds fall back to localStorage.
  */
 export async function loadBuiltinSkills(): Promise<{ skills: BuiltinSkill[]; error?: string }> {
-    if (!isTauri()) return { skills: loadBrowserSkills() };
+    if (!isTauri()) return { skills: mergeShippedSkills(loadBrowserSkills()) };
     try {
         const { readDir, readTextFile, exists } = await import("@tauri-apps/plugin-fs");
         const root = await storageRoot();
-        if (!root) return { skills: [] };
+        if (!root) return { skills: mergeShippedSkills([]) };
         const skillsDir = `${root.replace(/[/\\]+$/, "")}/skills`;
-        if (!(await exists(skillsDir))) return { skills: [] };
+        if (!(await exists(skillsDir))) return { skills: mergeShippedSkills([]) };
         const entries = await readDir(skillsDir);
         const skills: BuiltinSkill[] = [];
         for (const entry of entries) {
@@ -106,10 +142,9 @@ export async function loadBuiltinSkills(): Promise<{ skills: BuiltinSkill[]; err
                 // skip unreadable skill files
             }
         }
-        skills.sort((a, b) => a.name.localeCompare(b.name));
-        return { skills };
+        return { skills: mergeShippedSkills(skills) };
     } catch (error) {
-        return { skills: [], error: error instanceof Error ? error.message : i18n.t("agent.state.skillReadFailed") };
+        return { skills: mergeShippedSkills([]), error: error instanceof Error ? error.message : i18n.t("agent.state.skillReadFailed") };
     }
 }
 
