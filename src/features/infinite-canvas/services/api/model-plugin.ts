@@ -373,6 +373,34 @@ const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join
 onDelta(text);
 return text;`,
         },
+        {
+            label: i18n.t("modelPlugin.templates.anthropic"),
+            script: `// ${i18n.t("modelPlugin.templates.textAnthropic")}
+// ${i18n.t("modelPlugin.templates.availableTextAnthropic")}
+const system = systemPrompt || messages.filter((m) => m.role === "system").map((m) => m.content).join("\\n\\n");
+const anthropicMessages = messages
+  .filter((m) => m.role !== "system")
+  .map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content }));
+const data = await request({
+  method: "post",
+  url: \`\${baseUrl}/v1/messages\`,
+  headers: {
+    "Content-Type": "application/json",
+    "x-api-key": apiKey,
+    Authorization: \`Bearer \${apiKey}\`,
+    "anthropic-version": "2023-06-01",
+  },
+  data: {
+    model,
+    max_tokens: 8192,
+    ...(system ? { system } : {}),
+    messages: anthropicMessages,
+  },
+});
+const text = (data.content || []).filter((p) => p.type === "text").map((p) => p.text || "").join("") || "";
+onDelta(text);
+return text;`,
+        },
     ],
     };
 }

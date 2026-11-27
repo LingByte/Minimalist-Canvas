@@ -559,6 +559,7 @@ function assertVideoConfig(config: AiConfig, model: string) {
     if (!config.baseUrl.trim()) throw new Error(apiText("baseUrlRequired"));
     if (!config.apiKey.trim()) throw new Error(apiText("apiKeyRequired"));
     if (config.apiFormat === "gemini") throw new Error(apiText("geminiVideoUnsupported"));
+    if (config.apiFormat === "anthropic") throw new Error(apiText("anthropicVideoUnsupported"));
 }
 
 export function normalizeVideoSeconds(value: string) {

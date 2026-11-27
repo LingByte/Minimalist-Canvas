@@ -13,7 +13,7 @@ import {
 export type { ObjectStorageConfig, ObjectStorageProvider } from "@canvas/lib/object-storage/types";
 export { defaultObjectStorageConfig, OBJECT_STORAGE_PROVIDERS, isObjectStorageConfigured } from "@canvas/lib/object-storage/types";
 
-export type ApiCallFormat = "openai" | "gemini";
+export type ApiCallFormat = "openai" | "gemini" | "anthropic";
 export type ModelCapability = "image" | "video" | "text" | "audio";
 export type ReasoningEffort = "auto" | "low" | "medium" | "high" | "xhigh";
 
@@ -78,6 +78,7 @@ export type ConfigTabKey = "channels" | "preferences" | "prompt-sources" | "loca
 const CHANNEL_MODEL_SEPARATOR = "::";
 const CONFIG_STORE_KEY = "minimalist-canvas:ai_config_store";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
+const ANTHROPIC_BASE_URL = "https://api.anthropic.com";
 
 export const defaultConfig: AiConfig = {
     channelMode: "local",
@@ -370,12 +371,14 @@ export function resolveModelRequestConfig(config: AiConfig, value: string) {
 
 export function defaultBaseUrlForApiFormat(apiFormat: ApiCallFormat) {
     if (apiFormat === "gemini") return GEMINI_BASE_URL;
+    if (apiFormat === "anthropic") return ANTHROPIC_BASE_URL;
     // Empty by default so users explicitly choose provider endpoints.
     return "";
 }
 
-function normalizeApiFormat(apiFormat: unknown): ApiCallFormat {
-    return apiFormat === "gemini" ? apiFormat : "openai";
+export function normalizeApiFormat(apiFormat: unknown): ApiCallFormat {
+    if (apiFormat === "gemini" || apiFormat === "anthropic") return apiFormat;
+    return "openai";
 }
 
 function uniqueModelOptions(models: string[]) {

@@ -1,6 +1,11 @@
 import i18n from "@canvas/i18n";
 import type { BuiltinAgentToolCall, BuiltinAgentToolDefinition } from "@canvas/lib/agent/builtin-agent-tools";
 import { buildApiUrl, resolveModelRequestConfig, type AiConfig } from "@canvas/stores/use-config-store";
+import {
+    requestAnthropicMessages,
+    toAnthropicTools,
+    type AnthropicChatMessage,
+} from "./anthropic";
 
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
 
@@ -33,6 +38,23 @@ export async function requestBuiltinAgentChatTurn(
     options?: { signal?: AbortSignal },
 ): Promise<BuiltinAgentChatTurn> {
     const requestConfig = resolveModelRequestConfig(config, config.model || config.textModel);
+    if (requestConfig.apiFormat === "anthropic") {
+        const turn = await requestAnthropicMessages(
+            requestConfig,
+            messages as AnthropicChatMessage[],
+            toAnthropicTools(tools),
+            onDelta,
+            { signal: options?.signal },
+        );
+        return {
+            content: turn.content,
+            toolCalls: turn.toolCalls.map((call) => ({
+                id: call.id,
+                name: call.name,
+                arguments: call.arguments,
+            })),
+        };
+    }
     const response = await fetch(buildApiUrl(requestConfig.baseUrl, "/chat/completions"), {
         method: "POST",
         headers: {

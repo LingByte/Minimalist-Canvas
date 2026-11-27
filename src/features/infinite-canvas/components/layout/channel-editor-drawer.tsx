@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
+    defaultBaseUrlForApiFormat,
     guessCapability,
+    normalizeApiFormat,
     normalizeChannelModels,
     type ApiCallFormat,
     type ChannelModel,
@@ -40,6 +42,7 @@ export function ChannelEditorDrawer({
     const protocolOptions: Array<{ label: string; value: ApiCallFormat }> = [
         { label: "OpenAI", value: "openai" },
         { label: "Gemini", value: "gemini" },
+        { label: "Anthropic", value: "anthropic" },
     ];
 
     useEffect(() => {
@@ -84,8 +87,17 @@ export function ChannelEditorDrawer({
             name: draft.name.trim() || t("config.channels.defaultName"),
             baseUrl: draft.baseUrl.trim(),
             apiKey: draft.apiKey.trim(),
-            apiFormat: draft.apiFormat === "gemini" ? "gemini" : "openai",
+            apiFormat: normalizeApiFormat(draft.apiFormat),
             models: normalizeChannelModels(draft.models),
+        });
+    };
+
+    const setProtocol = (value: ApiCallFormat) => {
+        const previousDefault = defaultBaseUrlForApiFormat(draft.apiFormat);
+        const shouldReplaceBaseUrl = !draft.baseUrl.trim() || draft.baseUrl.trim() === previousDefault;
+        patch({
+            apiFormat: value,
+            ...(shouldReplaceBaseUrl ? { baseUrl: defaultBaseUrlForApiFormat(value) } : {}),
         });
     };
 
@@ -120,7 +132,7 @@ export function ChannelEditorDrawer({
                         className="w-full"
                         value={draft.apiFormat}
                         options={protocolOptions}
-                        onChange={(value: ApiCallFormat) => patch({ apiFormat: value })}
+                        onChange={(value: ApiCallFormat) => setProtocol(value)}
                     />
                 </label>
                 <label className="block md:col-span-2" data-tour="config-channel-base-url">
@@ -128,7 +140,13 @@ export function ChannelEditorDrawer({
                     <Input
                         value={draft.baseUrl}
                         onChange={(event) => patch({ baseUrl: event.target.value })}
-                        placeholder={t("config.channelEditor.baseUrlPlaceholder")}
+                        placeholder={
+                            draft.apiFormat === "anthropic"
+                                ? "https://api.anthropic.com"
+                                : draft.apiFormat === "gemini"
+                                  ? "https://generativelanguage.googleapis.com"
+                                  : t("config.channelEditor.baseUrlPlaceholder")
+                        }
                     />
                 </label>
                 <label className="block md:col-span-2" data-tour="config-channel-api-key">
@@ -136,7 +154,7 @@ export function ChannelEditorDrawer({
                     <Input.Password
                         value={draft.apiKey}
                         onChange={(event) => patch({ apiKey: event.target.value })}
-                        placeholder="sk-..."
+                        placeholder={draft.apiFormat === "anthropic" ? "sk-ant-..." : "sk-..."}
                     />
                 </label>
             </div>

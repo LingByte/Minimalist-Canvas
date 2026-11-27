@@ -2,6 +2,12 @@ import axios from "axios";
 
 import i18n from "@canvas/i18n";
 import { buildApiUrl, resolveModelRequestConfig, resolveModelScript, type AiConfig, type ModelChannel } from "@canvas/stores/use-config-store";
+import {
+    fetchAnthropicModelIds,
+    requestAnthropicMessages,
+    toAnthropicTools,
+    type AnthropicChatMessage,
+} from "./anthropic";
 import { normalizePluginImages, runModelPlugin } from "./model-plugin";
 import { nanoid } from "nanoid";
 import { dataUrlToFile } from "@canvas/lib/image-utils";
@@ -389,10 +395,10 @@ function geminiModelName(model: string) {
     return model.trim().replace(/^models\//, "");
 }
 
-function geminiApiUrl(config: Pick<AiConfig, "baseUrl" | "model">, action?: "generateContent" | "streamGenerateContent") {
+function geminiApiUrl(config: Pick<AiConfig, "baseUrl"> & { model?: string }, action?: "generateContent" | "streamGenerateContent") {
     const baseUrl = geminiBaseUrl(config);
     if (!action) return `${baseUrl}/models`;
-    return `${baseUrl}/models/${encodeURIComponent(geminiModelName(config.model))}:${action}`;
+    return `${baseUrl}/models/${encodeURIComponent(geminiModelName(config.model || ""))}:${action}`;
 }
 
 function geminiHeaders(config: Pick<AiConfig, "apiKey">) {
@@ -948,6 +954,9 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
             throw new Error(readAxiosError(error, apiText("requestFailed")));
         }
     }
+    if (requestConfig.apiFormat === "anthropic") {
+        throw new Error(apiText("anthropicImageUnsupported"));
+    }
     if (requestConfig.apiFormat === "gemini") {
         try {
             return await requestGeminiImages(requestConfig, prompt, [], n, options);
@@ -1020,6 +1029,9 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
         } catch (error) {
             throw new Error(readAxiosError(error, apiText("requestFailed")));
         }
+    }
+    if (requestConfig.apiFormat === "anthropic") {
+        throw new Error(apiText("anthropicImageUnsupported"));
     }
     if (requestConfig.apiFormat === "gemini") {
         if (mask) throw new Error(apiText("geminiMaskUnsupported"));
@@ -1222,6 +1234,20 @@ export async function requestImageQuestion(config: AiConfig, messages: AiTextMes
             if (answer === apiText("noContent")) onDelta(answer);
             return answer;
         }
+        if (requestConfig.apiFormat === "anthropic") {
+            const answer =
+                (
+                    await requestAnthropicMessages(
+                        requestConfig,
+                        toAnthropicChatMessages(withSystemMessage(requestConfig, messages)),
+                        [],
+                        onDelta,
+                        { signal: options?.signal },
+                    )
+                ).content || apiText("noContent");
+            if (answer === apiText("noContent")) onDelta(answer);
+            return answer;
+        }
         const answer = (await requestStreamingChatCompletions(requestConfig, withSystemMessage(requestConfig, messages), onDelta, options)).content || apiText("noContent");
         if (answer === apiText("noContent")) onDelta(answer);
         return answer;
@@ -1267,6 +1293,23 @@ export async function requestAgentChatCompletion(
                 options,
             );
         }
+        if (requestConfig.apiFormat === "anthropic") {
+            const turn = await requestAnthropicMessages(
+                requestConfig,
+                toAnthropicChatMessages(withSystemMessage(requestConfig, messages)),
+                toAnthropicTools(tools),
+                onDelta,
+                { signal: options?.signal },
+            );
+            return {
+                content: turn.content,
+                toolCalls: turn.toolCalls.map((call) => ({
+                    id: call.id,
+                    type: "function" as const,
+                    function: { name: call.name, arguments: call.arguments },
+                })),
+            };
+        }
         return await requestStreamingChatCompletions(
             requestConfig,
             withSystemMessage(requestConfig, messages),
@@ -1286,11 +1329,51 @@ export async function fetchImageModels(config: Pick<AiConfig, "baseUrl" | "apiKe
     if (!config.apiKey.trim()) throw new Error(apiText("apiKeyRequired"));
     try {
         const models =
-            config.apiFormat === "gemini" ? await fetchGeminiModelIds(config) : await fetchOpenAIModelIds(config);
+            config.apiFormat === "gemini"
+                ? await fetchGeminiModelIds(config)
+                : config.apiFormat === "anthropic"
+                  ? await fetchAnthropicModelIds(config)
+                  : await fetchOpenAIModelIds(config);
         return models.sort((a, b) => a.localeCompare(b));
     } catch (error) {
         throw new Error(readAxiosError(error, apiText("modelReadFailed")));
     }
+}
+
+function toAnthropicChatMessages(messages: ResponseInputMessage[]): AnthropicChatMessage[] {
+    const result: AnthropicChatMessage[] = [];
+    let pendingCalls: Array<{ id: string; name: string; arguments: string }> = [];
+    const flushCalls = (textContent?: AiTextMessage["content"]) => {
+        if (!pendingCalls.length) {
+            if (textContent !== undefined) result.push({ role: "assistant", content: textContent });
+            return;
+        }
+        result.push({
+            role: "assistant",
+            content: textContent ?? null,
+            tool_calls: pendingCalls,
+        });
+        pendingCalls = [];
+    };
+    for (const message of messages) {
+        if ("type" in message) {
+            pendingCalls.push({ id: message.call_id, name: message.name, arguments: message.arguments });
+            continue;
+        }
+        if (message.role === "tool") {
+            flushCalls();
+            result.push({ role: "tool", tool_call_id: message.tool_call_id, content: message.content });
+            continue;
+        }
+        if (message.role === "assistant") {
+            flushCalls(message.content);
+            continue;
+        }
+        flushCalls();
+        result.push({ role: message.role, content: message.content });
+    }
+    flushCalls();
+    return result;
 }
 
 export async function fetchChannelModels(channel: ModelChannel) {
