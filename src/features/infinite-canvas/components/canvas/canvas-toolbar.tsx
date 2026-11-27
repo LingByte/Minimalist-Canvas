@@ -1,7 +1,7 @@
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode, RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Button, Segmented, Switch } from "antd";
-import { BookOpen, CircleDot, Clapperboard, Eraser, FolderOpen, Grid2x2, Group, Hand, History, Image as ImageIcon, Info, ListVideo, Moon, MousePointer2, Music2, Palette, Puzzle, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Video, Wand2 } from "lucide-react";
+import { BookOpen, CircleDot, Clapperboard, FolderOpen, Grid2x2, Group, Hand, History, Image as ImageIcon, Info, ListVideo, Moon, MousePointer2, Music2, Palette, Puzzle, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Video, Wand2, WandSparkles } from "lucide-react";
 
 import { useTheme } from "@/context/theme-provider";
 
@@ -35,9 +35,9 @@ export function CanvasToolbar({
     onRedo,
     onOpenAssets,
     onOpenPrompts,
+    onOpenSkills,
     onOpenLogs,
     onDelete,
-    onClear,
     onCanvasToolChange,
     onBackgroundModeChange,
     onShowImageInfoChange,
@@ -63,9 +63,9 @@ export function CanvasToolbar({
     onRedo: () => void;
     onOpenAssets: () => void;
     onOpenPrompts?: () => void;
+    onOpenSkills?: () => void;
     onOpenLogs?: () => void;
     onDelete: () => void;
-    onClear: () => void;
     onCanvasToolChange: (tool: "select" | "pan") => void;
     onBackgroundModeChange: (mode: CanvasBackgroundMode) => void;
     onShowImageInfoChange: (show: boolean) => void;
@@ -135,6 +135,9 @@ export function CanvasToolbar({
                     <Redo2 className="size-4.5" />
                 </ToolbarButton>
                 <Divider theme={theme} />
+                <ToolbarButton id="tool-script" label={t("canvas.toolbar.script")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddScript}>
+                    <ListVideo className="size-4.5" />
+                </ToolbarButton>
                 <ToolbarButton id="tool-text" label={t("canvas.toolbar.text")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddText}>
                     <Type className="size-4.5" />
                 </ToolbarButton>
@@ -155,9 +158,6 @@ export function CanvasToolbar({
                 </ToolbarButton>
                 <ToolbarButton id="tool-director" label={t("canvas.toolbar.director")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddDirector}>
                     <Clapperboard className="size-4.5" />
-                </ToolbarButton>
-                <ToolbarButton id="tool-script" label={t("canvas.toolbar.script")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddScript}>
-                    <ListVideo className="size-4.5" />
                 </ToolbarButton>
                 {extensionDefs.length ? (
                     <ToolbarButton
@@ -185,6 +185,11 @@ export function CanvasToolbar({
                 {onOpenPrompts ? (
                     <ToolbarButton id="tool-prompts" label={t("canvas.toolbar.prompts")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onOpenPrompts}>
                         <BookOpen className="size-4.5" />
+                    </ToolbarButton>
+                ) : null}
+                {onOpenSkills ? (
+                    <ToolbarButton id="tool-skills" label={t("canvas.toolbar.skills")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onOpenSkills}>
+                        <WandSparkles className="size-4.5" />
                     </ToolbarButton>
                 ) : null}
                 {onOpenLogs ? (
@@ -259,10 +264,6 @@ export function CanvasToolbar({
                         </ToolbarButton>
                     </>
                 ) : null}
-                <Divider theme={theme} />
-                <ToolbarButton id="tool-clear" label={t("canvas.toolbar.clear")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onClear} danger>
-                    <Eraser className="size-4.5" />
-                </ToolbarButton>
             </div>
 
             {extensionsOpen && extensionDefs.length ? (
@@ -462,7 +463,7 @@ function toolLabel(id: string, t: (key: string) => string) {
     if (id === "tool-tools") return t("canvas.tools.open");
     if (id === "tool-style") return t("canvas.toolbar.appearance");
     if (id === "tool-delete") return t("canvas.deleteSelected");
-    if (id === "tool-clear") return t("canvas.toolbar.clear");
+    if (id === "tool-skills") return t("canvas.toolbar.skills");
     return "";
 }
 

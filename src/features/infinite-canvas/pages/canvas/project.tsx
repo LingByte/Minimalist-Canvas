@@ -4909,12 +4909,12 @@ function InfiniteCanvasPage() {
                     onRedo={redoCanvas}
                     onOpenAssets={() => setAssetManagerOpen(true)}
                     onOpenPrompts={() => setPromptsOpen(true)}
+                    onOpenSkills={() => navigate("/skills")}
                     onOpenLogs={() => {
                         markLogsSeen();
                         setLogsOpen(true);
                     }}
                     onDelete={() => deleteNodes(new Set(selectedNodeIds))}
-                    onClear={() => setClearConfirmOpen(true)}
                     onCanvasToolChange={setCanvasTool}
                     onBackgroundModeChange={setBackgroundMode}
                     onShowImageInfoChange={setShowImageInfo}
