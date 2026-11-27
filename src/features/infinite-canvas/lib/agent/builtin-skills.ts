@@ -1,6 +1,7 @@
 import { unzipSync, strFromU8 } from "fflate";
 
 import i18n from "@canvas/i18n";
+import { loadBundledShippedSkills } from "@canvas/lib/agent/bundled-skills-loader";
 import { isTauri, storageRoot } from "@canvas/services/fs-store";
 
 export type BuiltinSkillPackageRole = "skill" | "reference" | "script" | "asset" | "other";
@@ -94,7 +95,8 @@ const SHIPPED_BUILTIN_SKILLS: BuiltinSkill[] = [
 
 function mergeShippedSkills(skills: BuiltinSkill[]) {
     const byName = new Map(skills.map((skill) => [skill.name, skill]));
-    for (const shipped of SHIPPED_BUILTIN_SKILLS) {
+    // User installs win. Then fill gaps with bundled screenwriting packs + tiny inline skills.
+    for (const shipped of [...loadBundledShippedSkills(), ...SHIPPED_BUILTIN_SKILLS]) {
         if (!byName.has(shipped.name)) byName.set(shipped.name, shipped);
     }
     return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -102,7 +104,8 @@ function mergeShippedSkills(skills: BuiltinSkill[]) {
 
 export function isShippedBuiltinSkill(skill: Pick<BuiltinSkill, "path" | "name">) {
     if (skill.path?.startsWith("shipped:")) return true;
-    return SHIPPED_BUILTIN_SKILLS.some((item) => item.name === skill.name && skill.path === item.path);
+    if (SHIPPED_BUILTIN_SKILLS.some((item) => item.name === skill.name && skill.path === item.path)) return true;
+    return loadBundledShippedSkills().some((item) => item.name === skill.name);
 }
 
 /**
@@ -608,7 +611,7 @@ async function readSkillPackageManifest(skillDir: string): Promise<BuiltinSkillP
     }
 }
 
-function buildPackageEntriesFromFiles(files: Record<string, string>, skillMdBytes = 0): BuiltinSkillPackageEntry[] {
+export function buildPackageEntriesFromFiles(files: Record<string, string>, skillMdBytes = 0): BuiltinSkillPackageEntry[] {
     const entries: BuiltinSkillPackageEntry[] = [
         { path: "SKILL.md", bytes: Math.max(0, skillMdBytes), role: "skill", encoding: "text" },
     ];

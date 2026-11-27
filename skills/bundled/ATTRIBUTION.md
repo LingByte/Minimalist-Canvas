@@ -1,0 +1,62 @@
+# Bundled screenwriting skills — attribution
+
+These packages are vendored for offline use in Minimalist Canvas. Licenses remain with upstream authors.
+
+- `character-refs` ← `shuohao-skills`
+- `chekhov-dramaturgy` ← `screenwriting-skills`
+- `novel-art` ← `shuohao-skills`
+- `novel-characters` ← `shuohao-skills`
+- `novel-outline` ← `shuohao-skills`
+- `novel-script` ← `shuohao-skills`
+- `novel-staging` ← `shuohao-skills`
+- `novel-storyboard` ← `shuohao-skills`
+- `ozu-screenplay-style` ← `screenwriting-skills`
+- `screenwriting-master` ← `_shanyin_extract`
+- `script-generation` ← `local`
+- `short-drama` ← `drama-skills`
+- `short-drama-assets` ← `drama-skills`
+- `short-drama-breakdown` ← `drama-skills`
+- `short-drama-develop` ← `drama-skills`
+- `short-drama-edit` ← `drama-skills`
+- `short-drama-image-prompts` ← `drama-skills`
+- `short-drama-novel-analyze` ← `drama-skills`
+- `short-drama-produce` ← `drama-skills`
+- `short-drama-review` ← `drama-skills`
+- `short-drama-storyboard` ← `drama-skills`
+- `short-drama-video-prompts` ← `drama-skills`
+- `short-drama-write` ← `drama-skills`
+- `story-to-script` ← `story-to-script`
+- `succession-series-writing` ← `screenwriting-skills`
+- `sw-american-case-studies` ← `screenwriting-skills`
+- `sw-character-bio` ← `screenwriting-skills`
+- `sw-character-conflict` ← `screenwriting-skills`
+- `sw-chinese-opera-banqiang` ← `screenwriting-skills`
+- `sw-chinese-opera-banqiang-cases` ← `screenwriting-skills`
+- `sw-chinese-opera-qupai` ← `screenwriting-skills`
+- `sw-chinese-opera-qupai-cases` ← `screenwriting-skills`
+- `sw-chinese-series-practice` ← `screenwriting-skills`
+- `sw-dialogue` ← `screenwriting-skills`
+- `sw-format-adaptation` ← `screenwriting-skills`
+- `sw-genre-anatomy` ← `screenwriting-skills`
+- `sw-industry-business` ← `screenwriting-skills`
+- `sw-japanese-screenwriting` ← `screenwriting-skills`
+- `sw-korean-french-screenwriting` ← `screenwriting-skills`
+- `sw-premise-theme` ← `screenwriting-skills`
+- `sw-scene-craft` ← `screenwriting-skills`
+- `sw-series-case-studies` ← `screenwriting-skills`
+- `sw-series-engine-bible` ← `screenwriting-skills`
+- `sw-series-structure` ← `screenwriting-skills`
+- `sw-sitcom-comedy` ← `screenwriting-skills`
+- `sw-story-structure` ← `screenwriting-skills`
+- `sw-truby-anatomy` ← `screenwriting-skills`
+- `sw-workflow` ← `screenwriting-skills`
+- `sw-writers-room` ← `screenwriting-skills`
+- `write-screenplay` ← `write-screenplay-skill`
+
+Upstream repos:
+- https://github.com/eternityspring/shuohao-skills
+- https://github.com/zenstory-ai/drama-skills
+- https://github.com/jtydhr88/screenwriting-skills
+- https://github.com/Shanyin-ai/shanyin-screenwriting-master
+- https://github.com/oleo17/story-to-script
+- https://github.com/egguy886/write-screenplay-skill

@@ -11,7 +11,9 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "typecheck": "tsc --noEmit",
-    "lint": "oxlint ."
+    "lint": "oxlint .",
+    "skills:sync": "bun scripts/sync-bundled-skills.mjs",
+    "skills:fetch": "bun scripts/sync-bundled-skills.mjs --fetch"
   },
   "dependencies": {
     "@ant-design/icons": "^6.1.1",

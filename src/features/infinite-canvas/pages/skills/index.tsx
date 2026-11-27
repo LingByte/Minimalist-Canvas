@@ -4,9 +4,16 @@ import { CircleHelp, FileArchive, RefreshCw, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
-import { formatSkillPackageTree, isShippedBuiltinSkill, isZipMagic, normalizeSkillName, packageEntryCount, SKILL_ZIP_LIMITS } from "@canvas/lib/agent/builtin-skills";
+import { isShippedBuiltinSkill, isZipMagic, normalizeSkillName, packageEntryCount, SKILL_ZIP_LIMITS } from "@canvas/lib/agent/builtin-skills";
+import {
+    groupSkillsByCategory,
+    skillCategory,
+    SKILL_CATEGORY_ORDER,
+    type SkillCategoryId,
+} from "@canvas/lib/agent/skill-categories";
 import { useBuiltinSkillStore } from "@canvas/stores/use-builtin-skill-store";
 import { useAgentStore } from "@canvas/stores/use-agent-store";
+import { cn } from "@canvas/lib/utils";
 
 const PACKAGE_STRUCTURE = `skill-name.zip
 └── skill-name/
@@ -21,6 +28,7 @@ export default function SkillsPage() {
     const { message, modal } = App.useApp();
     const fileRef = useRef<HTMLInputElement>(null);
     const [query, setQuery] = useState("");
+    const [category, setCategory] = useState<SkillCategoryId | "all">("all");
     const [uploading, setUploading] = useState(false);
     const skills = useBuiltinSkillStore((state) => state.skills);
     const loading = useBuiltinSkillStore((state) => state.loading);
@@ -38,9 +46,20 @@ export default function SkillsPage() {
 
     const filtered = useMemo(() => {
         const keyword = query.trim().toLowerCase();
-        if (!keyword) return skills;
-        return skills.filter((skill) => [skill.name, skill.description].some((value) => value.toLowerCase().includes(keyword)));
-    }, [query, skills]);
+        return skills.filter((skill) => {
+            if (category !== "all" && skillCategory(skill) !== category) return false;
+            if (!keyword) return true;
+            return [skill.name, skill.description].some((value) => value.toLowerCase().includes(keyword));
+        });
+    }, [category, query, skills]);
+
+    const grouped = useMemo(() => groupSkillsByCategory(filtered), [filtered]);
+
+    const categoryCounts = useMemo(() => {
+        const counts = Object.fromEntries(SKILL_CATEGORY_ORDER.map((id) => [id, 0])) as Record<SkillCategoryId, number>;
+        for (const skill of skills) counts[skillCategory(skill)] += 1;
+        return counts;
+    }, [skills]);
 
     const uploadZip = async (file: File) => {
         if (!/\.zip$/i.test(file.name) && file.type !== "application/zip" && file.type !== "application/x-zip-compressed") {
@@ -91,7 +110,12 @@ export default function SkillsPage() {
 
     const useInAgent = (name: string) => {
         select(name);
-        useAgentStore.getState().setAgentState({ activeTab: "chat" });
+        const current = useAgentStore.getState().prompt;
+        const cleaned = current
+            .replace(/\$[a-z0-9]+(?:-[a-z0-9]+)*/gi, "")
+            .replace(/[ \t]{2,}/g, " ")
+            .trim();
+        useAgentStore.getState().setAgentState({ prompt: cleaned, activeTab: "chat" });
         openPanel();
         navigate("/canvas");
         message.success(t("skillsLibrary.readyInChat", { name }));
@@ -172,82 +196,102 @@ export default function SkillsPage() {
                         }}
                     />
 
-                    <div className="mt-5 flex items-center gap-2">
-                        <Input.Search
-                            allowClear
-                            value={query}
-                            onChange={(event) => setQuery(event.target.value)}
-                            placeholder={t("skillsLibrary.search")}
-                            className="min-w-0 flex-1"
-                        />
-                        <Tooltip title={t("skillsLibrary.reload")}>
-                            <Button
-                                className="!h-8 !w-8 !min-w-8 !px-0"
-                                icon={<RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />}
-                                aria-label={t("skillsLibrary.reload")}
-                                onClick={() => void load(true)}
+                    <div className="mt-5 flex flex-col gap-3">
+                        <div className="flex flex-wrap gap-1.5">
+                            <CategoryChip
+                                active={category === "all"}
+                                label={t("skillsLibrary.categoryAll")}
+                                count={skills.length}
+                                onClick={() => setCategory("all")}
                             />
-                        </Tooltip>
+                            {SKILL_CATEGORY_ORDER.filter((id) => categoryCounts[id] > 0).map((id) => (
+                                <CategoryChip
+                                    key={id}
+                                    active={category === id}
+                                    label={t(`skillsLibrary.categories.${id}`)}
+                                    count={categoryCounts[id]}
+                                    onClick={() => setCategory(id)}
+                                />
+                            ))}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Input.Search
+                                allowClear
+                                value={query}
+                                onChange={(event) => setQuery(event.target.value)}
+                                placeholder={t("skillsLibrary.search")}
+                                className="min-w-0 flex-1"
+                            />
+                            <Tooltip title={t("skillsLibrary.reload")}>
+                                <Button
+                                    className="!h-8 !w-8 !min-w-8 !px-0"
+                                    icon={<RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />}
+                                    aria-label={t("skillsLibrary.reload")}
+                                    onClick={() => void load(true)}
+                                />
+                            </Tooltip>
+                        </div>
                     </div>
 
-                    <div className="mt-5">
+                    <div className="mt-5 space-y-8">
                         {loading && !loaded ? (
                             <div className="flex justify-center py-24">
                                 <Spin />
                             </div>
-                        ) : filtered.length ? (
-                            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                                {filtered.map((skill) => {
-                                    const active = skill.name === selectedName;
-                                    const entryCount = packageEntryCount(skill);
-                                    const tree = formatSkillPackageTree(skill.name, skill.packageEntries);
-                                    return (
-                                        <div
-                                            key={skill.path || skill.name}
-                                            className="flex h-full flex-col rounded-2xl border border-stone-200/80 bg-white/80 p-4 dark:border-stone-700/80 dark:bg-stone-900/50"
-                                        >
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                <span className="truncate text-base font-semibold">@{skill.name}</span>
-                                                {active ? (
-                                                    <span className="rounded-full bg-sky-500/10 px-2 py-0.5 text-[11px] text-sky-600 dark:text-sky-300">
-                                                        {t("skillsLibrary.active")}
-                                                    </span>
-                                                ) : null}
-                                                <span className="rounded-full bg-stone-500/10 px-2 py-0.5 text-[11px] text-stone-500">
-                                                    {t("skillsLibrary.packageEntryCount", { count: entryCount })}
-                                                </span>
-                                            </div>
-                                            <p className="mt-1 line-clamp-2 text-sm text-stone-500 dark:text-stone-400">
-                                                {skill.description || t("skillsLibrary.noDescription")}
-                                            </p>
-                                            <div className="mt-3 flex-1">
-                                                <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-stone-400">
-                                                    {t("skillsLibrary.packageStructure")}
+                        ) : grouped.length ? (
+                            grouped.map((group) => (
+                                <section key={group.id} aria-labelledby={`skill-cat-${group.id}`}>
+                                    <header className="mb-3 flex items-baseline gap-2">
+                                        <h2 id={`skill-cat-${group.id}`} className="text-sm font-semibold tracking-tight text-stone-700 dark:text-stone-200">
+                                            {t(`skillsLibrary.categories.${group.id}`)}
+                                        </h2>
+                                        <span className="text-xs text-stone-400">{group.skills.length}</span>
+                                    </header>
+                                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                                        {group.skills.map((skill) => {
+                                            const active = skill.name === selectedName;
+                                            const entryCount = packageEntryCount(skill);
+                                            return (
+                                                <div
+                                                    key={skill.path || skill.name}
+                                                    className="flex h-full flex-col rounded-2xl border border-stone-200/80 bg-white/80 p-4 dark:border-stone-700/80 dark:bg-stone-900/50"
+                                                >
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <span className="truncate text-base font-semibold">@{skill.name}</span>
+                                                        {active ? (
+                                                            <span className="rounded-full bg-sky-500/10 px-2 py-0.5 text-[11px] text-sky-600 dark:text-sky-300">
+                                                                {t("skillsLibrary.active")}
+                                                            </span>
+                                                        ) : null}
+                                                        <span className="rounded-full bg-stone-500/10 px-2 py-0.5 text-[11px] text-stone-500">
+                                                            {t("skillsLibrary.packageEntryCount", { count: entryCount })}
+                                                        </span>
+                                                    </div>
+                                                    <p className="mt-1 line-clamp-3 flex-1 text-sm text-stone-500 dark:text-stone-400">
+                                                        {skill.description || t("skillsLibrary.noDescription")}
+                                                    </p>
+                                                    <div className="mt-4 flex items-center gap-2">
+                                                        <Button type={active ? "default" : "primary"} className="flex-1" onClick={() => useInAgent(skill.name)}>
+                                                            {t("skillsLibrary.useInChat")}
+                                                        </Button>
+                                                        {isShippedBuiltinSkill(skill) ? (
+                                                            <span className="px-2 text-[11px] text-stone-400">{t("skillsLibrary.shipped")}</span>
+                                                        ) : (
+                                                            <Button
+                                                                danger
+                                                                type="text"
+                                                                icon={<Trash2 className="size-3.5" />}
+                                                                aria-label={t("skillsLibrary.delete")}
+                                                                onClick={() => removeSkill(skill.name)}
+                                                            />
+                                                        )}
+                                                    </div>
                                                 </div>
-                                                <pre className="m-0 max-h-36 overflow-auto whitespace-pre rounded-xl bg-stone-100/80 px-3 py-2 font-mono text-[11px] leading-5 text-stone-600 dark:bg-stone-800/60 dark:text-stone-300">
-                                                    {tree}
-                                                </pre>
-                                            </div>
-                                            <div className="mt-4 flex items-center gap-2">
-                                                <Button type={active ? "default" : "primary"} className="flex-1" onClick={() => useInAgent(skill.name)}>
-                                                    {t("skillsLibrary.useInChat")}
-                                                </Button>
-                                                {isShippedBuiltinSkill(skill) ? (
-                                                    <span className="px-2 text-[11px] text-stone-400">{t("skillsLibrary.shipped", { defaultValue: "内置" })}</span>
-                                                ) : (
-                                                    <Button
-                                                        danger
-                                                        type="text"
-                                                        icon={<Trash2 className="size-3.5" />}
-                                                        aria-label={t("skillsLibrary.delete")}
-                                                        onClick={() => removeSkill(skill.name)}
-                                                    />
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                                            );
+                                        })}
+                                    </div>
+                                </section>
+                            ))
                         ) : (
                             <Empty className="py-16" description={t("skillsLibrary.emptyZip")} />
                         )}
@@ -255,5 +299,23 @@ export default function SkillsPage() {
                 </div>
             </main>
         </div>
+    );
+}
+
+function CategoryChip(props: { active: boolean; label: string; count: number; onClick: () => void }) {
+    return (
+        <button
+            type="button"
+            onClick={props.onClick}
+            className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition",
+                props.active
+                    ? "border-stone-900 bg-stone-900 text-white dark:border-stone-100 dark:bg-stone-100 dark:text-stone-900"
+                    : "border-stone-200 bg-white text-stone-600 hover:border-stone-300 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300 dark:hover:border-stone-600",
+            )}
+        >
+            <span>{props.label}</span>
+            <span className={cn("tabular-nums opacity-70", props.active && "opacity-80")}>{props.count}</span>
+        </button>
     );
 }

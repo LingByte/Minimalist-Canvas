@@ -35,5 +35,8 @@ src-tauri/gen/
 # Local tooling
 tools/
 
+# Skill vendor clones (synced into skills/bundled/)
+skills/_vendor/
+
 # Local meme-wiki preview dumps
 tmp-memewiki-preview/

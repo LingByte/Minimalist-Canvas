@@ -1,8 +1,33 @@
 # Local Agent Skills
 
-Put skill folders under the app storage root as `{storageRoot}/skills/<name>/SKILL.md`.
+## Built-in screenwriting packs
 
-This repo ships a template you can copy:
+The app ships vendored screenwriting skills under `skills/bundled/` (loaded as `shipped:` builtins).
+
+| Upstream | What you get |
+| --- | --- |
+| [shuohao-skills](https://github.com/eternityspring/shuohao-skills) | Novel → outline / characters / art / script / staging / storyboard |
+| [drama-skills](https://github.com/zenstory-ai/drama-skills) | Short-drama pipeline (write / storyboard / prompts / review…) |
+| [screenwriting-skills](https://github.com/jtydhr88/screenwriting-skills) | Craft skills (structure, dialogue, series bible, …) |
+| [shanyin-screenwriting-master](https://github.com/Shanyin-ai/shanyin-screenwriting-master) | Full-format screenwriting master |
+| [story-to-script](https://github.com/oleo17/story-to-script) | Duration-budgeted script writer |
+| [write-screenplay-skill](https://github.com/egguy886/write-screenplay-skill) | Commercial short-drama / overseas screenplay |
+
+Refresh from GitHub:
+
+```bash
+bun run skills:fetch   # clone/pull skills/_vendor then rebuild skills/bundled
+# or
+bun run skills:sync    # rebuild bundled/ from existing _vendor
+```
+
+`skills/_vendor/` is a local clone cache (gitignored). Commit `skills/bundled/` so CI/desktop builds ship offline.
+
+Attribution: `skills/bundled/ATTRIBUTION.md`.
+
+## Optional user installs
+
+You can still drop extra folders under `{storageRoot}/skills/<name>/SKILL.md`, or upload a skill zip from the Skills library page.
 
 ```bash
 # Example (macOS Tauri data dir; adjust to your storageRoot)
@@ -10,6 +35,4 @@ cp -R skills/script-generation \
   "$HOME/Library/Application Support/com.lingbyte.minimalist-canvas/skills/"
 ```
 
-After copying, restart the app (or reload skills) so `use_skill` can see `script-generation`.
-
-The built-in script harness already teaches Script-node workflows via the system prompt; this skill is an optional reinforcement, not required.
+User installs override a built-in skill with the same `name`.

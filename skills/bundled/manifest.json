@@ -1,0 +1,256 @@
+{
+  "generatedAt": "2026-11-27T09:26:47.506Z",
+  "count": 50,
+  "skills": [
+    {
+      "name": "character-refs",
+      "source": "shuohao-skills",
+      "path": "bundled/character-refs"
+    },
+    {
+      "name": "chekhov-dramaturgy",
+      "source": "screenwriting-skills",
+      "path": "bundled/chekhov-dramaturgy"
+    },
+    {
+      "name": "novel-art",
+      "source": "shuohao-skills",
+      "path": "bundled/novel-art"
+    },
+    {
+      "name": "novel-characters",
+      "source": "shuohao-skills",
+      "path": "bundled/novel-characters"
+    },
+    {
+      "name": "novel-outline",
+      "source": "shuohao-skills",
+      "path": "bundled/novel-outline"
+    },
+    {
+      "name": "novel-script",
+      "source": "shuohao-skills",
+      "path": "bundled/novel-script"
+    },
+    {
+      "name": "novel-staging",
+      "source": "shuohao-skills",
+      "path": "bundled/novel-staging"
+    },
+    {
+      "name": "novel-storyboard",
+      "source": "shuohao-skills",
+      "path": "bundled/novel-storyboard"
+    },
+    {
+      "name": "ozu-screenplay-style",
+      "source": "screenwriting-skills",
+      "path": "bundled/ozu-screenplay-style"
+    },
+    {
+      "name": "screenwriting-master",
+      "source": "_shanyin_extract",
+      "path": "bundled/screenwriting-master"
+    },
+    {
+      "name": "script-generation",
+      "source": "local",
+      "path": "bundled/script-generation"
+    },
+    {
+      "name": "short-drama",
+      "source": "drama-skills",
+      "path": "bundled/short-drama"
+    },
+    {
+      "name": "short-drama-assets",
+      "source": "drama-skills",
+      "path": "bundled/short-drama-assets"
+    },
+    {
+      "name": "short-drama-breakdown",
+      "source": "drama-skills",
+      "path": "bundled/short-drama-breakdown"
+    },
+    {
+      "name": "short-drama-develop",
+      "source": "drama-skills",
+      "path": "bundled/short-drama-develop"
+    },
+    {
+      "name": "short-drama-edit",
+      "source": "drama-skills",
+      "path": "bundled/short-drama-edit"
+    },
+    {
+      "name": "short-drama-image-prompts",
+      "source": "drama-skills",
+      "path": "bundled/short-drama-image-prompts"
+    },
+    {
+      "name": "short-drama-novel-analyze",
+      "source": "drama-skills",
+      "path": "bundled/short-drama-novel-analyze"
+    },
+    {
+      "name": "short-drama-produce",
+      "source": "drama-skills",
+      "path": "bundled/short-drama-produce"
+    },
+    {
+      "name": "short-drama-review",
+      "source": "drama-skills",
+      "path": "bundled/short-drama-review"
+    },
+    {
+      "name": "short-drama-storyboard",
+      "source": "drama-skills",
+      "path": "bundled/short-drama-storyboard"
+    },
+    {
+      "name": "short-drama-video-prompts",
+      "source": "drama-skills",
+      "path": "bundled/short-drama-video-prompts"
+    },
+    {
+      "name": "short-drama-write",
+      "source": "drama-skills",
+      "path": "bundled/short-drama-write"
+    },
+    {
+      "name": "story-to-script",
+      "source": "story-to-script",
+      "path": "bundled/story-to-script"
+    },
+    {
+      "name": "succession-series-writing",
+      "source": "screenwriting-skills",
+      "path": "bundled/succession-series-writing"
+    },
+    {
+      "name": "sw-american-case-studies",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-american-case-studies"
+    },
+    {
+      "name": "sw-character-bio",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-character-bio"
+    },
+    {
+      "name": "sw-character-conflict",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-character-conflict"
+    },
+    {
+      "name": "sw-chinese-opera-banqiang",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-chinese-opera-banqiang"
+    },
+    {
+      "name": "sw-chinese-opera-banqiang-cases",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-chinese-opera-banqiang-cases"
+    },
+    {
+      "name": "sw-chinese-opera-qupai",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-chinese-opera-qupai"
+    },
+    {
+      "name": "sw-chinese-opera-qupai-cases",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-chinese-opera-qupai-cases"
+    },
+    {
+      "name": "sw-chinese-series-practice",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-chinese-series-practice"
+    },
+    {
+      "name": "sw-dialogue",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-dialogue"
+    },
+    {
+      "name": "sw-format-adaptation",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-format-adaptation"
+    },
+    {
+      "name": "sw-genre-anatomy",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-genre-anatomy"
+    },
+    {
+      "name": "sw-industry-business",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-industry-business"
+    },
+    {
+      "name": "sw-japanese-screenwriting",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-japanese-screenwriting"
+    },
+    {
+      "name": "sw-korean-french-screenwriting",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-korean-french-screenwriting"
+    },
+    {
+      "name": "sw-premise-theme",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-premise-theme"
+    },
+    {
+      "name": "sw-scene-craft",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-scene-craft"
+    },
+    {
+      "name": "sw-series-case-studies",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-series-case-studies"
+    },
+    {
+      "name": "sw-series-engine-bible",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-series-engine-bible"
+    },
+    {
+      "name": "sw-series-structure",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-series-structure"
+    },
+    {
+      "name": "sw-sitcom-comedy",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-sitcom-comedy"
+    },
+    {
+      "name": "sw-story-structure",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-story-structure"
+    },
+    {
+      "name": "sw-truby-anatomy",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-truby-anatomy"
+    },
+    {
+      "name": "sw-workflow",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-workflow"
+    },
+    {
+      "name": "sw-writers-room",
+      "source": "screenwriting-skills",
+      "path": "bundled/sw-writers-room"
+    },
+    {
+      "name": "write-screenplay",
+      "source": "write-screenplay-skill",
+      "path": "bundled/write-screenplay"
+    }
+  ]
+}
