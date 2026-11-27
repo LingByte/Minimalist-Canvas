@@ -1,8 +1,11 @@
 import i18n from "@canvas/i18n";
 import type { BuiltinAgentToolCall, BuiltinAgentToolDefinition } from "@canvas/lib/agent/builtin-agent-tools";
 import {
+    buildUsageRequest,
     estimateTextTokens,
     parseProviderUsage,
+    resolveUsageRequestPath,
+    summarizeMessagesForUsage,
     trackUsageWithTokens,
     type TokenUsage,
 } from "@canvas/services/usage-meter";
@@ -121,6 +124,10 @@ export async function requestBuiltinAgentChatTurn(
         const usage =
             turn.usage ||
             estimateTextTokens(promptChars, turn.content.length);
+        const agentPath =
+            requestConfig.apiFormat === "anthropic"
+                ? resolveUsageRequestPath(requestConfig.baseUrl || "https://api.anthropic.com", "/messages")
+                : resolveUsageRequestPath(requestConfig.baseUrl, "/chat/completions");
         trackUsageWithTokens({
             capability: "text",
             model: requestConfig.model,
@@ -128,9 +135,25 @@ export async function requestBuiltinAgentChatTurn(
             status: "success",
             durationMs: Date.now() - startedAt,
             tokens: usage,
+            request: buildUsageRequest({
+                method: "POST",
+                path: agentPath,
+                prompt: summarizeMessagesForUsage(messages),
+                response: turn.content,
+                params: [
+                    "agent",
+                    tools.length ? `tools=${tools.length}` : null,
+                    turn.toolCalls.length ? `tool_calls=${turn.toolCalls.length}` : null,
+                    `messages=${messages.length}`,
+                ],
+            }),
         });
         return { ...turn, usage };
     } catch (error) {
+        const agentPath =
+            requestConfig.apiFormat === "anthropic"
+                ? resolveUsageRequestPath(requestConfig.baseUrl || "https://api.anthropic.com", "/messages")
+                : resolveUsageRequestPath(requestConfig.baseUrl, "/chat/completions");
         trackUsageWithTokens({
             capability: "text",
             model: requestConfig.model,
@@ -139,6 +162,12 @@ export async function requestBuiltinAgentChatTurn(
             durationMs: Date.now() - startedAt,
             error: error instanceof Error ? error.message : String(error),
             tokens: estimateTextTokens(promptChars, 0),
+            request: buildUsageRequest({
+                method: "POST",
+                path: agentPath,
+                prompt: summarizeMessagesForUsage(messages),
+                params: ["agent", tools.length ? `tools=${tools.length}` : null, `messages=${messages.length}`],
+            }),
         });
         throw error;
     }

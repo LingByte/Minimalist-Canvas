@@ -4,7 +4,7 @@ import i18n from "@canvas/i18n";
 import { audioMimeType, normalizeAudioFormatValue, normalizeAudioSpeedValue } from "@canvas/lib/audio-generation";
 import { resolveVoiceRuntime } from "@canvas/lib/tts-voices";
 import { uploadMediaFile, type UploadedFile } from "@canvas/services/file-storage";
-import { trackUsageWithTokens, type UsageOrigin } from "@canvas/services/usage-meter";
+import { buildUsageRequest, resolveUsageRequestPath, trackUsageWithTokens, type UsageOrigin } from "@canvas/services/usage-meter";
 import { resolveModelRequestConfig, resolveModelScript, type AiConfig } from "@canvas/stores/use-config-store";
 import { runModelPlugin } from "./model-plugin";
 import { synthesizeSpeech } from "./tts";
@@ -92,6 +92,22 @@ export async function requestAudioGeneration(config: AiConfig, prompt: string, o
                 throw new Error(readAxiosError(error, apiText("audioGenerationFailed")));
             }
         }
+        const audioRequest = buildUsageRequest({
+            method: "POST",
+            path: script
+                ? resolveUsageRequestPath(requestConfig.baseUrl, "/audio/speech", "plugin")
+                : runtime
+                  ? `tts:${runtime.engine.vendor}`
+                  : "tts",
+            prompt,
+            params: [
+                format ? `format=${format}` : null,
+                upstreamVoice ? `voice=${upstreamVoice}` : null,
+                config.ttsVoiceId || null,
+                config.audioSpeed ? `speed=${config.audioSpeed}` : null,
+                characters ? `${characters} chars` : null,
+            ],
+        });
         trackUsageWithTokens({
             capability: "audio",
             model: meterModel,
@@ -100,6 +116,7 @@ export async function requestAudioGeneration(config: AiConfig, prompt: string, o
             durationMs: Date.now() - startedAt,
             units: characters,
             unitKind: "characters",
+            request: audioRequest,
         });
         return blob;
     } catch (error) {
@@ -112,6 +129,22 @@ export async function requestAudioGeneration(config: AiConfig, prompt: string, o
                 durationMs: Date.now() - startedAt,
                 units: characters,
                 unitKind: "characters",
+                request: buildUsageRequest({
+                    method: "POST",
+                    path: script
+                        ? resolveUsageRequestPath(requestConfig.baseUrl, "/audio/speech", "plugin")
+                        : runtime
+                          ? `tts:${runtime.engine.vendor}`
+                          : "tts",
+                    prompt,
+                    params: [
+                        format ? `format=${format}` : null,
+                        upstreamVoice ? `voice=${upstreamVoice}` : null,
+                        config.ttsVoiceId || null,
+                        config.audioSpeed ? `speed=${config.audioSpeed}` : null,
+                        characters ? `${characters} chars` : null,
+                    ],
+                }),
                 error: error instanceof Error ? error.message : String(error),
             });
         }

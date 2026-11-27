@@ -22,6 +22,19 @@ export type TokenUsage = {
     estimated?: boolean;
 };
 
+export type UsageRequestDetail = {
+    /** HTTP method when applicable, e.g. POST. */
+    method?: string;
+    /** Request path shown in the recent table, e.g. `api.example.com/v1/images/generations`. */
+    path?: string;
+    /** Truncated prompt / user text sent upstream. */
+    prompt?: string;
+    /** Truncated model output preview (text turns). */
+    response?: string;
+    /** Short param summary, e.g. `n=4 · 16:9 · voice=alloy`. */
+    params?: string;
+};
+
 export type UsageEvent = {
     id: string;
     createdAt: number;
@@ -39,8 +52,15 @@ export type UsageEvent = {
     /** Media metering: image count, video seconds, TTS characters, etc. */
     units?: number;
     unitKind?: UsageUnitKind;
+    /** Request payload preview for the recent-calls inspector. */
+    request?: UsageRequestDetail;
     error?: string;
 };
+
+/** Keep stored bodies short — detail drawer only needs a skim, not full transcripts. */
+const USAGE_TEXT_LIMIT = 480;
+const USAGE_RESPONSE_LIMIT = 280;
+const USAGE_PATH_LIMIT = 240;
 
 export type UsageDateRange = "7d" | "30d" | "90d" | "all";
 
@@ -183,8 +203,143 @@ function positiveInt(value: unknown) {
     return Math.round(n);
 }
 
+export function clipUsageText(value: unknown, max = USAGE_TEXT_LIMIT): string | undefined {
+    const text = typeof value === "string" ? value : value == null ? "" : String(value);
+    const trimmed = text.replace(/\s+/g, " ").trim();
+    if (!trimmed) return undefined;
+    if (trimmed.length <= max) return trimmed;
+    return `${trimmed.slice(0, Math.max(0, max - 1))}…`;
+}
+
+export function formatUsageParams(parts: Array<string | number | boolean | null | undefined>): string | undefined {
+    const values = parts
+        .map((part) => {
+            if (part == null || part === false) return "";
+            if (part === true) return "true";
+            return String(part).trim();
+        })
+        .filter(Boolean);
+    return values.length ? values.join(" · ") : undefined;
+}
+
+/** Host + pathname for an OpenAI-compatible `/v1/...` call (no query/secrets). */
+export function resolveUsageRequestPath(baseUrl: string, apiPath: string, suffix?: string): string {
+    const base = baseUrl.trim().replace(/\/+$/, "");
+    const withV1 = /\/v1$/i.test(base) ? base : base ? `${base}/v1` : "/v1";
+    const path = apiPath.startsWith("/") ? apiPath : `/${apiPath}`;
+    let resolved = `${withV1}${path}`;
+    try {
+        const url = new URL(resolved);
+        resolved = `${url.host}${url.pathname}`;
+    } catch {
+        resolved = resolved.replace(/^https?:\/\//i, "");
+    }
+    const label = suffix ? `${resolved} · ${suffix}` : resolved;
+    return clipUsageText(label, USAGE_PATH_LIMIT) || label;
+}
+
+/** Sanitize an absolute upstream URL into host+pathname. */
+export function sanitizeUsageUrl(raw: string, suffix?: string): string {
+    const value = raw.trim();
+    if (!value) return suffix || "";
+    try {
+        const url = new URL(value);
+        const label = suffix ? `${url.host}${url.pathname} · ${suffix}` : `${url.host}${url.pathname}`;
+        return clipUsageText(label, USAGE_PATH_LIMIT) || label;
+    } catch {
+        return clipUsageText(suffix ? `${value} · ${suffix}` : value, USAGE_PATH_LIMIT) || value;
+    }
+}
+
+/** Build a compact request snapshot for recent-call inspection. */
+export function buildUsageRequest(input: {
+    method?: string;
+    path?: string;
+    baseUrl?: string;
+    apiPath?: string;
+    pathSuffix?: string;
+    prompt?: unknown;
+    response?: unknown;
+    params?: Array<string | number | boolean | null | undefined> | string;
+}): UsageRequestDetail | undefined {
+    const method = clipUsageText(input.method, 16)?.toUpperCase();
+    const path =
+        clipUsageText(input.path, USAGE_PATH_LIMIT) ||
+        (input.baseUrl && input.apiPath
+            ? resolveUsageRequestPath(input.baseUrl, input.apiPath, input.pathSuffix)
+            : input.pathSuffix
+              ? clipUsageText(input.pathSuffix, USAGE_PATH_LIMIT)
+              : undefined);
+    const prompt = clipUsageText(input.prompt, USAGE_TEXT_LIMIT);
+    const response = clipUsageText(input.response, USAGE_RESPONSE_LIMIT);
+    const params =
+        typeof input.params === "string"
+            ? clipUsageText(input.params, 240)
+            : formatUsageParams(input.params || []);
+    if (!method && !path && !prompt && !response && !params) return undefined;
+    return {
+        ...(method ? { method } : {}),
+        ...(path ? { path } : {}),
+        ...(prompt ? { prompt } : {}),
+        ...(response ? { response } : {}),
+        ...(params ? { params } : {}),
+    };
+}
+
+export function formatUsageRoute(request?: UsageRequestDetail | null): string {
+    if (!request) return "";
+    const path = request.path?.trim() || "";
+    const method = request.method?.trim() || "";
+    if (method && path) return `${method} ${path}`;
+    return path || method;
+}
+
+/** Prefer the latest user message text for chat-style metering. */
+export function summarizeMessagesForUsage(
+    messages: Array<{ role?: string; content?: unknown }> | null | undefined,
+): string | undefined {
+    if (!messages?.length) return undefined;
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+        const message = messages[index];
+        if (message.role && message.role !== "user") continue;
+        const text = flattenMessageContent(message.content);
+        if (text) return text;
+    }
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+        const text = flattenMessageContent(messages[index]?.content);
+        if (text) return text;
+    }
+    return undefined;
+}
+
+function flattenMessageContent(content: unknown): string {
+    if (typeof content === "string") return content;
+    if (!Array.isArray(content)) return "";
+    return content
+        .map((part) => {
+            if (typeof part === "string") return part;
+            if (!part || typeof part !== "object") return "";
+            const record = part as Record<string, unknown>;
+            if (typeof record.text === "string") return record.text;
+            if (record.type === "text" && typeof record.text === "string") return record.text;
+            if (record.type === "image_url" || record.type === "input_image") return "[image]";
+            return "";
+        })
+        .filter(Boolean)
+        .join("\n");
+}
+
 /** Persist one API usage event. Safe to fire-and-forget. */
 export async function recordUsage(input: RecordUsageInput): Promise<UsageEvent> {
+    const request = input.request
+        ? buildUsageRequest({
+              method: input.request.method,
+              path: input.request.path,
+              prompt: input.request.prompt,
+              response: input.request.response,
+              params: input.request.params,
+          })
+        : undefined;
     const event: UsageEvent = {
         id: input.id || nanoid(),
         createdAt: input.createdAt || Date.now(),
@@ -203,6 +358,7 @@ export async function recordUsage(input: RecordUsageInput): Promise<UsageEvent> 
         }),
         units: typeof input.units === "number" && Number.isFinite(input.units) ? input.units : undefined,
         unitKind: input.unitKind,
+        ...(request ? { request } : {}),
         error: input.error?.trim() || undefined,
     };
     await store.setItem(event.id, event);

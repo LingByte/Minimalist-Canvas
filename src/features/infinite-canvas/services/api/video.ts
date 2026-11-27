@@ -8,7 +8,7 @@ import { ensurePublicFileUrl, ensurePublicImageUrl, isPubliclyReachableMediaUrl 
 import { getObjectStorageStatus, mirrorRemoteToObjectStorage, uploadCanvasMedia } from "@canvas/services/object-storage";
 import { VIDEO_SECONDS_MAX, VIDEO_SECONDS_MIN } from "@canvas/components/video-settings-panel";
 import { VIDEO_POLL_INTERVAL_MS, VIDEO_POLL_MAX_ATTEMPTS, VIDEO_POLL_TIMEOUT_MS } from "@canvas/constant/video-generation";
-import { trackUsageWithTokens, type UsageOrigin } from "@canvas/services/usage-meter";
+import { buildUsageRequest, resolveUsageRequestPath, trackUsageWithTokens, type UsageOrigin } from "@canvas/services/usage-meter";
 import { boolConfig, buildApiUrl, modelOptionName, resolveModelRequestConfig, resolveModelScript, type AiConfig } from "@canvas/stores/use-config-store";
 import { runModelPlugin } from "./model-plugin";
 import type { ReferenceImage } from "@canvas/types/image";
@@ -84,6 +84,11 @@ const pluginVideoResults = new Map<string, VideoGenerationResult>();
 /** Avoid double-counting when wait/poll loops observe the same terminal task. */
 const meteredVideoTasks = new Set<string>();
 const videoTaskStartedAt = new Map<string, number>();
+const videoTaskPrompts = new Map<string, string>();
+const videoTaskMeta = new Map<
+    string,
+    { seconds: number; refs: number; quality?: string; size?: string; path: string; provider: "openai" | "plugin" }
+>();
 
 function aiApiUrl(config: AiConfig, path: string) {
     return buildApiUrl(config.baseUrl, path);
@@ -161,6 +166,15 @@ export async function createVideoGenerationTask(config: AiConfig, prompt: string
         task = await createOpenAIVideoTask(requestConfig, selectedModel, prompt, refs, options);
     }
     videoTaskStartedAt.set(task.id, Date.now());
+    videoTaskPrompts.set(task.id, prompt);
+    videoTaskMeta.set(task.id, {
+        seconds: Math.max(1, Number(config.videoSeconds) || 5),
+        refs: (refs.images?.length || 0) + (refs.videos?.length || 0) + (refs.audios?.length || 0),
+        quality: config.vquality || undefined,
+        size: config.size || undefined,
+        path: resolveUsageRequestPath(requestConfig.baseUrl, "/videos", script ? "plugin" : undefined),
+        provider: script ? "plugin" : "openai",
+    });
     return task;
 }
 
@@ -207,14 +221,40 @@ function meterVideoTaskOnce(
     meteredVideoTasks.add(task.id);
     const startedAt = videoTaskStartedAt.get(task.id) || Date.now();
     videoTaskStartedAt.delete(task.id);
+    const prompt = videoTaskPrompts.get(task.id);
+    videoTaskPrompts.delete(task.id);
+    const meta = videoTaskMeta.get(task.id);
+    videoTaskMeta.delete(task.id);
+    const seconds = meta?.seconds || Math.max(1, Number(config.videoSeconds) || 5);
+    const requestConfig = resolveModelRequestConfig(config, task.model);
     trackUsageWithTokens({
         capability: "video",
         model: task.model,
         origin: videoOrigin(options?.generationSource),
         status: state.status === "completed" ? "success" : "failed",
         durationMs: Date.now() - startedAt,
-        units: Math.max(1, Number(config.videoSeconds) || 5),
+        units: seconds,
         unitKind: "seconds",
+        request: buildUsageRequest({
+            method: "POST",
+            path:
+                meta?.path ||
+                resolveUsageRequestPath(
+                    requestConfig.baseUrl,
+                    "/videos",
+                    task.provider === "plugin" ? "plugin" : undefined,
+                ),
+            prompt,
+            params: [
+                "create",
+                `${seconds}s`,
+                meta?.size || config.size || null,
+                meta?.quality || config.vquality || null,
+                meta?.refs ? `refs=${meta.refs}` : null,
+                config.videoGenerateAudio === "true" ? "audio" : null,
+                config.videoWatermark === "true" ? "watermark" : null,
+            ],
+        }),
         error: state.status === "failed" ? state.error : undefined,
     });
 }

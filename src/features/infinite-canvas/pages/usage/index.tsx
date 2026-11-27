@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
-import { App, Button, Empty, Popconfirm, Segmented, Spin, Table, Tag, Tooltip } from "antd";
+import { App, Button, Drawer, Empty, Popconfirm, Segmented, Spin, Table, Tag, Tooltip } from "antd";
 import { BarChart3, Image as ImageIcon, Mic, RefreshCw, Sparkles, Trash2, Type, Video } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -7,6 +7,7 @@ import { SectionPageLayout } from "@/components/layout";
 import { toIntlLocale } from "@/i18n/languages";
 import {
     clearUsageEvents,
+    formatUsageRoute,
     summarizeUsage,
     type UsageCapability,
     type UsageDailyPoint,
@@ -642,6 +643,13 @@ function CapabilityBars({ summary, t, locale }: { summary: UsageSummary; t: (key
     );
 }
 
+function formatDuration(ms?: number) {
+    if (ms == null || !Number.isFinite(ms) || ms < 0) return "—";
+    if (ms < 1000) return `${Math.round(ms)}ms`;
+    if (ms < 60_000) return `${(ms / 1000).toFixed(ms >= 10_000 ? 0 : 1)}s`;
+    return `${(ms / 60_000).toFixed(1)}m`;
+}
+
 export default function UsagePage() {
     const { message } = App.useApp();
     const { t, i18n } = useTranslation();
@@ -649,6 +657,7 @@ export default function UsagePage() {
     const [tab, setTab] = useState<TabKey>("overview");
     const [loading, setLoading] = useState(true);
     const [summary, setSummary] = useState<UsageSummary | null>(null);
+    const [detail, setDetail] = useState<UsageEvent | null>(null);
 
     const refresh = useCallback(async () => {
         setLoading(true);
@@ -708,26 +717,40 @@ export default function UsagePage() {
                 title: t("usage.columns.time"),
                 dataIndex: "createdAt",
                 key: "createdAt",
-                width: 168,
+                width: 156,
                 render: (value: number) => new Date(value).toLocaleString(toIntlLocale(locale), { hour12: false }),
             },
             {
                 title: t("usage.columns.capability"),
                 dataIndex: "capability",
                 key: "capability",
-                width: 120,
+                width: 88,
                 render: (value: UsageCapability) => <CapabilityTag capability={value} t={t} />,
             },
             {
                 title: t("usage.columns.model"),
                 dataIndex: "model",
                 key: "model",
+                width: 140,
                 ellipsis: true,
+            },
+            {
+                title: t("usage.columns.path"),
+                key: "path",
+                ellipsis: true,
+                render: (_: unknown, row: UsageEvent) => {
+                    const route = formatUsageRoute(row.request);
+                    return (
+                        <span className="font-mono text-[12px] text-stone-600 dark:text-stone-300" title={route || undefined}>
+                            {route || "—"}
+                        </span>
+                    );
+                },
             },
             {
                 title: t("usage.columns.meter"),
                 key: "meter",
-                width: 140,
+                width: 110,
                 render: (_: unknown, row: UsageEvent) => {
                     if (row.capability === "text") {
                         const tokens = row.totalTokens || 0;
@@ -741,8 +764,18 @@ export default function UsagePage() {
                 title: t("usage.columns.status"),
                 dataIndex: "status",
                 key: "status",
-                width: 88,
+                width: 80,
                 render: (value: UsageEvent["status"]) => <Tag color={value === "success" ? "green" : "red"}>{t(`usage.status.${value}`)}</Tag>,
+            },
+            {
+                title: t("usage.columns.detail"),
+                key: "detail",
+                width: 72,
+                render: (_: unknown, row: UsageEvent) => (
+                    <Button type="link" size="small" className="px-0" onClick={() => setDetail(row)}>
+                        {t("usage.viewDetail")}
+                    </Button>
+                ),
             },
         ],
         [locale, t],
@@ -950,6 +983,116 @@ export default function UsagePage() {
                         </div>
                     )}
                 </div>
+
+                <Drawer
+                    open={Boolean(detail)}
+                    onClose={() => setDetail(null)}
+                    title={t("usage.detailTitle")}
+                    width={480}
+                    destroyOnHidden
+                >
+                    {detail ? (
+                        <div className="space-y-4 text-sm">
+                            <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-x-3 gap-y-2">
+                                <span className="text-stone-500">{t("usage.columns.time")}</span>
+                                <span>{new Date(detail.createdAt).toLocaleString(toIntlLocale(locale), { hour12: false })}</span>
+                                <span className="text-stone-500">{t("usage.columns.capability")}</span>
+                                <span>
+                                    <CapabilityTag capability={detail.capability} t={t} />
+                                </span>
+                                <span className="text-stone-500">{t("usage.columns.model")}</span>
+                                <span className="break-all">{detail.model}</span>
+                                <span className="text-stone-500">{t("usage.columns.path")}</span>
+                                <span className="break-all font-mono text-xs">
+                                    {formatUsageRoute(detail.request) || "—"}
+                                </span>
+                                <span className="text-stone-500">{t("usage.columns.origin")}</span>
+                                <span>
+                                    {detail.origin
+                                        ? t(`usage.origin.${detail.origin as UsageOrigin}`, { defaultValue: detail.origin })
+                                        : "—"}
+                                </span>
+                                <span className="text-stone-500">{t("usage.columns.status")}</span>
+                                <span>
+                                    <Tag color={detail.status === "success" ? "green" : "red"} className="m-0">
+                                        {t(`usage.status.${detail.status}`)}
+                                    </Tag>
+                                </span>
+                                <span className="text-stone-500">{t("usage.columns.duration")}</span>
+                                <span className="tabular-nums">{formatDuration(detail.durationMs)}</span>
+                                <span className="text-stone-500">{t("usage.columns.meter")}</span>
+                                <span className="tabular-nums">
+                                    {detail.capability === "text"
+                                        ? detail.totalTokens
+                                            ? `${formatTokens(detail.totalTokens, locale)}${detail.tokensEstimated ? ` · ${t("usage.estimated")}` : ""}`
+                                            : "—"
+                                        : detail.units != null
+                                          ? t(`usage.units.${detail.capability}`, { count: formatNumber(detail.units, locale) })
+                                          : "—"}
+                                </span>
+                            </div>
+
+                            {detail.capability === "text" &&
+                            (detail.inputTokens || detail.outputTokens || detail.cacheReadTokens || detail.cacheWriteTokens) ? (
+                                <div className="rounded-xl border border-stone-200 px-3 py-2 tabular-nums text-xs text-stone-600 dark:border-stone-800 dark:text-stone-300">
+                                    {t("usage.charts.tokenInput")} {formatTokens(detail.inputTokens || 0, locale)}
+                                    {" · "}
+                                    {t("usage.charts.tokenOutput")} {formatTokens(detail.outputTokens || 0, locale)}
+                                    {detail.cacheWriteTokens
+                                        ? ` · ${t("usage.charts.tokenCacheWrite")} ${formatTokens(detail.cacheWriteTokens, locale)}`
+                                        : ""}
+                                    {detail.cacheReadTokens
+                                        ? ` · ${t("usage.charts.tokenCacheRead")} ${formatTokens(detail.cacheReadTokens, locale)}`
+                                        : ""}
+                                </div>
+                            ) : null}
+
+                            {detail.request?.params ? (
+                                <div>
+                                    <div className="mb-1 text-xs font-medium text-stone-500">{t("usage.detail.params")}</div>
+                                    <div className="rounded-xl bg-stone-50 px-3 py-2 text-xs leading-5 text-stone-700 dark:bg-stone-900 dark:text-stone-200">
+                                        {detail.request.params}
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            {detail.request?.prompt ? (
+                                <div>
+                                    <div className="mb-1 text-xs font-medium text-stone-500">{t("usage.detail.prompt")}</div>
+                                    <p className="m-0 line-clamp-6 rounded-xl bg-stone-50 px-3 py-2 text-xs leading-5 text-stone-800 dark:bg-stone-900 dark:text-stone-100" title={detail.request.prompt}>
+                                        {detail.request.prompt}
+                                    </p>
+                                </div>
+                            ) : null}
+
+                            {detail.request?.response ? (
+                                <div>
+                                    <div className="mb-1 text-xs font-medium text-stone-500">{t("usage.detail.response")}</div>
+                                    <p className="m-0 line-clamp-4 rounded-xl bg-stone-50 px-3 py-2 text-xs leading-5 text-stone-800 dark:bg-stone-900 dark:text-stone-100" title={detail.request.response}>
+                                        {detail.request.response}
+                                    </p>
+                                </div>
+                            ) : null}
+
+                            {detail.error ? (
+                                <div>
+                                    <div className="mb-1 text-xs font-medium text-red-500">{t("usage.detail.error")}</div>
+                                    <p className="m-0 line-clamp-4 rounded-xl bg-red-50 px-3 py-2 text-xs leading-5 text-red-700 dark:bg-red-950/40 dark:text-red-200" title={detail.error}>
+                                        {detail.error}
+                                    </p>
+                                </div>
+                            ) : null}
+
+                            {!detail.request?.path &&
+                            !detail.request?.prompt &&
+                            !detail.request?.response &&
+                            !detail.request?.params &&
+                            !detail.error ? (
+                                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("usage.detail.empty")} />
+                            ) : null}
+                        </div>
+                    ) : null}
+                </Drawer>
             </SectionPageLayout.Content>
         </SectionPageLayout>
     );

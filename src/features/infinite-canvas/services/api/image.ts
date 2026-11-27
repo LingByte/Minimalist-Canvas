@@ -25,11 +25,16 @@ import {
 import { imageToDataUrl } from "@canvas/services/image-storage";
 import { ensurePublicImageUrls } from "@canvas/services/ensure-public-media";
 import {
+    buildUsageRequest,
     estimateTextTokens,
     parseProviderUsage,
+    resolveUsageRequestPath,
+    sanitizeUsageUrl,
+    summarizeMessagesForUsage,
     trackUsageWithTokens,
     type TokenUsage,
     type UsageOrigin,
+    type UsageRequestDetail,
 } from "@canvas/services/usage-meter";
 import type { ReferenceImage } from "@canvas/types/image";
 
@@ -39,6 +44,64 @@ function usageOrigin(source?: "canvas" | "workbench"): UsageOrigin {
     if (source === "workbench") return "workbench";
     if (source === "canvas") return "canvas";
     return "other";
+}
+
+function imageUsageRequest(
+    config: AiConfig,
+    requestConfig: ReturnType<typeof resolveModelRequestConfig>,
+    mode: "generate" | "edit",
+    prompt: string,
+    params: Array<string | number | boolean | null | undefined>,
+): UsageRequestDetail | undefined {
+    const script = resolveModelScript(config, config.model || config.imageModel);
+    let path: string;
+    if (script) {
+        path = resolveUsageRequestPath(
+            requestConfig.baseUrl,
+            mode === "edit" ? "/images/edits" : "/images/generations",
+            "plugin",
+        );
+    } else if (requestConfig.apiFormat === "gemini") {
+        path = sanitizeUsageUrl(geminiApiUrl({ ...requestConfig, model: requestConfig.model }, "generateContent"));
+    } else {
+        path = resolveUsageRequestPath(
+            requestConfig.baseUrl,
+            mode === "edit" ? "/images/edits" : "/images/generations",
+        );
+    }
+    return buildUsageRequest({
+        method: "POST",
+        path,
+        prompt,
+        params: [mode === "edit" ? "edit" : "generate", ...params],
+    });
+}
+
+function textUsageRequest(
+    config: AiConfig,
+    requestConfig: ReturnType<typeof resolveModelRequestConfig>,
+    messages: AiTextMessage[],
+    response?: string,
+): UsageRequestDetail | undefined {
+    const script = resolveModelScript(config, config.model || config.textModel);
+    const runnableScript = script && !/\/v1\/responses\b/.test(script) ? script : "";
+    let path: string;
+    if (runnableScript) {
+        path = resolveUsageRequestPath(requestConfig.baseUrl, "/chat/completions", "plugin");
+    } else if (requestConfig.apiFormat === "gemini") {
+        path = sanitizeUsageUrl(geminiApiUrl({ ...requestConfig, model: requestConfig.model }, "streamGenerateContent"));
+    } else if (requestConfig.apiFormat === "anthropic") {
+        path = resolveUsageRequestPath(requestConfig.baseUrl || "https://api.anthropic.com", "/messages");
+    } else {
+        path = resolveUsageRequestPath(requestConfig.baseUrl, "/chat/completions");
+    }
+    return buildUsageRequest({
+        method: "POST",
+        path,
+        prompt: summarizeMessagesForUsage(messages),
+        response,
+        params: [`messages=${messages.length}`],
+    });
 }
 
 export type AiTextMessage = {
@@ -980,6 +1043,13 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
             durationMs: Date.now() - startedAt,
             units: images.length,
             unitKind: "count",
+            request: imageUsageRequest(config, requestConfig, "generate", prompt, [
+                `n=${images.length}`,
+                config.size,
+                config.quality,
+                config.imageResolution,
+                config.background,
+            ]),
         });
         return images;
     } catch (error) {
@@ -991,6 +1061,13 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
             durationMs: Date.now() - startedAt,
             units: n,
             unitKind: "count",
+            request: imageUsageRequest(config, requestConfig, "generate", prompt, [
+                `n=${n}`,
+                config.size,
+                config.quality,
+                config.imageResolution,
+                config.background,
+            ]),
             error: error instanceof Error ? error.message : String(error),
         });
         throw error;
@@ -1085,6 +1162,14 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
             durationMs: Date.now() - startedAt,
             units: images.length,
             unitKind: "count",
+            request: imageUsageRequest(config, requestConfig, "edit", prompt, [
+                `refs=${references.length}`,
+                mask ? "mask" : null,
+                `n=${images.length}`,
+                config.size,
+                config.quality,
+                config.imageResolution,
+            ]),
         });
         return images;
     } catch (error) {
@@ -1096,6 +1181,14 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
             durationMs: Date.now() - startedAt,
             units: n,
             unitKind: "count",
+            request: imageUsageRequest(config, requestConfig, "edit", prompt, [
+                `refs=${references.length}`,
+                mask ? "mask" : null,
+                `n=${n}`,
+                config.size,
+                config.quality,
+                config.imageResolution,
+            ]),
             error: error instanceof Error ? error.message : String(error),
         });
         throw error;
@@ -1357,6 +1450,7 @@ export async function requestImageQuestion(config: AiConfig, messages: AiTextMes
             status: "success",
             durationMs: Date.now() - startedAt,
             tokens: usage || estimateTextTokens(promptChars, answer.length),
+            request: textUsageRequest(config, requestConfig, messages, answer),
         });
         return answer;
     } catch (error) {
@@ -1369,6 +1463,7 @@ export async function requestImageQuestion(config: AiConfig, messages: AiTextMes
             durationMs: Date.now() - startedAt,
             error: message,
             tokens: estimateTextTokens(promptChars, 0),
+            request: textUsageRequest(config, requestConfig, messages),
         });
         throw new Error(message);
     }
