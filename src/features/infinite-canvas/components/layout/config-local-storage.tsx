@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { clearSyncedLocalData } from "@canvas/services/clear-synced-local-data";
-import { isTauri, moveStorageRoot } from "@canvas/services/fs-store";
+import { isTauri, moveStorageRoot, storageRoot } from "@canvas/services/fs-store";
 import { readLocalStorageUsage, type LocalStorageUsage } from "@canvas/services/local-storage-usage";
 import { useConfigStore } from "@canvas/stores/use-config-store";
 
@@ -19,10 +19,29 @@ const storeLabelKeys: Record<string, string> = {
     prompt_cache: "promptCache",
 };
 
+async function openStorageFolder(path: string) {
+    const { openPath, revealItemInDir } = await import("@tauri-apps/plugin-opener");
+    try {
+        await openPath(path);
+        return;
+    } catch {
+        // Fall through — some hosts prefer reveal.
+    }
+    try {
+        await revealItemInDir(path);
+        return;
+    } catch {
+        // Last resort: parent directory.
+    }
+    const parent = path.replace(/[/\\]+$/, "").split(/[/\\]/).slice(0, -1).join("/") || path;
+    await openPath(parent);
+}
+
 export function ConfigLocalStorage({ active }: { active: boolean }) {
     const { message, modal } = App.useApp();
     const { t } = useTranslation();
     const [usage, setUsage] = useState<LocalStorageUsage | null>(null);
+    const [rootPath, setRootPath] = useState("");
     const [loading, setLoading] = useState(false);
     const [clearing, setClearing] = useState(false);
     const [movingDir, setMovingDir] = useState(false);
@@ -32,6 +51,10 @@ export function ConfigLocalStorage({ active }: { active: boolean }) {
         setLoading(true);
         setError("");
         try {
+            if (isTauri()) {
+                const root = await storageRoot();
+                setRootPath(root);
+            }
             setUsage(await readLocalStorageUsage());
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : t("config.localStorage.readFailed"));
@@ -43,6 +66,15 @@ export function ConfigLocalStorage({ active }: { active: boolean }) {
     useEffect(() => {
         if (active && !usage) void refresh();
     }, [active, refresh, usage]);
+
+    const dataPath = usage?.dataPath || rootPath;
+    const openPathLabel = async (path: string) => {
+        try {
+            await openStorageFolder(path);
+        } catch (err) {
+            message.error(t("config.localStorage.openPathFailed") + ": " + String(err));
+        }
+    };
 
     const indexedDbBytes = usage?.contentBytes ?? 0;
     const percent = usage ? Math.min(100, (usage.usage / usage.quota) * 100) : 0;
@@ -107,35 +139,40 @@ export function ConfigLocalStorage({ active }: { active: boolean }) {
                         </Button>
                     </div>
                 </div>
-                {usage?.dataPath ? (
+                {isTauri() ? (
                     <div className="mt-4 rounded-lg bg-stone-100/70 p-3 dark:bg-stone-900/70">
                         <div className="flex items-center gap-2 text-xs text-stone-500">
                             <FolderOpen className="size-4" />
                             {t("config.localStorage.dataPath")}
                         </div>
-                        <div className="mt-2 flex items-center gap-2">
-                            <code className="flex-1 text-xs break-all">{usage.dataPath}</code>
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <code className="min-w-0 flex-1 text-xs break-all">
+                                {dataPath || t("config.localStorage.dataPathLoading")}
+                            </code>
                             <Button
                                 size="small"
+                                type="primary"
+                                disabled={!dataPath}
                                 icon={<FolderOpen className="size-3.5" />}
-                                onClick={async () => {
-                                    const path = usage.dataPath!;
-                                    try {
-                                        const { openPath } = await import("@tauri-apps/plugin-opener");
-                                        await openPath(path);
-                                    } catch (err) {
-                                        try {
-                                            const parentPath = path.split("/").slice(0, -1).join("/") || "/Users";
-                                            const { openPath } = await import("@tauri-apps/plugin-opener");
-                                            await openPath(parentPath);
-                                        } catch (err2) {
-                                            message.error(t("config.localStorage.openPathFailed") + ": " + String(err));
-                                        }
-                                    }
-                                }}
+                                onClick={() => dataPath && void openPathLabel(dataPath)}
                             >
                                 {t("config.localStorage.openPath")}
                             </Button>
+                            <Button
+                                size="small"
+                                disabled={!dataPath}
+                                icon={<FolderOpen className="size-3.5" />}
+                                onClick={() => {
+                                    if (!dataPath) return;
+                                    const sep = dataPath.includes("\\") ? "\\" : "/";
+                                    void openPathLabel(`${dataPath.replace(/[/\\]+$/, "")}${sep}app_state`);
+                                }}
+                            >
+                                {t("config.localStorage.openConfigJson")}
+                            </Button>
+                        </div>
+                        <div className="mt-2 text-[11px] leading-relaxed text-stone-500 dark:text-stone-400">
+                            {t("config.localStorage.configJsonHint")}
                         </div>
                         <div className="mt-3 border-t border-stone-200 pt-3 dark:border-stone-800">
                             <div className="mb-1.5 text-xs font-medium text-stone-600 dark:text-stone-400">
