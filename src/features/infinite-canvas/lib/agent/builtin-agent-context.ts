@@ -55,6 +55,8 @@ export function buildBuiltinAgentSystemPrompt(snapshot: CanvasAgentSnapshot | nu
         "- metadata.storyboard.rows[] items: {id?, shotNumber, durationSeconds, plotDescription, imageNodeId?, videoNodeId?}.",
         "- Fill plotDescription with concrete shot action, dialogue hints, and camera intent.",
         "- For shot images: add image nodes with metadata.prompt (or composerContent) derived from the shot plot, connect Script→Image, set row.imageNodeId, then run_generation on those image node ids.",
+        "- If the user only asks to create an image/video/audio/text node (empty placeholder), call canvas_apply_ops with add_node only. Do NOT call run_generation unless they explicitly ask to generate content.",
+        "- Prefer placing new nodes near the current viewport center when position is unspecified.",
         "- Never invent node IDs; call canvas_get_state first when unsure.",
         "- canvas_get_state / apply_ops return compact summaries (including storyboard row digests), not raw media payloads.",
         "- After canvas mutations, briefly summarize what changed.",

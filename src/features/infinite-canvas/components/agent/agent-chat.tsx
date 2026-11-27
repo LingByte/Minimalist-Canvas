@@ -42,8 +42,17 @@ export function AgentChatTimeline({
     const contentRef = useRef<HTMLDivElement>(null);
     const followMessagesRef = useRef(true);
     const [showScrollToBottom, setShowScrollToBottom] = useState(false);
-    const streaming = messages.some((message) => message.streamId);
+    // Only treat real streamed text as "streaming" so empty shells don't hide the single waiting chip.
+    const streaming = messages.some((message) => message.role === "assistant" && message.streamId && Boolean(message.text?.trim()));
+    const lastToolRunning = (() => {
+        const last = [...messages].reverse().find((item) => item.role === "tool");
+        if (!last?.detail || typeof last.detail !== "object") return false;
+        const status = String((last.detail as { status?: unknown }).status || "").toLowerCase();
+        return ["inprogress", "in_progress", "running", "started", "pending"].includes(status);
+    })();
     const showBootstrap = Boolean(bootstrapStatus && !messages.some((message) => message.role === "user" || message.role === "assistant"));
+    // One waiting indicator only — never stack a compact typing chip + "正在思考".
+    const showWorking = (sending || waiting || showBootstrap) && !streaming && !pendingTool && !pendingApprovals.length && !lastToolRunning;
     const working = showBootstrap ? bootstrapStatus! : workingActivity(messages.at(-1));
     const updateScrollState = useCallback(() => {
         const list = listRef.current;
@@ -80,7 +89,7 @@ export function AgentChatTimeline({
     return (
         <div className="relative min-h-0 flex-1">
             <div ref={listRef} className="thin-scrollbar h-full select-text overflow-y-auto" onScroll={updateScrollState}>
-                <div ref={contentRef} className="space-y-4 px-4 pt-4">
+                <div ref={contentRef} className="space-y-4 px-4 pb-6 pt-4">
                     {timeline.length === 0 && !pendingTool && !pendingApprovals.length && !sending && !waiting && !showBootstrap && emptyState ? emptyState : null}
                     {timeline.map((entry) => entry.type === "commands"
                         ? <AgentCommandGroupRow key={entry.id} items={entry.items} theme={theme} />
@@ -95,7 +104,9 @@ export function AgentChatTimeline({
                         />
                     ) : null}
                     {pendingApprovals.map((approval) => <AgentApprovalCard key={approval.requestId} approval={approval} theme={theme} onDecision={(decision) => onApprovalDecision(approval, decision)} />)}
-                    {(sending || waiting || showBootstrap) && !streaming && !pendingTool && !pendingApprovals.length ? <AgentWorkingMessage text={working.text} detail={"detail" in working && typeof working.detail === "string" ? working.detail : undefined} status={showBootstrap ? bootstrapStatus?.status : undefined} mcpStatuses={showBootstrap ? Object.entries(mcpStartupStatuses).map(([name, item]) => ({ name, ...item })) : []} activityKey={working.key} theme={theme} /> : null}
+                    {showWorking ? (
+                        <AgentWorkingMessage text={working.text} detail={"detail" in working && typeof working.detail === "string" ? working.detail : undefined} status={showBootstrap ? bootstrapStatus?.status : undefined} mcpStatuses={showBootstrap ? Object.entries(mcpStartupStatuses).map(([name, item]) => ({ name, ...item })) : []} activityKey={working.key} theme={theme} />
+                    ) : null}
                 </div>
             </div>
             {showScrollToBottom ? (
@@ -148,6 +159,8 @@ function groupTimelineMessages(messages: AgentChatItem[]) {
     };
     messages.forEach((item) => {
         if (isPlanMessage(item)) return;
+        // Drop blank / invisible assistant placeholders (including empty stream shells between tool rounds).
+        if (item.role === "assistant" && !visibleAssistantText(item.text)) return;
         if (isCommandMessage(item)) {
             const scope = item.threadId && item.turnId ? `${item.threadId}\0${item.turnId}` : item.id;
             if (commands.length && scope !== commandScope) flushCommands();
@@ -164,6 +177,11 @@ function groupTimelineMessages(messages: AgentChatItem[]) {
 
 function isCommandMessage(item: AgentChatItem) {
     return item.role === "tool" && item.detail && typeof item.detail === "object" && (item.detail as { kind?: unknown }).kind === "command";
+}
+
+function visibleAssistantText(text: string | undefined) {
+    // Strip zero-width / bidi marks that can keep an "empty" bubble alive.
+    return Boolean((text || "").replace(/[\u200B-\u200D\uFEFF\u2060]/g, "").trim());
 }
 
 export function AgentUsageBar({ usage, theme }: { usage: AgentTokenUsage; theme: (typeof canvasThemes)[keyof typeof canvasThemes] }) {

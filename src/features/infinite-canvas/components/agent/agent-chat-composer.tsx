@@ -96,13 +96,17 @@ export function AgentChatComposer({
     };
 
     return (
-        <div className="px-2 pb-2 pt-1.5" onWheelCapture={(event) => event.stopPropagation()}>
+        <div className="px-2.5 pb-2.5 pt-1" onWheelCapture={(event) => event.stopPropagation()}>
             <div
-                className="relative rounded-2xl border px-2.5 pb-2 pt-2 shadow-sm transition-[box-shadow,border-color] focus-within:shadow-md"
+                className="relative rounded-[1.25rem] border px-3.5 pb-3 pt-3 shadow-sm transition-[box-shadow,border-color,background-color,transform] duration-200 focus-within:shadow-md"
                 style={{
                     background: theme.toolbar.panel,
-                    borderColor: dragging ? theme.node.text : theme.node.stroke,
-                    boxShadow: dragging ? `0 0 0 1px ${theme.node.text}` : undefined,
+                    borderColor: dragging ? theme.node.text : sending ? `${theme.node.text}55` : theme.node.stroke,
+                    boxShadow: dragging
+                        ? `0 0 0 1px ${theme.node.text}`
+                        : sending
+                          ? `0 8px 24px -18px ${theme.node.text}`
+                          : undefined,
                 }}
                 onDragEnter={onDragEnter}
                 onDragOver={onDragOver}

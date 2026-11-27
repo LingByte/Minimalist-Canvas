@@ -259,7 +259,7 @@ export function AgentChatPromptInput({ value, disabled, placeholder, theme, onCh
             <div className="relative">
                 {showPlaceholder ? (
                     <div
-                        className="pointer-events-none absolute inset-x-0 top-0 line-clamp-2 select-none px-1 py-1 text-sm leading-6"
+                        className="pointer-events-none absolute inset-x-0 top-0 line-clamp-2 select-none px-1 py-1.5 text-[15px] leading-6"
                         style={{ color: theme.node.placeholder }}
                     >
                         {placeholder}
@@ -273,7 +273,7 @@ export function AgentChatPromptInput({ value, disabled, placeholder, theme, onCh
                     aria-multiline="true"
                     aria-placeholder={placeholder}
                     aria-label={placeholder}
-                    className="thin-scrollbar max-h-28 min-h-[2.75rem] w-full overflow-y-auto whitespace-pre-wrap break-words bg-transparent px-1 py-1 text-sm leading-6 outline-none focus-visible:outline-none"
+                    className="thin-scrollbar max-h-40 min-h-[3.5rem] w-full overflow-y-auto whitespace-pre-wrap break-words bg-transparent px-1 py-1.5 text-[15px] leading-6 outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                     style={{ color: theme.node.text, caretColor: theme.node.text, cursor: disabled ? "default" : "text" }}
                     onInput={() => {
                         if (!composingRef.current) syncFromEditor();
@@ -367,15 +367,16 @@ function AgentCommandMenu({ command, candidates, activeIndex, loading, theme, on
             <div className="thin-scrollbar max-h-[min(21rem,52vh)] overflow-y-auto p-1">
                 {candidates.length ? candidates.map((candidate, index) => {
                     const skill = candidate.type === "skill" ? candidate.skill : null;
+                    const skillSource = candidate.type === "skill" ? candidate.source : null;
                     const reference = candidate.type === "resource" ? candidate.reference : null;
                     const title = skill ? skill.interface?.displayName || skill.name : reference?.title || "";
                     const description = skill
-                        ? `${candidate.source === "builtin" ? "@" : "/"}${skill.name} · ${skill.interface?.shortDescription || skill.shortDescription || skill.description || ""}`
+                        ? `${skillSource === "builtin" ? "@" : "/"}${skill.name} · ${skill.interface?.shortDescription || skill.shortDescription || skill.description || ""}`
                         : reference
                           ? `${agentReferenceMarker(reference)} · ${canvasReferenceKindLabel(reference.kind)}`
                           : "";
                     return (
-                        <button key={skill ? `${candidate.source}:${skill.name}:${skill.path}` : reference?.nodeId} ref={index === activeIndex ? activeItemRef : undefined} type="button" className="flex w-full min-w-0 items-center gap-2.5 rounded-lg px-2 py-2 text-left transition hover:bg-black/5 dark:hover:bg-white/10" style={{ background: index === activeIndex ? theme.toolbar.activeBg : undefined, color: index === activeIndex ? theme.toolbar.activeText : theme.node.text }} onPointerDown={(event) => { event.preventDefault(); onSelect(candidate); }}>
+                        <button key={skill && skillSource ? `${skillSource}:${skill.name}:${skill.path}` : reference?.nodeId} ref={index === activeIndex ? activeItemRef : undefined} type="button" className="flex w-full min-w-0 items-center gap-2.5 rounded-lg px-2 py-2 text-left transition hover:bg-black/5 dark:hover:bg-white/10" style={{ background: index === activeIndex ? theme.toolbar.activeBg : undefined, color: index === activeIndex ? theme.toolbar.activeText : theme.node.text }} onPointerDown={(event) => { event.preventDefault(); onSelect(candidate); }}>
                             {skill ? <span className="grid size-9 shrink-0 place-items-center"><Sparkles className="size-4" /></span> : reference ? <ReferencePreview reference={reference} /> : null}
                             <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{title}</span><span className="mt-0.5 block truncate text-xs" style={{ color: theme.node.muted }}>{description}</span></span>
                         </button>

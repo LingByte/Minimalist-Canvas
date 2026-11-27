@@ -159,6 +159,8 @@ export function AgentChatMessage({ item, theme, onRejectTool, onApproveTool }: {
             </div>
         );
     }
+    // Empty assistant shells are filtered in the timeline; keep a hard hide as a safety net.
+    if (!isUser && !(item.text || "").replace(/[\u200B-\u200D\uFEFF\u2060]/g, "").trim()) return null;
     return (
         <div className={`flex items-end gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"}`}>
             <AgentAvatar role={isUser ? "user" : "assistant"} theme={theme} />
@@ -293,8 +295,17 @@ export function AgentToolCard({ title, text, detail, theme }: { title: string; t
     if (kind === "command") return <AgentCommandGroup items={[{ id: title, text, detail }]} theme={theme} />;
     const state = toolCardState(title, text, detail);
     const view = userDetail(detail);
-    const showText = title !== "读取画布" || text !== "已读取当前画布内容";
-    const className = "group min-w-0 rounded-xl border px-3 py-2.5 text-left";
+    const normalizedTitle = title.trim();
+    const normalizedText = text.trim();
+    const toolId = String(objectField(detail, "name") || "").trim();
+    // Avoid repeating the tool name / raw id under itself (common for builtin tool cards).
+    const showText =
+        Boolean(normalizedText) &&
+        normalizedText !== normalizedTitle &&
+        normalizedText !== toolId &&
+        !/^canvas_[a-z0-9_]+$/i.test(normalizedText) &&
+        !(normalizedTitle === "读取画布" && normalizedText === "已读取当前画布内容");
+    const className = "group min-w-0 rounded-xl border px-3 py-2 text-left transition-colors hover:bg-black/[.02] dark:hover:bg-white/[.03]";
     const style = { borderColor: theme.node.stroke, background: "transparent", color: theme.node.text };
     const content = (
         <>
@@ -302,10 +313,10 @@ export function AgentToolCard({ title, text, detail, theme }: { title: string; t
                 <span className="shrink-0" style={{ color: state.color }}>{toolIcon(kind, state.icon)}</span>
                 <span className="min-w-0 truncate font-medium">{title}</span>
                 <span className="shrink-0 text-[11px]" style={{ color: state.color }}>{state.label}</span>
-                {view ? <ChevronDown className="ml-auto size-3.5 shrink-0 transition-transform group-open:rotate-180" style={{ color: theme.node.muted }} /> : null}
+                {view ? <ChevronDown className="ml-auto size-3.5 shrink-0 opacity-70 transition-transform group-open:rotate-180" style={{ color: theme.node.muted }} /> : null}
             </div>
             {showText ? (
-                <div className={`mt-1 whitespace-pre-wrap break-words pl-6 text-sm leading-5 ${kind === "command" ? "font-mono text-[12px]" : ""}`} style={{ color: state.isError ? state.color : theme.node.muted }}>
+                <div className={`mt-1 whitespace-pre-wrap break-words pl-6 text-[13px] leading-5 ${kind === "command" ? "font-mono text-[12px]" : ""}`} style={{ color: state.isError ? state.color : theme.node.muted }}>
                     {text}
                 </div>
             ) : null}
@@ -314,7 +325,7 @@ export function AgentToolCard({ title, text, detail, theme }: { title: string; t
     if (!view) return <div className={className} style={style}>{content}</div>;
     return (
         <details className={className} style={style}>
-            <summary className="list-none cursor-pointer">{content}</summary>
+            <summary className="list-none cursor-pointer select-none">{content}</summary>
             <div className="ml-6"><AgentDetailBlock detail={view} theme={theme} /></div>
         </details>
     );
@@ -472,45 +483,53 @@ export function AgentWorkingMessage({ text, detail, status = "running", mcpStatu
         <div className="flex items-end gap-2.5" aria-live="polite">
             <AgentAvatar role="assistant" theme={theme} />
             <div
-                className="min-w-0 max-w-[min(100%,28rem)] rounded-2xl rounded-tl-md border px-3.5 py-2.5"
+                className="min-w-0 max-w-[min(100%,28rem)] overflow-hidden rounded-2xl rounded-tl-md border"
                 style={{ borderColor: theme.node.stroke, background: theme.toolbar.panel }}
             >
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" style={{ color: theme.node.muted }}>
-                    {status === "running" ? (
-                        <span className="relative inline-flex size-3.5 shrink-0 items-center justify-center">
-                            <span className="absolute inset-0 rounded-full opacity-30 animate-ping" style={{ background: theme.node.text }} />
-                            <LoaderCircle className="relative size-3.5 animate-spin" />
-                        </span>
-                    ) : status === "ready" ? (
-                        <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600" />
-                    ) : (
-                        <XCircle className="size-3.5 shrink-0 text-red-600" />
-                    )}
-                    <span className="min-w-0">{text}</span>
-                    {status === "running" ? <AgentTypingDots color={theme.node.muted} /> : null}
-                    {status === "running" && elapsed >= 5 ? (
-                        <span className="shrink-0 text-[11px] tabular-nums opacity-60">{waitingTime(elapsed)}</span>
-                    ) : null}
-                </div>
-                {detail ? <div className="mt-1 text-xs leading-5 opacity-65" style={{ color: theme.node.muted }}>{detail}</div> : null}
-                {mcpStatuses.length ? (
-                    <div className="mt-3 space-y-2">
-                        {mcpStatuses.map((item) => (
-                            <div key={item.name} className="flex min-w-0 items-start gap-2 text-xs leading-5" style={{ color: theme.node.muted }}>
-                                {item.status === "running" ? <LoaderCircle className="mt-0.5 size-3.5 shrink-0 animate-spin" /> : item.status === "ready" ? <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-600" /> : <XCircle className="mt-0.5 size-3.5 shrink-0 text-red-600" />}
-                                <div className="min-w-0">
-                                    <div className="font-medium" style={{ color: theme.node.text }}>{item.name}</div>
-                                    <div className="opacity-65">{item.detail}</div>
-                                </div>
-                            </div>
-                        ))}
+                {status === "running" ? (
+                    <div className="h-0.5 w-full overflow-hidden" style={{ background: `${theme.node.stroke}` }}>
+                        <div className="agent-wait-bar h-full w-1/3 rounded-full" style={{ background: theme.node.text }} />
                     </div>
                 ) : null}
-                {status === "running" && elapsed >= 30 ? (
-                    <div className="mt-1 text-xs leading-5 opacity-65" style={{ color: theme.node.muted }}>{t("agent.message.slowResponse")}</div>
-                ) : null}
+                <div className="px-3.5 py-2.5">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" style={{ color: theme.node.muted }}>
+                        {status === "running" ? (
+                            <LoaderCircle className="size-3.5 shrink-0 animate-spin" />
+                        ) : status === "ready" ? (
+                            <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600" />
+                        ) : (
+                            <XCircle className="size-3.5 shrink-0 text-red-600" />
+                        )}
+                        <span className="min-w-0 font-medium" style={{ color: theme.node.text }}>{text}</span>
+                        {status === "running" ? <AgentTypingDots color={theme.node.muted} /> : null}
+                        {status === "running" && elapsed >= 5 ? (
+                            <span className="shrink-0 text-[11px] tabular-nums opacity-60">{waitingTime(elapsed)}</span>
+                        ) : null}
+                    </div>
+                    {detail ? <div className="mt-1 text-xs leading-5 opacity-65" style={{ color: theme.node.muted }}>{detail}</div> : null}
+                    {mcpStatuses.length ? (
+                        <div className="mt-3 space-y-2">
+                            {mcpStatuses.map((item) => (
+                                <div key={item.name} className="flex min-w-0 items-start gap-2 text-xs leading-5" style={{ color: theme.node.muted }}>
+                                    {item.status === "running" ? <LoaderCircle className="mt-0.5 size-3.5 shrink-0 animate-spin" /> : item.status === "ready" ? <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-600" /> : <XCircle className="mt-0.5 size-3.5 shrink-0 text-red-600" />}
+                                    <div className="min-w-0">
+                                        <div className="font-medium" style={{ color: theme.node.text }}>{item.name}</div>
+                                        <div className="opacity-65">{item.detail}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : null}
+                    {status === "running" && elapsed >= 30 ? (
+                        <div className="mt-1 text-xs leading-5 opacity-65" style={{ color: theme.node.muted }}>{t("agent.message.slowResponse")}</div>
+                    ) : null}
+                </div>
             </div>
-            <style>{`@keyframes agent-typing-dot{0%,80%,100%{transform:translateY(0);opacity:.35}40%{transform:translateY(-3px);opacity:1}}`}</style>
+            <style>{`
+                @keyframes agent-typing-dot{0%,80%,100%{transform:translateY(0);opacity:.35}40%{transform:translateY(-3px);opacity:1}}
+                @keyframes agent-wait-bar{0%{transform:translateX(-120%)}100%{transform:translateX(360%)}}
+                .agent-wait-bar{animation:agent-wait-bar 1.35s ease-in-out infinite}
+            `}</style>
         </div>
     );
 }
@@ -671,8 +690,8 @@ function userDetail(value: unknown): UserDetail | null {
         ? detail.rows.flatMap((row) => {
               if (!row || typeof row !== "object") return [];
               const label = String((row as Record<string, unknown>).label || "");
-              const value = String((row as Record<string, unknown>).value || "");
-              return label && value ? [{ label, value }] : [];
+              const rowValue = String((row as Record<string, unknown>).value || "");
+              return label && rowValue ? [{ label, value: rowValue }] : [];
           })
         : [];
     const files = Array.isArray(detail.files)
@@ -683,9 +702,29 @@ function userDetail(value: unknown): UserDetail | null {
           })
         : [];
     const error = objectField(detail.error, "message");
-    const output = typeof detail.output === "string" ? detail.output.trim() : typeof error === "string" ? error : "";
+    let output = typeof detail.output === "string" ? detail.output.trim() : typeof error === "string" ? error : "";
+    // Builtin tool cards: fall back to arguments/result so users can expand and inspect.
+    if (!rows.length && !files.length && !output) {
+        const args = detail.arguments;
+        const result = detail.result;
+        if (args != null || result != null) {
+            const chunks: string[] = [];
+            if (args != null) chunks.push(`arguments:\n${stringifyDetail(args)}`);
+            if (result != null) chunks.push(`result:\n${stringifyDetail(result)}`);
+            output = chunks.join("\n\n").slice(0, 4000);
+        }
+    }
     if (!rows.length && !files.length && !output) return null;
     return { kind: typeof detail.kind === "string" ? detail.kind : undefined, status: typeof detail.status === "string" ? detail.status : undefined, rows, files, output };
+}
+
+function stringifyDetail(value: unknown) {
+    if (typeof value === "string") return value;
+    try {
+        return JSON.stringify(value, null, 2);
+    } catch {
+        return String(value);
+    }
 }
 
 function normalizeText(value: unknown) {

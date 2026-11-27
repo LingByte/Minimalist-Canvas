@@ -351,6 +351,7 @@ export function BuiltinAgentPanel() {
                 signal: controller.signal,
                 handlers: {
                     onAssistantDelta: (assistantId, delta) => {
+                        if (!delta.trim()) return;
                         const latest = useAgentStore.getState().messages;
                         const exists = latest.some((item) => item.id === assistantId);
                         setAgentState({
@@ -374,18 +375,39 @@ export function BuiltinAgentPanel() {
                     },
                     onAssistantFinalize: (assistantId, finalText) => {
                         const latest = useAgentStore.getState().messages;
+                        const trimmed = finalText.trim();
+                        if (!trimmed) {
+                            // Tool-only rounds shouldn't leave empty assistant bubbles.
+                            setAgentState({
+                                messages: latest.filter((item) => item.id !== assistantId),
+                            });
+                            return;
+                        }
+                        const exists = latest.some((item) => item.id === assistantId);
                         setAgentState({
-                            messages: latest.map((item) =>
-                                item.id === assistantId
-                                    ? { ...item, text: finalText || item.text, streamId: undefined }
-                                    : item,
-                            ),
+                            messages: exists
+                                ? latest.map((item) =>
+                                      item.id === assistantId
+                                          ? { ...item, text: trimmed, streamId: undefined }
+                                          : item,
+                                  )
+                                : [
+                                      ...latest,
+                                      {
+                                          id: assistantId,
+                                          role: "assistant",
+                                          text: trimmed,
+                                          threadId: activeThreadId,
+                                      },
+                                  ],
                         });
                     },
                     onToolStart: (item) => {
                         const latest = useAgentStore.getState().messages;
+                        // Drop empty streaming placeholders left from the previous model turn.
+                        const cleaned = latest.filter((entry) => !(entry.role === "assistant" && !entry.text?.trim()));
                         setAgentState({
-                            messages: [...latest, { ...item, threadId: activeThreadId }],
+                            messages: [...cleaned, { ...item, threadId: activeThreadId }],
                             activity: item.title || item.text,
                         });
                     },
@@ -410,10 +432,16 @@ export function BuiltinAgentPanel() {
                 setAgentState({ sending: false, waiting: false, activity: textModel ? modelOptionName(textModel) : "" });
                 return;
             }
-            const errText = error instanceof Error ? error.message : t("agent.state.requestFailed");
+            const errText = friendlyAgentError(error, t("apiErrors.networkRequestFailed"));
             const latest = useAgentStore.getState().messages;
+            // If a previous assistant stream already wrote "Load failed", replace it with a clear error card.
+            const cleaned = latest.map((item) =>
+                item.role === "assistant" && isRawNetworkFailureText(item.text)
+                    ? { ...item, text: t("agent.message.interruptedByNetwork") }
+                    : item,
+            );
             const withError: AgentChatItem[] = [
-                ...latest,
+                ...cleaned,
                 { id: randomId(), role: "error", text: errText, threadId: activeThreadId },
             ];
             const draft = useAgentStore.getState();
@@ -640,7 +668,10 @@ export function BuiltinAgentPanel() {
                             </div>
                         }
                     />
-                    <div className="shrink-0 px-1 pb-1 pt-1">
+                    <div
+                        className="shrink-0 border-t px-1 pb-1 pt-2"
+                        style={{ borderColor: `${theme.node.stroke}55`, background: theme.toolbar.panel }}
+                    >
                         <AgentChatComposer
                             prompt={prompt}
                             attachments={attachments.map(({ id, name, url, type }) => ({ id, name, url, type }))}
@@ -664,4 +695,22 @@ export function BuiltinAgentPanel() {
             )}
         </>
     );
+}
+
+function isRawNetworkFailureText(text?: string) {
+    const value = (text || "").trim().toLowerCase();
+    if (!value) return false;
+    return (
+        value === "load failed" ||
+        value.includes("network connection was lost") ||
+        value.includes("failed to fetch") ||
+        value.includes("networkerror") ||
+        value.includes("err_network")
+    );
+}
+
+function friendlyAgentError(error: unknown, fallback: string) {
+    const raw = error instanceof Error ? error.message : String(error || "");
+    if (isRawNetworkFailureText(raw)) return fallback;
+    return raw || fallback;
 }

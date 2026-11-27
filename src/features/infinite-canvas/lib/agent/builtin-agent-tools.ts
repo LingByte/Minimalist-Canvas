@@ -479,5 +479,33 @@ function summarizeBuiltinToolResult(name: string, result: unknown) {
         }
         if (typeof hit.text === "string" && hit.text.trim()) return hit.text.trim();
     }
-    return name;
+    if (name === "canvas_get_state" || name === "canvas_get_selection") {
+        return i18n.t(name === "canvas_get_selection" ? "agent.eventMore.selectionRead" : "agent.eventMore.canvasRead");
+    }
+    if (name === "canvas_apply_ops" && result && typeof result === "object") {
+        const data = result as { applied?: number; skipped?: unknown[]; nodes?: number; connections?: number };
+        if (typeof data.applied === "number") {
+            const skipped = Array.isArray(data.skipped) ? data.skipped.length : 0;
+            if (skipped) {
+                return i18n.t("agent.eventMore.canvasOpsPartial", {
+                    applied: data.applied,
+                    skipped,
+                    defaultValue: `已应用 ${data.applied} 项，跳过 ${skipped} 项`,
+                });
+            }
+            return i18n.t("agent.eventMore.canvasOpsApplied", {
+                count: data.applied,
+                defaultValue: `已应用 ${data.applied} 项操作`,
+            });
+        }
+    }
+    if (name === "canvas_undo_ops") {
+        return i18n.t("agent.eventMore.canvasOpsUndone", { defaultValue: "已撤销上一批画布操作" });
+    }
+    // Prefer a human summary over echoing the raw tool id under the title.
+    if (result && typeof result === "object" && typeof (result as { summary?: unknown }).summary === "string") {
+        const summary = String((result as { summary: string }).summary).trim();
+        if (summary && summary !== name) return summary;
+    }
+    return "";
 }
