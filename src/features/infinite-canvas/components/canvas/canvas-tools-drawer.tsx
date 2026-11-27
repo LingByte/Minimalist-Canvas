@@ -1,15 +1,18 @@
 import imageCompression from "browser-image-compression";
-import { ArrowLeft, Brush, ChevronRight, Download, FileImage, ImageIcon, Loader2, ScanFace, Trash2, Wand2 } from "lucide-react";
+import { ArrowLeft, Brush, ChevronRight, Clapperboard, Download, FileImage, FlipVertical2, ImageIcon, Loader2, Palette, ScanFace, Trash2, Wand2 } from "lucide-react";
 import { useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
-import { App, Button, Drawer, InputNumber, Slider, Tooltip, Typography } from "antd";
+import { App, Button, Drawer, Input, InputNumber, Slider, Tooltip, Typography } from "antd";
 import { useTranslation } from "react-i18next";
 
 import { CanvasNodeFaceMeshDialog } from "@canvas/components/canvas/canvas-node-face-mesh-dialog";
+import { CanvasNodePortraitStyleDialog, type CanvasPortraitStyleConfirm } from "@canvas/components/canvas/canvas-node-portrait-style-dialog";
+import { CanvasNodeDepthVideoDialog, type CanvasDepthVideoConfirm } from "@canvas/components/canvas/canvas-node-depth-video-dialog";
+import { rotateFlipDataUrl } from "@canvas/lib/canvas/canvas-image-data";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { cn } from "@canvas/lib/utils";
 
-type ToolId = "home" | "image-compress" | "to-png" | "face-mesh";
+type ToolId = "home" | "image-compress" | "to-png" | "face-mesh" | "flip-upside-down" | "portrait-style" | "depth-video";
 
 type MediaItem = {
     id: string;
@@ -125,10 +128,10 @@ async function fileToDataUrl(file: File) {
     });
 }
 
-async function dataUrlToPngFile(dataUrl: string, name: string) {
+async function dataUrlToPngFile(dataUrl: string, name: string, suffix = "mesh") {
     const response = await fetch(dataUrl);
     const blob = await response.blob();
-    return new File([blob], `${baseName(name)}-mesh.png`, {
+    return new File([blob], `${baseName(name)}-${suffix}.png`, {
         type: "image/png",
         lastModified: Date.now(),
     });
@@ -144,9 +147,13 @@ function revokeItems(items: MediaItem[]) {
 export function CanvasToolsDrawer({
     open,
     onOpenChange,
+    onApplyPortraitStyle,
+    onApplyDepthVideo,
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    onApplyPortraitStyle?: (payload: { dataUrl: string; fileName?: string; style: string; model: string; prompt: string }) => Promise<void> | void;
+    onApplyDepthVideo?: (payload: { dataUrl: string; mediaKind: "image" | "video"; fileName?: string; model: string; prompt: string }) => Promise<void> | void;
 }) {
     const { t } = useTranslation();
     const { message } = App.useApp();
@@ -156,6 +163,11 @@ export function CanvasToolsDrawer({
     const [compressItems, setCompressItems] = useState<MediaItem[]>([]);
     const [pngItems, setPngItems] = useState<MediaItem[]>([]);
     const [meshItems, setMeshItems] = useState<MediaItem[]>([]);
+    const [flipItems, setFlipItems] = useState<MediaItem[]>([]);
+    const [portraitItems, setPortraitItems] = useState<MediaItem[]>([]);
+    const [depthItems, setDepthItems] = useState<MediaItem[]>([]);
+    const [portraitPaint, setPortraitPaint] = useState<{ dataUrl: string; name: string } | null>(null);
+    const [depthPaint, setDepthPaint] = useState<{ dataUrl: string; name: string; mediaKind: "image" | "video" } | null>(null);
     const [quality, setQuality] = useState(0.8);
     const [maxWidthOrHeight, setMaxWidthOrHeight] = useState(1920);
     const [maxSizeMB, setMaxSizeMB] = useState(2);
@@ -165,6 +177,9 @@ export function CanvasToolsDrawer({
     const compressInputRef = useRef<HTMLInputElement>(null);
     const pngInputRef = useRef<HTMLInputElement>(null);
     const meshInputRef = useRef<HTMLInputElement>(null);
+    const flipInputRef = useRef<HTMLInputElement>(null);
+    const portraitInputRef = useRef<HTMLInputElement>(null);
+    const depthInputRef = useRef<HTMLInputElement>(null);
 
     const activeTitle =
         tool === "image-compress"
@@ -173,7 +188,13 @@ export function CanvasToolsDrawer({
               ? t("canvas.tools.toPng.title")
               : tool === "face-mesh"
                 ? t("canvas.tools.faceMesh.title")
-                : t("canvas.tools.title");
+                : tool === "flip-upside-down"
+                  ? t("canvas.tools.flipUpsideDown.title")
+                  : tool === "portrait-style"
+                    ? t("canvas.tools.portraitStyle.title")
+                    : tool === "depth-video"
+                      ? t("canvas.tools.depthVideo.title")
+                      : t("canvas.tools.title");
 
     const closeDrawer = () => {
         onOpenChange(false);
@@ -261,6 +282,68 @@ export function CanvasToolsDrawer({
         }
     };
 
+    const flipUpsideDownOne = async (item: MediaItem): Promise<MediaItem> => {
+        try {
+            const sourceDataUrl = await fileToDataUrl(item.source);
+            const flippedDataUrl = await rotateFlipDataUrl(sourceDataUrl, { rotate: 180 });
+            const result = await dataUrlToPngFile(flippedDataUrl, item.name, "upside-down");
+            if (item.resultPreviewUrl) URL.revokeObjectURL(item.resultPreviewUrl);
+            return {
+                ...item,
+                result,
+                resultPreviewUrl: URL.createObjectURL(result),
+                error: undefined,
+                busy: false,
+            };
+        } catch (error) {
+            return {
+                ...item,
+                error: error instanceof Error ? error.message : String(error),
+                busy: false,
+            };
+        }
+    };
+
+    const openPortraitStyle = async (item: MediaItem) => {
+        try {
+            const dataUrl = await fileToDataUrl(item.source);
+            setPortraitPaint({ dataUrl, name: item.name });
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : String(error));
+        }
+    };
+
+    const openDepthVideo = async (item: MediaItem) => {
+        try {
+            const dataUrl = await fileToDataUrl(item.source);
+            const mediaKind: "image" | "video" = item.source.type.startsWith("video/") ? "video" : "image";
+            setDepthPaint({ dataUrl, name: item.name, mediaKind });
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : String(error));
+        }
+    };
+
+    const addDepthFiles = (files: FileList | File[]) => {
+        const next: MediaItem[] = [];
+        for (const file of Array.from(files)) {
+            const isImage = file.type.startsWith("image/") || /\.(jpe?g|png|webp|gif|bmp|avif|heic|heif)$/i.test(file.name);
+            const isVideo = file.type.startsWith("video/") || /\.(mp4|webm|mov|m4v)$/i.test(file.name);
+            if (!isImage && !isVideo) continue;
+            next.push({
+                id: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2, 8)}`,
+                name: file.name,
+                source: file,
+                previewUrl: URL.createObjectURL(file),
+                sourceBytes: file.size,
+            });
+        }
+        if (!next.length) {
+            message.warning(t("canvas.tools.depthVideo.mediaOnly"));
+            return;
+        }
+        setDepthItems((current) => [...current, ...next]);
+    };
+
     const openFaceMeshPaint = async (item: MediaItem) => {
         try {
             const dataUrl = await fileToDataUrl(item.source);
@@ -316,14 +399,17 @@ export function CanvasToolsDrawer({
         if (ok) message.success(t(doneKey, { count: ok }));
     };
 
-    const downloadOne = (item: MediaItem, mode: "compress" | "png" | "mesh") => {
+
+    const downloadOne = (item: MediaItem, mode: "compress" | "png" | "mesh" | "flip") => {
         if (!item.result) return;
         const filename =
             mode === "png"
                 ? `${baseName(item.name)}.png`
                 : mode === "mesh"
                   ? `${baseName(item.name)}-mesh.png`
-                  : compressedFilename(item.name, item.result.type || item.source.type);
+                  : mode === "flip"
+                    ? `${baseName(item.name)}-upside-down.png`
+                    : compressedFilename(item.name, item.result.type || item.source.type);
         downloadBlob(item.result, filename);
     };
 
@@ -383,28 +469,53 @@ export function CanvasToolsDrawer({
 
                     <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-4">
                 {tool === "home" ? (
-                    <div className="grid gap-1.5">
-                        <ToolCard
-                            theme={theme}
-                            icon={<ImageIcon className="size-4" />}
-                            title={t("canvas.tools.compress.title")}
-                            description={t("canvas.tools.compress.description")}
-                            onClick={() => setTool("image-compress")}
-                        />
-                        <ToolCard
-                            theme={theme}
-                            icon={<FileImage className="size-4" />}
-                            title={t("canvas.tools.toPng.title")}
-                            description={t("canvas.tools.toPng.description")}
-                            onClick={() => setTool("to-png")}
-                        />
-                        <ToolCard
-                            theme={theme}
-                            icon={<ScanFace className="size-4" />}
-                            title={t("canvas.tools.faceMesh.title")}
-                            description={t("canvas.tools.faceMesh.description")}
-                            onClick={() => setTool("face-mesh")}
-                        />
+                    <div className="grid gap-4">
+                        <ToolSection theme={theme} label={t("canvas.tools.sectionLocal")}>
+                            <ToolCard
+                                theme={theme}
+                                icon={<ImageIcon className="size-4" />}
+                                title={t("canvas.tools.compress.title")}
+                                description={t("canvas.tools.compress.description")}
+                                onClick={() => setTool("image-compress")}
+                            />
+                            <ToolCard
+                                theme={theme}
+                                icon={<FileImage className="size-4" />}
+                                title={t("canvas.tools.toPng.title")}
+                                description={t("canvas.tools.toPng.description")}
+                                onClick={() => setTool("to-png")}
+                            />
+                            <ToolCard
+                                theme={theme}
+                                icon={<ScanFace className="size-4" />}
+                                title={t("canvas.tools.faceMesh.title")}
+                                description={t("canvas.tools.faceMesh.description")}
+                                onClick={() => setTool("face-mesh")}
+                            />
+                            <ToolCard
+                                theme={theme}
+                                icon={<FlipVertical2 className="size-4" />}
+                                title={t("canvas.tools.flipUpsideDown.title")}
+                                description={t("canvas.tools.flipUpsideDown.description")}
+                                onClick={() => setTool("flip-upside-down")}
+                            />
+                        </ToolSection>
+                        <ToolSection theme={theme} label={t("canvas.tools.sectionAi")}>
+                            <ToolCard
+                                theme={theme}
+                                icon={<Palette className="size-4" />}
+                                title={t("canvas.tools.portraitStyle.title")}
+                                description={t("canvas.tools.portraitStyle.description")}
+                                onClick={() => setTool("portrait-style")}
+                            />
+                            <ToolCard
+                                theme={theme}
+                                icon={<Clapperboard className="size-4" />}
+                                title={t("canvas.tools.depthVideo.title")}
+                                description={t("canvas.tools.depthVideo.description")}
+                                onClick={() => setTool("depth-video")}
+                            />
+                        </ToolSection>
                     </div>
                 ) : null}
 
@@ -535,6 +646,105 @@ export function CanvasToolsDrawer({
                         sizeDeltaMode="any"
                     />
                 ) : null}
+
+                {tool === "flip-upside-down" ? (
+                    <ToolWorkspace
+                        theme={theme}
+                        items={flipItems}
+                        batchBusy={batchBusy}
+                        inputRef={flipInputRef}
+                        settings={
+                            <Typography.Paragraph className="!mb-0 rounded-xl border p-3.5 !text-xs" style={{ borderColor: theme.toolbar.border, background: theme.toolbar.panel, color: theme.node.muted }}>
+                                {t("canvas.tools.flipUpsideDown.hint")}
+                            </Typography.Paragraph>
+                        }
+                        addLabel={t("canvas.tools.flipUpsideDown.addImages")}
+                        runLabel={t("canvas.tools.flipUpsideDown.run")}
+                        downloadAllLabel={t("canvas.tools.flipUpsideDown.downloadAll")}
+                        clearLabel={t("canvas.tools.compress.clear")}
+                        dropHint={t("canvas.tools.flipUpsideDown.dropHint")}
+                        workingLabel={t("canvas.tools.flipUpsideDown.working")}
+                        downloadLabel={t("canvas.tools.compress.download")}
+                        onAdd={() => flipInputRef.current?.click()}
+                        onRun={() => void runBatch(flipItems, setFlipItems, flipUpsideDownOne, "canvas.tools.flipUpsideDown.done")}
+                        onDownloadAll={() => flipItems.forEach((item) => downloadOne(item, "flip"))}
+                        onClear={() => clearList(flipItems, setFlipItems)}
+                        onRemove={(id) => removeItem(id, flipItems, setFlipItems)}
+                        onDownload={(item) => downloadOne(item, "flip")}
+                        onFiles={(files) => addFiles(files, setFlipItems)}
+                        sizeDeltaMode="any"
+                    />
+                ) : null}
+
+                {tool === "portrait-style" ? (
+                    <ToolWorkspace
+                        theme={theme}
+                        items={portraitItems}
+                        batchBusy={batchBusy}
+                        inputRef={portraitInputRef}
+                        settings={
+                            <Typography.Paragraph className="!mb-0 rounded-xl border p-3.5 !text-xs" style={{ borderColor: theme.toolbar.border, background: theme.toolbar.panel, color: theme.node.muted }}>
+                                {t("canvas.tools.portraitStyle.hint")}
+                            </Typography.Paragraph>
+                        }
+                        addLabel={t("canvas.tools.portraitStyle.addImages")}
+                        runLabel={t("canvas.tools.portraitStyle.run")}
+                        downloadAllLabel={t("canvas.tools.compress.download")}
+                        clearLabel={t("canvas.tools.compress.clear")}
+                        dropHint={t("canvas.tools.portraitStyle.dropHint")}
+                        workingLabel={t("canvas.tools.portraitStyle.working")}
+                        downloadLabel={t("canvas.tools.compress.download")}
+                        itemActionLabel={t("canvas.tools.portraitStyle.convert")}
+                        onItemAction={(item) => void openPortraitStyle(item)}
+                        onAdd={() => portraitInputRef.current?.click()}
+                        onRun={() => {
+                            const pending = portraitItems.find((item) => !item.result) || portraitItems[0];
+                            if (pending) void openPortraitStyle(pending);
+                        }}
+                        onDownloadAll={() => {}}
+                        onClear={() => clearList(portraitItems, setPortraitItems)}
+                        onRemove={(id) => removeItem(id, portraitItems, setPortraitItems)}
+                        onDownload={() => {}}
+                        onFiles={(files) => addFiles(files, setPortraitItems)}
+                        sizeDeltaMode="any"
+                    />
+                ) : null}
+
+                {tool === "depth-video" ? (
+                    <ToolWorkspace
+                        theme={theme}
+                        items={depthItems}
+                        batchBusy={batchBusy}
+                        inputRef={depthInputRef}
+                        settings={
+                            <Typography.Paragraph className="!mb-0 rounded-xl border p-3.5 !text-xs" style={{ borderColor: theme.toolbar.border, background: theme.toolbar.panel, color: theme.node.muted }}>
+                                {t("canvas.tools.depthVideo.hint")}
+                            </Typography.Paragraph>
+                        }
+                        addLabel={t("canvas.tools.depthVideo.addMedia")}
+                        runLabel={t("canvas.tools.depthVideo.run")}
+                        downloadAllLabel={t("canvas.tools.compress.download")}
+                        clearLabel={t("canvas.tools.compress.clear")}
+                        dropHint={t("canvas.tools.depthVideo.dropHint")}
+                        workingLabel={t("canvas.tools.depthVideo.working")}
+                        downloadLabel={t("canvas.tools.compress.download")}
+                        itemActionLabel={t("canvas.tools.depthVideo.convert")}
+                        onItemAction={(item) => void openDepthVideo(item)}
+                        onAdd={() => depthInputRef.current?.click()}
+                        onRun={() => {
+                            const pending = depthItems.find((item) => !item.result) || depthItems[0];
+                            if (pending) void openDepthVideo(pending);
+                        }}
+                        onDownloadAll={() => {}}
+                        onClear={() => clearList(depthItems, setDepthItems)}
+                        onRemove={(id) => removeItem(id, depthItems, setDepthItems)}
+                        onDownload={() => {}}
+                        onFiles={(files) => addDepthFiles(files)}
+                        sizeDeltaMode="any"
+                        accept="image/*,video/*"
+                    />
+                ) : null}
+
                     </div>
                 </div>
             </Drawer>
@@ -550,7 +760,83 @@ export function CanvasToolsDrawer({
                     onConfirm={(result) => void confirmFaceMeshPaint(result)}
                 />
             ) : null}
+
+            {portraitPaint ? (
+                <CanvasNodePortraitStyleDialog
+                    dataUrl={portraitPaint.dataUrl}
+                    open={Boolean(portraitPaint)}
+                    onClose={() => setPortraitPaint(null)}
+                    onConfirm={(payload: CanvasPortraitStyleConfirm) => {
+                        const pending = portraitPaint;
+                        setPortraitPaint(null);
+                        void (async () => {
+                            try {
+                                await onApplyPortraitStyle?.({
+                                    dataUrl: pending.dataUrl,
+                                    fileName: pending.name,
+                                    style: payload.style,
+                                    model: payload.model,
+                                    prompt: payload.prompt,
+                                });
+                                message.success(t("canvas.tools.portraitStyle.started"));
+                                onOpenChange(false);
+                                setTool("home");
+                            } catch (error) {
+                                message.error(error instanceof Error ? error.message : t("canvas.tools.portraitStyle.failed"));
+                            }
+                        })();
+                    }}
+                />
+            ) : null}
+
+            {depthPaint ? (
+                <CanvasNodeDepthVideoDialog
+                    previewUrl={depthPaint.dataUrl}
+                    mediaKind={depthPaint.mediaKind}
+                    open={Boolean(depthPaint)}
+                    onClose={() => setDepthPaint(null)}
+                    onConfirm={(payload: CanvasDepthVideoConfirm) => {
+                        const pending = depthPaint;
+                        setDepthPaint(null);
+                        void (async () => {
+                            try {
+                                await onApplyDepthVideo?.({
+                                    dataUrl: pending.dataUrl,
+                                    mediaKind: pending.mediaKind,
+                                    fileName: pending.name,
+                                    model: payload.model,
+                                    prompt: payload.prompt,
+                                });
+                                message.success(t("canvas.tools.depthVideo.started"));
+                                onOpenChange(false);
+                                setTool("home");
+                            } catch (error) {
+                                message.error(error instanceof Error ? error.message : t("canvas.tools.depthVideo.failed"));
+                            }
+                        })();
+                    }}
+                />
+            ) : null}
         </>
+    );
+}
+
+function ToolSection({
+    theme,
+    label,
+    children,
+}: {
+    theme: (typeof canvasThemes)[keyof typeof canvasThemes];
+    label: string;
+    children: ReactNode;
+}) {
+    return (
+        <div className="grid gap-1.5">
+            <div className="px-0.5 text-[11px] font-medium tracking-wide opacity-55" style={{ color: theme.node.muted }}>
+                {label}
+            </div>
+            {children}
+        </div>
     );
 }
 
@@ -620,6 +906,7 @@ function ToolWorkspace({
     onDownload,
     onFiles,
     sizeDeltaMode,
+    accept = "image/*",
 }: {
     theme: (typeof canvasThemes)[keyof typeof canvasThemes];
     items: MediaItem[];
@@ -643,6 +930,7 @@ function ToolWorkspace({
     onDownload: (item: MediaItem) => void;
     onFiles: (files: FileList) => void;
     sizeDeltaMode: "shrink" | "any";
+    accept?: string;
 }) {
     const { t } = useTranslation();
     const doneCount = useMemo(() => items.filter((item) => item.result).length, [items]);
@@ -668,7 +956,7 @@ function ToolWorkspace({
             <input
                 ref={inputRef}
                 type="file"
-                accept="image/*"
+                accept={accept}
                 multiple
                 className="hidden"
                 onChange={(event) => {

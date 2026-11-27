@@ -33,7 +33,7 @@ import { collectMediaStorageKeys, getMediaBlob } from "@canvas/services/file-sto
 import { readClipboardImage, readClipboardText } from "@canvas/services/clipboard";
 import { canvasWorkspaceDir, isTauri, syncWorkspaceMedia, writeCanvasWorkspace } from "@canvas/services/fs-store";
 import { compressImageBlob } from "@canvas/lib/image-compress";
-import { cropDataUrl, splitDataUrl, upscaleDataUrl } from "@canvas/lib/canvas/canvas-image-data";
+import { cropDataUrl, rotateFlipDataUrl, splitDataUrl, upscaleDataUrl } from "@canvas/lib/canvas/canvas-image-data";
 import { fitNodeSize, imageNodeSizeFromUpload, layoutMultiFilePositions, nodeSizeFromRatio } from "@canvas/lib/canvas/canvas-node-size";
 import {
     erchunImageWireParams,
@@ -56,6 +56,8 @@ import { CanvasNodeMaskEditDialog, type CanvasImageMaskEditPayload } from "@canv
 import { CanvasNodeSplitDialog, type CanvasImageSplitParams } from "@canvas/components/canvas/canvas-node-split-dialog";
 import { CanvasNodeUpscaleDialog, type CanvasImageUpscaleParams } from "@canvas/components/canvas/canvas-node-upscale-dialog";
 import { CanvasNodeFaceMeshDialog } from "@canvas/components/canvas/canvas-node-face-mesh-dialog";
+import { CanvasNodePortraitStyleDialog, type CanvasPortraitStyleConfirm } from "@canvas/components/canvas/canvas-node-portrait-style-dialog";
+import { CanvasNodeDepthVideoDialog, type CanvasDepthVideoConfirm } from "@canvas/components/canvas/canvas-node-depth-video-dialog";
 import { buildNodeGenerationContext, buildNodeGenerationInputs, buildNodeResponseMessages, hydrateNodeGenerationContext, type NodeGenerationInput } from "@canvas/components/canvas/canvas-node-generation";
 import { CanvasNodeHoverToolbar, CanvasNodeInfoModal } from "@canvas/components/canvas/canvas-node-hover-toolbar";
 import { InfiniteCanvas } from "@canvas/components/canvas/infinite-canvas";
@@ -405,6 +407,8 @@ function InfiniteCanvasPage() {
     const [splitNodeId, setSplitNodeId] = useState<string | null>(null);
     const [upscaleNodeId, setUpscaleNodeId] = useState<string | null>(null);
     const [faceMeshNodeId, setFaceMeshNodeId] = useState<string | null>(null);
+    const [portraitStyleNodeId, setPortraitStyleNodeId] = useState<string | null>(null);
+    const [depthVideoNodeId, setDepthVideoNodeId] = useState<string | null>(null);
     const [superResolveNodeId, setSuperResolveNodeId] = useState<string | null>(null);
     const [angleNodeId, setAngleNodeId] = useState<string | null>(null);
     const [previewNodeId, setPreviewNodeId] = useState<string | null>(null);
@@ -873,6 +877,8 @@ function InfiniteCanvasPage() {
     const splitNode = splitNodeId ? nodeById.get(splitNodeId) || null : null;
     const upscaleNode = upscaleNodeId ? nodeById.get(upscaleNodeId) || null : null;
     const faceMeshNode = faceMeshNodeId ? nodeById.get(faceMeshNodeId) || null : null;
+    const portraitStyleNode = portraitStyleNodeId ? nodeById.get(portraitStyleNodeId) || null : null;
+    const depthVideoNode = depthVideoNodeId ? nodeById.get(depthVideoNodeId) || null : null;
     const superResolveNode = superResolveNodeId ? nodeById.get(superResolveNodeId) || null : null;
     const angleNode = angleNodeId ? nodeById.get(angleNodeId) || null : null;
     const previewNode = previewNodeId ? nodeById.get(previewNodeId) || null : null;
@@ -2830,14 +2836,19 @@ function InfiniteCanvasPage() {
     }, []);
 
     const handleGenerateNode = useCallback(
-        async (nodeId: string, mode: CanvasNodeGenerationMode, prompt: string, options?: { skipQuotaConfirm?: boolean }) => {
+        async (nodeId: string, mode: CanvasNodeGenerationMode, prompt: string, options?: { skipQuotaConfirm?: boolean; model?: string }) => {
             if (!tryBeginNodeGeneration(nodeId)) {
                 message.warning(t("canvas.projectPage.nodeBusy"));
                 return;
             }
             try {
             const sourceNode = nodesRef.current.find((node) => node.id === nodeId);
-            const generationConfig = buildGenerationConfig(effectiveConfig, sourceNode, mode);
+            const generationConfig = {
+                ...buildGenerationConfig(effectiveConfig, sourceNode, mode),
+                ...(options?.model ? { model: options.model } : {}),
+                ...(options?.model && mode === "video" ? { videoModel: options.model } : {}),
+                ...(options?.model && mode === "image" ? { imageModel: options.model } : {}),
+            };
             if (!isAiConfigReady(generationConfig, generationConfig.model)) {
                 openConfigDialog(true);
                 return;
@@ -3869,6 +3880,234 @@ function InfiniteCanvasPage() {
         [handleGenerateNode],
     );
 
+    const flipUpsideDownImageNode = useCallback(
+        async (node: CanvasNodeData) => {
+            const hide = message.loading(t("canvas.projectPage.flippingUpsideDown"), 0);
+            try {
+                const source = await imageToDataUrl({
+                    url: node.metadata?.content,
+                    dataUrl: node.metadata?.content,
+                    storageKey: node.metadata?.storageKey,
+                });
+                if (!source) {
+                    message.warning(t("canvas.projectPage.noImageToFlip"));
+                    return;
+                }
+                const flipped = await rotateFlipDataUrl(source, { rotate: 180 });
+                const image = await uploadImage(flipped);
+                const size = fitNodeSize(image.width, image.height);
+                const childId = nanoid();
+                const child: CanvasNodeData = {
+                    id: childId,
+                    type: CanvasNodeType.Image,
+                    title: t("canvas.projectPage.flipUpsideDownResult"),
+                    position: { x: node.position.x + node.width + 96, y: node.position.y },
+                    width: size.width,
+                    height: size.height,
+                    metadata: {
+                        ...imageMetadata(image),
+                        prompt: node.metadata?.prompt,
+                    },
+                };
+                setNodes((prev) => [...prev, child]);
+                setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: node.id, toNodeId: childId }]);
+                setSelectedNodeIds(new Set([childId]));
+                setDialogNodeId(childId);
+                message.success(t("canvas.projectPage.flipUpsideDownSuccess"));
+            } catch (error) {
+                message.error(error instanceof Error ? error.message : t("canvas.projectPage.flipUpsideDownFailed"));
+            } finally {
+                hide();
+            }
+        },
+        [message, t],
+    );
+
+    const applyPortraitStyleNode = useCallback(
+        async (node: CanvasNodeData, payload: CanvasPortraitStyleConfirm) => {
+            if (!node.metadata?.content) return;
+            const generationConfig = {
+                ...buildGenerationConfig(effectiveConfig, node, "image"),
+                model: payload.model,
+                imageModel: payload.model,
+                count: "1",
+            };
+            if (!isAiConfigReady(generationConfig, generationConfig.model)) {
+                openConfigDialog(true);
+                return;
+            }
+            const childId = nanoid();
+            const imageConfig = NODE_DEFAULT_SIZE[CanvasNodeType.Image];
+            const title = t(`canvas.editors.portraitStyle_${payload.style}`);
+            const prompt = payload.prompt;
+            const generationMetadata = buildImageGenerationMetadata("edit", generationConfig, 1, [
+                { id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey },
+            ]);
+            setPortraitStyleNodeId(null);
+            if (!tryBeginNodeGeneration(childId)) return;
+            const loadingSize =
+                nodeSizeFromRatio(generationConfig.size, imageConfig.width, imageConfig.height) || imageConfig;
+            setNodes((prev) => [
+                ...prev,
+                {
+                    id: childId,
+                    type: CanvasNodeType.Image,
+                    title,
+                    position: { x: node.position.x + node.width + 96, y: node.position.y },
+                    width: loadingSize.width,
+                    height: loadingSize.height,
+                    metadata: { prompt, status: NODE_STATUS_LOADING, ...generationMetadata },
+                },
+            ]);
+            setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: node.id, toNodeId: childId }]);
+            setSelectedNodeIds(new Set([childId]));
+            setDialogNodeId(childId);
+            const controller = startGenerationRequest(childId, node.id, childId);
+            try {
+                const image = await requestEdit(
+                    generationConfig,
+                    prompt,
+                    [{ id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey }],
+                    undefined,
+                    {
+                        signal: controller.signal,
+                        generationClientId: childId,
+                        generationSource: "canvas",
+                    },
+                ).then((items) => items[0]);
+                const uploaded = await uploadImage(image.dataUrl);
+                const size = imageNodeSizeFromUpload(
+                    uploaded.width,
+                    uploaded.height,
+                    generationConfig.size,
+                    imageConfig.width,
+                    imageConfig.height,
+                );
+                setNodes((prev) =>
+                    prev.map((item) =>
+                        item.id === childId
+                            ? {
+                                  ...item,
+                                  width: size.width,
+                                  height: size.height,
+                                  position: {
+                                      x: item.position.x + item.width / 2 - size.width / 2,
+                                      y: item.position.y + item.height / 2 - size.height / 2,
+                                  },
+                                  metadata: { ...item.metadata, ...imageMetadata(uploaded), prompt, ...generationMetadata },
+                              }
+                            : item,
+                    ),
+                );
+                syncCanvasImageGenerationAsset({
+                    clientId: childId,
+                    prompt,
+                    model: generationConfig.imageModel || generationConfig.model,
+                    url: uploaded.url,
+                    storageKey: uploaded.storageKey,
+                    mimeType: uploaded.mimeType,
+                    width: uploaded.width,
+                    height: uploaded.height,
+                    bytes: uploaded.bytes,
+                    config: canvasImageAssetConfigFromAi(generationConfig, { mode: "edit", count: 1 }),
+                });
+            } catch (error) {
+                if (isGenerationCanceled(error)) return;
+                const errorDetails = error instanceof Error ? error.message : t("canvas.projectPage.generationFailed");
+                message.error(errorDetails);
+                setNodes((prev) => prev.map((item) => (item.id === childId ? { ...item, metadata: { ...item.metadata, status: NODE_STATUS_ERROR, errorDetails } } : item)));
+            } finally {
+                finishGenerationRequest(childId, controller);
+                markNodeIdle(childId);
+            }
+        },
+        [effectiveConfig, finishGenerationRequest, isAiConfigReady, markNodeIdle, message, openConfigDialog, startGenerationRequest, t, tryBeginNodeGeneration],
+    );
+
+    const applyDepthVideoNode = useCallback(
+        (node: CanvasNodeData, payload: CanvasDepthVideoConfirm) => {
+            if (!node.metadata?.content) return;
+            setDepthVideoNodeId(null);
+            void handleGenerateNode(node.id, "video", payload.prompt, { model: payload.model });
+        },
+        [handleGenerateNode],
+    );
+
+    const applyPortraitStyleFromUpload = useCallback(
+        async (payload: { dataUrl: string; fileName?: string; style: string; model: string; prompt: string }) => {
+            const image = await uploadImage(payload.dataUrl);
+            const nodeSize = fitNodeSize(image.width, image.height);
+            const id = nanoid();
+            const vp = viewportRef.current;
+            const centerX = (size.width / 2 - vp.x) / vp.k;
+            const centerY = (size.height / 2 - vp.y) / vp.k;
+            const sourceNode: CanvasNodeData = {
+                id,
+                type: CanvasNodeType.Image,
+                title: (payload.fileName || "portrait").replace(/\.[^.]+$/, "") || "portrait",
+                position: { x: centerX - nodeSize.width / 2, y: centerY - nodeSize.height / 2 },
+                width: nodeSize.width,
+                height: nodeSize.height,
+                metadata: imageMetadata(image),
+            };
+            nodesRef.current = [...nodesRef.current, sourceNode];
+            setNodes(nodesRef.current);
+            setSelectedNodeIds(new Set([id]));
+            setSelectedConnectionId(null);
+            await applyPortraitStyleNode(sourceNode, {
+                style: payload.style as CanvasPortraitStyleConfirm["style"],
+                model: payload.model,
+                prompt: payload.prompt,
+            });
+        },
+        [applyPortraitStyleNode, size.height, size.width],
+    );
+
+    const applyDepthVideoFromUpload = useCallback(
+        async (payload: { dataUrl: string; mediaKind: "image" | "video"; fileName?: string; model: string; prompt: string }) => {
+            const vp = viewportRef.current;
+            const id = nanoid();
+            let sourceNode: CanvasNodeData;
+            if (payload.mediaKind === "video") {
+                const blob = await fetch(payload.dataUrl).then((response) => response.blob());
+                const file = new File([blob], payload.fileName || "video.mp4", { type: blob.type || "video/mp4" });
+                const video = await uploadMediaFile(file, "video");
+                const nodeSize = fitNodeSize(video.width || 1280, video.height || 720, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
+                const centerX = (size.width / 2 - vp.x) / vp.k;
+                const centerY = (size.height / 2 - vp.y) / vp.k;
+                sourceNode = {
+                    id,
+                    type: CanvasNodeType.Video,
+                    title: (payload.fileName || "video").replace(/\.[^.]+$/, "") || "video",
+                    position: { x: centerX - nodeSize.width / 2, y: centerY - nodeSize.height / 2 },
+                    width: nodeSize.width,
+                    height: nodeSize.height,
+                    metadata: videoMetadata(video),
+                };
+            } else {
+                const image = await uploadImage(payload.dataUrl);
+                const nodeSize = fitNodeSize(image.width, image.height);
+                const centerX = (size.width / 2 - vp.x) / vp.k;
+                const centerY = (size.height / 2 - vp.y) / vp.k;
+                sourceNode = {
+                    id,
+                    type: CanvasNodeType.Image,
+                    title: (payload.fileName || "image").replace(/\.[^.]+$/, "") || "image",
+                    position: { x: centerX - nodeSize.width / 2, y: centerY - nodeSize.height / 2 },
+                    width: nodeSize.width,
+                    height: nodeSize.height,
+                    metadata: imageMetadata(image),
+                };
+            }
+            nodesRef.current = [...nodesRef.current, sourceNode];
+            setNodes(nodesRef.current);
+            setSelectedNodeIds(new Set([id]));
+            setSelectedConnectionId(null);
+            applyDepthVideoNode(sourceNode, { model: payload.model, prompt: payload.prompt });
+        },
+        [applyDepthVideoNode, size.height, size.width],
+    );
+
     const updateScriptStoryboard = useCallback((scriptId: string, rows: StoryboardRow[]) => {
         setNodes((prev) => prev.map((node) => (node.id === scriptId ? { ...node, metadata: { ...node.metadata, storyboard: { rows } } } : node)));
     }, []);
@@ -4877,6 +5116,8 @@ function InfiniteCanvasPage() {
                     onCompress={(node) => void compressImageNode(node)}
                     onSplit={(node) => setSplitNodeId(node.id)}
                     onFaceMesh={(node) => setFaceMeshNodeId(node.id)}
+                    onFlipUpsideDown={(node) => void flipUpsideDownImageNode(node)}
+                    onPortraitStyle={(node) => setPortraitStyleNodeId(node.id)}
                     onUpscale={(node) => setUpscaleNodeId(node.id)}
                     onSuperResolve={(node) => setSuperResolveNodeId(node.id)}
                     onAngle={(node) => setAngleNodeId(node.id)}
@@ -4925,7 +5166,12 @@ function InfiniteCanvasPage() {
 
                 <CanvasZoomControls scale={viewport.k} onScaleChange={setZoomScale} onReset={resetViewport} onFit={() => setViewport(viewportToFitNodes(nodesRef.current, size))} onArrange={arrangeNodes} isMiniMapOpen={isMiniMapOpen} onToggleMiniMap={() => setIsMiniMapOpen((value) => !value)} />
                 <CloudUploadProgress />
-                <CanvasToolsDrawer open={toolsDrawerOpen} onOpenChange={setToolsDrawerOpen} />
+                <CanvasToolsDrawer
+                    open={toolsDrawerOpen}
+                    onOpenChange={setToolsDrawerOpen}
+                    onApplyPortraitStyle={applyPortraitStyleFromUpload}
+                    onApplyDepthVideo={applyDepthVideoFromUpload}
+                />
 
                 {contextMenu ? (
                     <CanvasNodeContextMenu
@@ -4975,6 +5221,25 @@ function InfiniteCanvasPage() {
 
                 {faceMeshNode?.metadata?.content ? (
                     <CanvasNodeFaceMeshDialog dataUrl={faceMeshNode.metadata.content} open={Boolean(faceMeshNode)} onClose={() => setFaceMeshNodeId(null)} onConfirm={(result) => void faceMeshImageNode(faceMeshNode!, result)} />
+                ) : null}
+
+                {portraitStyleNode?.metadata?.content ? (
+                    <CanvasNodePortraitStyleDialog
+                        dataUrl={portraitStyleNode.metadata.content}
+                        open={Boolean(portraitStyleNode)}
+                        onClose={() => setPortraitStyleNodeId(null)}
+                        onConfirm={(payload) => void applyPortraitStyleNode(portraitStyleNode, payload)}
+                    />
+                ) : null}
+
+                {depthVideoNode?.metadata?.content ? (
+                    <CanvasNodeDepthVideoDialog
+                        previewUrl={depthVideoNode.metadata.content}
+                        mediaKind={depthVideoNode.type === CanvasNodeType.Video ? "video" : "image"}
+                        open={Boolean(depthVideoNode)}
+                        onClose={() => setDepthVideoNodeId(null)}
+                        onConfirm={(payload) => applyDepthVideoNode(depthVideoNode, payload)}
+                    />
                 ) : null}
 
                 <Modal title={t("canvas.projectPage.superResolve")} open={Boolean(superResolveNode?.metadata?.content)} centered footer={null} onCancel={() => setSuperResolveNodeId(null)}>

@@ -233,6 +233,27 @@ export async function transformAngleDataUrl(dataUrl: string, params: ImageAngleT
     return exportCanvasPng(canvas);
 }
 
+export async function rotateFlipDataUrl(
+    dataUrl: string,
+    options: { rotate?: 0 | 90 | 180 | 270; flipX?: boolean; flipY?: boolean } = {},
+) {
+    const image = await loadImage(dataUrl);
+    const rotate = options.rotate ?? 0;
+    const flipX = Boolean(options.flipX);
+    const flipY = Boolean(options.flipY);
+    const swap = rotate === 90 || rotate === 270;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, swap ? image.height : image.width);
+    canvas.height = Math.max(1, swap ? image.width : image.height);
+    const context = canvas.getContext("2d");
+    if (!context) return dataUrl;
+    context.translate(canvas.width / 2, canvas.height / 2);
+    context.rotate((rotate * Math.PI) / 180);
+    context.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+    context.drawImage(image, -image.width / 2, -image.height / 2);
+    return exportCanvasPng(canvas);
+}
+
 export async function upscaleDataUrl(dataUrl: string, params: ImageUpscaleParams) {
     const image = await loadImage(dataUrl);
     const { width, height } = resolveUpscaleSize(image.width, image.height, params.targetLongEdge);

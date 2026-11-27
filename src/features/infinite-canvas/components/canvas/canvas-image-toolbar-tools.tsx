@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
-import { Brush, Camera, Copy, FileText, Grid2x2, Lock, LockOpen, Maximize2, ScanFace, Scissors, Sparkles, Upload, ZoomIn, Archive } from "lucide-react";
+import { Brush, Camera, Copy, FileText, FlipVertical2, Grid2x2, Lock, LockOpen, Maximize2, Palette, ScanFace, Scissors, Sparkles, Upload, ZoomIn, Archive } from "lucide-react";
 
 import type { CanvasNodeData } from "@canvas/types/canvas";
 import i18n from "@canvas/i18n";
 
-export type ImageNodeActionToolId = "copyPrompt" | "reversePrompt" | "replace" | "resize" | "maskEdit" | "crop" | "compress" | "split" | "faceMesh" | "upscale" | "superResolve" | "angle" | "view";
+export type ImageNodeActionToolId = "copyPrompt" | "reversePrompt" | "replace" | "resize" | "maskEdit" | "crop" | "compress" | "split" | "faceMesh" | "flipUpsideDown" | "portraitStyle" | "upscale" | "superResolve" | "angle" | "view";
 export type ImageQuickToolId = "info" | "delete" | "saveAsset" | "download" | ImageNodeActionToolId;
 
 export type ImageToolHandlers = {
@@ -15,6 +15,8 @@ export type ImageToolHandlers = {
     onCompress: (node: CanvasNodeData) => void;
     onSplit: (node: CanvasNodeData) => void;
     onFaceMesh: (node: CanvasNodeData) => void;
+    onFlipUpsideDown: (node: CanvasNodeData) => void;
+    onPortraitStyle: (node: CanvasNodeData) => void;
     onUpscale: (node: CanvasNodeData) => void;
     onSuperResolve: (node: CanvasNodeData) => void;
     onAngle: (node: CanvasNodeData) => void;
@@ -115,6 +117,22 @@ export const imageToolDefinitions: ImageToolDefinition[] = [
         title: () => i18n.t("canvas.imageTools.faceMeshTitle"),
         icon: () => <ScanFace className="size-4" />,
         run: (node, handlers) => handlers.onFaceMesh(node),
+    },
+    {
+        id: "flipUpsideDown",
+        defaultVisible: true,
+        label: () => i18n.t("canvas.imageTools.flipUpsideDown"),
+        title: () => i18n.t("canvas.imageTools.flipUpsideDownTitle"),
+        icon: () => <FlipVertical2 className="size-4" />,
+        run: (node, handlers) => handlers.onFlipUpsideDown(node),
+    },
+    {
+        id: "portraitStyle",
+        defaultVisible: true,
+        label: () => i18n.t("canvas.imageTools.portraitStyle"),
+        title: () => i18n.t("canvas.imageTools.portraitStyleTitle"),
+        icon: () => <Palette className="size-4" />,
+        run: (node, handlers) => handlers.onPortraitStyle(node),
     },
     {
         id: "upscale",
