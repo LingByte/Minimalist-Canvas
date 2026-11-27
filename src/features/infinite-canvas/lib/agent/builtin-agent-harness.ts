@@ -3,9 +3,10 @@ import type { NavigateFunction } from "react-router-dom";
 import { toolCallDetail, toolName } from "@canvas/components/agent/agent-event-formatters";
 import { buildBuiltinAgentSystemPrompt } from "@canvas/lib/agent/builtin-agent-context";
 import {
-    BUILTIN_AGENT_TOOLS,
+    builtinAgentTools,
     executeBuiltinAgentTool,
     type BuiltinAgentToolCall,
+    type BuiltinAgentToolDefinition,
     type BuiltinAgentToolResult,
 } from "@canvas/lib/agent/builtin-agent-tools";
 import {
@@ -60,6 +61,8 @@ export async function runBuiltinAgentHarness(options: {
     ];
 
     let finalText = "";
+    // Rebuild each turn so shipped/user skills land in use_skill after store.load().
+    const tools = () => builtinAgentTools(true) as BuiltinAgentToolDefinition[];
     for (let round = 0; round < BUILTIN_AGENT_MAX_TOOL_ROUNDS; round += 1) {
         if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
         messages[0] = { role: "system", content: buildBuiltinAgentSystemPrompt(liveSnapshot) };
@@ -71,7 +74,7 @@ export async function runBuiltinAgentHarness(options: {
             turn = await requestBuiltinAgentChatTurnWithRetry(
                 config,
                 messages,
-                BUILTIN_AGENT_TOOLS,
+                tools(),
                 (text) => {
                     if (text.trim()) handlers.onAssistantDelta(assistantId, text);
                 },
@@ -167,14 +170,30 @@ function serializeToolResult(result: BuiltinAgentToolResult) {
         typeof result.result === "object" &&
         typeof (result.result as { text?: unknown }).text === "string"
     ) {
+        const payload = result.result as {
+            text: string;
+            found?: boolean;
+            query?: string;
+            mode?: string;
+            entry?: { title?: string };
+            hits?: Array<{ title?: string; tags?: string; usage?: string }>;
+        };
         return {
             ok: result.ok,
             name: result.name,
             summary: result.summary,
-            text: (result.result as { text: string }).text,
-            found: Boolean((result.result as { found?: boolean }).found),
-            query: (result.result as { query?: string }).query || "",
-            title: (result.result as { entry?: { title?: string } }).entry?.title || "",
+            text: payload.text,
+            found: Boolean(payload.found),
+            mode: payload.mode || "lookup",
+            query: payload.query || "",
+            title: payload.entry?.title || "",
+            hits: Array.isArray(payload.hits)
+                ? payload.hits.slice(0, 12).map((hit) => ({
+                      title: hit.title || "",
+                      tags: hit.tags || "",
+                      usage: hit.usage || "",
+                  }))
+                : undefined,
         };
     }
     return {
@@ -188,8 +207,22 @@ function serializeToolResult(result: BuiltinAgentToolResult) {
 function formatBuiltinToolOutput(name: string, result: BuiltinAgentToolResult) {
     if (!result.ok) return result.summary || "failed";
     if (name === "search_meme_wiki" && result.result && typeof result.result === "object") {
-        const hit = result.result as { text?: string; found?: boolean; query?: string; entry?: { title?: string } };
+        const hit = result.result as {
+            text?: string;
+            found?: boolean;
+            mode?: string;
+            query?: string;
+            entry?: { title?: string };
+            hits?: Array<{ title?: string }>;
+        };
         if (typeof hit.text === "string" && hit.text.trim()) return hit.text.trim().slice(0, 2400);
+        if (Array.isArray(hit.hits) && hit.hits.length) {
+            return hit.hits
+                .slice(0, 8)
+                .map((item) => item.title)
+                .filter(Boolean)
+                .join("、");
+        }
         return result.summary;
     }
     if (name === "canvas_get_state" || name === "canvas_get_selection") {

@@ -126,11 +126,18 @@ export function builtinAgentTools(hasCanvas: boolean): ResponseFunctionTool[] {
             function: {
                 name: "search_meme_wiki",
                 description:
-                    "Look up Chinese internet meme / slang / abbreviation meanings from the local meme wiki (~6800 entries). Use when a term looks like a meme or slang and you are not sure. Prefer this over guessing.",
+                    "Local Chinese meme wiki (~6800 entries). mode=lookup (default): one entry by name/alias. mode=search: ranked multi-hit cards for a keyword. mode=pack: theme pack for storyboards (校园/职场/抽象/短视频…). For meme short dramas: pack/search first, then write Script rows that actually 接梗.",
                 parameters: {
                     type: "object",
                     properties: {
-                        query: { type: "string", description: "Meme name, slang, or abbreviation to look up" },
+                        query: { type: "string", description: "Meme name, slang, keyword, or theme (for pack)" },
+                        mode: {
+                            type: "string",
+                            description: "lookup | search | pack",
+                            enum: ["lookup", "search", "pack"],
+                        },
+                        limit: { type: "number", description: "Max hits for search/pack (1-12, default 6)" },
+                        tags: { type: "string", description: "Optional extra tag filters for pack, comma-separated" },
                     },
                     required: ["query"],
                 },
@@ -289,7 +296,12 @@ export async function runBuiltinAgentTool(
             return { ok: true, skill: skill.name, instructions: skill.instructions };
         }
         case "search_meme_wiki": {
-            return searchMemeWiki(String(args.query || ""));
+            return searchMemeWiki({
+                query: String(args.query || ""),
+                mode: typeof args.mode === "string" ? args.mode : undefined,
+                limit: args.limit == null ? undefined : Number(args.limit),
+                tags: typeof args.tags === "string" ? args.tags : undefined,
+            });
         }
         case "canvas_get_state": {
             const snapshot = canvasContext?.snapshot;
@@ -470,7 +482,26 @@ export async function executeBuiltinAgentTool(
 
 function summarizeBuiltinToolResult(name: string, result: unknown) {
     if (name === "search_meme_wiki" && result && typeof result === "object") {
-        const hit = result as { ok?: boolean; found?: boolean; query?: string; entry?: { title?: string }; text?: string };
+        const hit = result as {
+            ok?: boolean;
+            found?: boolean;
+            mode?: string;
+            query?: string;
+            entry?: { title?: string };
+            hits?: Array<{ title?: string }>;
+            text?: string;
+        };
+        const mode = String(hit.mode || "lookup");
+        if ((mode === "search" || mode === "pack") && Array.isArray(hit.hits)) {
+            if (hit.hits.length) {
+                return i18n.t("agent.eventMore.memePack", {
+                    count: hit.hits.length,
+                    query: hit.query || "",
+                    defaultValue: `梗素材 ${hit.hits.length} 条 · ${hit.query || mode}`,
+                });
+            }
+            return i18n.t("agent.eventMore.memeMissing", { query: hit.query || "", defaultValue: `未找到「${hit.query || ""}」相关梗` });
+        }
         if (hit.found && hit.entry?.title) {
             return i18n.t("agent.eventMore.memeFound", { title: hit.entry.title, defaultValue: `查到「${hit.entry.title}」` });
         }

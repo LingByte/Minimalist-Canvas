@@ -368,7 +368,15 @@ export function toolCallDetail(name: string, input: unknown, status: string, err
 function toolInputRows(name: string, input: unknown) {
     input = parseToolArguments(input);
     if (name === "site_navigate") return [detailRow(tr("targetPage"), routeName(stringText(objectField(input, "path")) || "/"))].flatMap((row) => (row ? [row] : []));
-    if (name === "prompts_search" || name === "search_meme_wiki") return [detailRow(tr("searchContent"), objectField(input, "query") || objectField(input, "keyword"))].flatMap((row) => (row ? [row] : []));
+    if (name === "prompts_search" || name === "search_meme_wiki") {
+        return [
+            detailRow(tr("searchContent"), objectField(input, "query") || objectField(input, "keyword")),
+            name === "search_meme_wiki" ? detailRow(tr("memeMode", { defaultValue: "模式" }), objectField(input, "mode") || "lookup") : null,
+            name === "search_meme_wiki" && objectField(input, "limit") != null
+                ? detailRow(tr("memeLimit", { defaultValue: "条数" }), objectField(input, "limit"))
+                : null,
+        ].flatMap((row) => (row ? [row] : []));
+    }
     if (name === "canvas_create_text_node") return [detailRow(tr("textContent"), objectField(input, "text"))].flatMap((row) => (row ? [row] : []));
     if (name === "canvas_apply_ops") return [detailRow(tr("operationContent"), summarizeCanvasAgentOps((objectField(input, "ops") as CanvasAgentOp[] | undefined) || []))].flatMap((row) => (row ? [row] : []));
     if (name === "canvas_create_attachment_nodes") return [detailRow(tr("imageCount"), Array.isArray(objectField(input, "attachmentIds")) ? (objectField(input, "attachmentIds") as unknown[]).length : 0)].flatMap((row) => (row ? [row] : []));

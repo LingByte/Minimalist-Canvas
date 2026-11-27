@@ -79,6 +79,8 @@ describe("script harness prompt/snapshot", () => {
         expect(prompt).toContain("script");
         expect(prompt.toLowerCase()).toContain("storyboard");
         expect(prompt).toContain("至简未来AI");
+        expect(prompt).toContain("mode=pack");
+        expect(prompt).toContain("meme-storyboard");
     });
 
     it("compacts storyboard rows into the snapshot summary", () => {
