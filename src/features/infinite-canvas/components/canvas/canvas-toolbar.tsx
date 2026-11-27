@@ -1,7 +1,7 @@
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode, RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Button, Segmented, Switch } from "antd";
-import { BookOpen, CircleDot, Clapperboard, FolderOpen, Grid2x2, Group, Hand, History, Image as ImageIcon, Info, ListVideo, Moon, MousePointer2, Music2, Palette, Puzzle, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Video, Wand2, WandSparkles } from "lucide-react";
+import { Blocks, BookOpen, CircleDot, Clapperboard, FolderOpen, Grid2x2, Group, Hand, History, Image as ImageIcon, Info, ListVideo, Moon, MousePointer2, Music2, Palette, Puzzle, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Video, Wrench } from "lucide-react";
 
 import { useTheme } from "@/context/theme-provider";
 
@@ -121,7 +121,7 @@ export function CanvasToolbar({
     return (
         <div
             ref={rootRef}
-            className="pointer-events-none absolute bottom-3 left-2 right-2 z-50 flex justify-center sm:bottom-5 sm:left-4 sm:right-4"
+            className="pointer-events-none absolute bottom-3 left-[13.75rem] right-2 z-50 flex justify-center sm:bottom-5 sm:left-72 sm:right-4"
         >
             {tip ? <DockTip label={tip} x={tipX} theme={theme} /> : null}
             <div ref={wrapRef} className="thin-scrollbar pointer-events-auto flex h-12 max-w-full items-center gap-1 overflow-x-auto rounded-xl border px-1.5 shadow-lg backdrop-blur sm:h-14 sm:px-2 [&>*]:shrink-0" style={dockStyle}>
@@ -189,7 +189,7 @@ export function CanvasToolbar({
                 ) : null}
                 {onOpenSkills ? (
                     <ToolbarButton id="tool-skills" label={t("canvas.toolbar.skills")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onOpenSkills}>
-                        <WandSparkles className="size-4.5" />
+                        <Blocks className="size-4.5" />
                     </ToolbarButton>
                 ) : null}
                 {onOpenLogs ? (
@@ -234,7 +234,7 @@ export function CanvasToolbar({
                         onClick={() => onToolsOpenChange(!toolsOpen)}
                         dataTour="canvas-tools-fab"
                     >
-                        <Wand2 className="size-4.5" />
+                        <Wrench className="size-4.5" />
                     </ToolbarButton>
                 ) : null}
                 <Divider theme={theme} />

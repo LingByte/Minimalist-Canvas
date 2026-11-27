@@ -125,7 +125,7 @@ export default function SkillsPage() {
                     </div>
                     <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">{t("skillsLibrary.subtitleShort")}</p>
 
-                    <div className="mt-5">
+                    <div className="mt-4">
                         <Upload.Dragger
                             multiple={false}
                             showUploadList={false}
@@ -135,22 +135,19 @@ export default function SkillsPage() {
                                 void uploadZip(file);
                                 return false;
                             }}
-                            className="!rounded-2xl"
+                            className="!rounded-xl [&_.ant-upload-drag]:!border-stone-300/80 [&_.ant-upload-drag]:!bg-transparent [&_.ant-upload-drag]:!px-3 [&_.ant-upload-drag]:!py-2 dark:[&_.ant-upload-drag]:!border-stone-700"
                         >
-                            <div className="flex flex-col items-center gap-2 px-4 py-7 sm:flex-row sm:justify-center sm:gap-4 sm:py-6">
-                                <span className="grid size-11 place-items-center rounded-xl bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-200">
-                                    <FileArchive className="size-5" />
-                                </span>
-                                <div className="text-center sm:text-left">
-                                    <div className="text-sm font-medium text-stone-800 dark:text-stone-100">
-                                        {uploading ? t("skillsLibrary.uploading") : t("skillsLibrary.dropZip")}
+                            <div className="flex items-center justify-between gap-3 px-1 py-0.5">
+                                <div className="flex min-w-0 items-center gap-2 text-left">
+                                    <FileArchive className="size-4 shrink-0 text-stone-500" />
+                                    <div className="min-w-0 truncate text-sm text-stone-700 dark:text-stone-200">
+                                        {uploading ? t("skillsLibrary.uploading") : t("skillsLibrary.dropZipCompact")}
                                     </div>
-                                    <div className="mt-0.5 text-xs text-stone-500 dark:text-stone-400">{t("skillsLibrary.dropZipHint")}</div>
                                 </div>
                                 <Button
+                                    size="small"
                                     type="primary"
                                     loading={uploading}
-                                    className="!mt-1 sm:!mt-0"
                                     icon={<FileArchive className="size-3.5" />}
                                     onClick={(event) => {
                                         event.stopPropagation();

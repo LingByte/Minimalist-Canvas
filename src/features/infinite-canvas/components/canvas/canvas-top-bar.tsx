@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Check, ChevronDown, CloudUpload, Download, FolderOpen, History, Home, Images, Layers3, Plus, Redo2, Trash2, Undo2, Upload } from "lucide-react";
+import { Bot, Check, ChevronDown, CloudUpload, Download, FolderOpen, History, Home, Images, Plus, Redo2, Trash2, Undo2, Upload } from "lucide-react";
 import { Button, Dropdown, Tooltip } from "antd";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -8,9 +8,7 @@ import { CanvasVersionHistoryDrawer } from "@canvas/components/canvas/canvas-ver
 import { UserStatusActions } from "@canvas/components/layout/user-status-actions";
 import { useCanvasHost } from "@canvas/integration/canvas-host-context";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
-import { cn } from "@canvas/lib/utils";
 import { useCanvasStore, type CanvasProject } from "@canvas/stores/canvas/use-canvas-store";
-import { useCanvasSidePanelStore } from "@canvas/stores/use-canvas-side-panel-store";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 
 export function CanvasTopBar({
@@ -74,8 +72,6 @@ export function CanvasTopBar({
     const titleRef = useRef<HTMLDivElement>(null);
     const [versionsOpen, setVersionsOpen] = useState(false);
     const projects = useCanvasStore((state) => state.projects);
-    const sidePanelOpen = useCanvasSidePanelStore((state) => state.panelOpen);
-    const toggleSidePanel = useCanvasSidePanelStore((state) => state.togglePanel);
     const saveLabel = saveSaving ? t("canvas.cloudVersion.uploading") : saveDirty ? t("canvas.cloudVersion.upload") : t("canvas.cloudVersion.uploaded");
     const saveHint = saveDirty ? t("canvas.cloudVersion.hintDirty") : t("canvas.cloudVersion.hint");
     const chipStyle = {
@@ -214,22 +210,6 @@ export function CanvasTopBar({
                                 <ChevronDown className="size-3.5 opacity-55" />
                             </button>
                         </Dropdown>
-                    </div>
-
-                    <div className="flex h-11 items-center gap-0.5 rounded-lg border px-1 shadow-lg backdrop-blur" style={chipStyle}>
-                        <Tooltip title={t("canvas.sidePanel.elements")}>
-                            <button
-                                type="button"
-                                onClick={toggleSidePanel}
-                                className={cn("grid size-9 place-items-center rounded-md transition", !sidePanelOpen && "hover:bg-black/5 dark:hover:bg-white/10")}
-                                style={sidePanelOpen ? activeBtn : undefined}
-                                aria-label={t("canvas.sidePanel.elements")}
-                                aria-pressed={sidePanelOpen}
-                                data-tour="canvas-elements-button"
-                            >
-                                <Layers3 className="size-4" />
-                            </button>
-                        </Tooltip>
                     </div>
                 </div>
 

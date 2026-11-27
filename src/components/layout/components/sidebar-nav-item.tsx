@@ -38,9 +38,9 @@ export const SIDEBAR_NAV_PILL_LAYOUT_ID = 'desktop-sidebar-nav-pill'
 
 const pillTransition = {
   type: 'spring' as const,
-  stiffness: 480,
-  damping: 36,
-  mass: 0.5,
+  stiffness: 380,
+  damping: 32,
+  mass: 0.7,
 }
 
 type SidebarNavItemProps = {
@@ -88,8 +88,9 @@ export function SidebarNavItem({
               <motion.span
                 layoutId={layoutId}
                 aria-hidden
-                className='pointer-events-none absolute inset-0 z-0 rounded-[0.7rem] bg-stone-900 dark:bg-stone-100'
+                className='pointer-events-none absolute inset-0 z-0 rounded-[0.7rem] bg-stone-900 shadow-sm dark:bg-stone-100'
                 transition={pillTransition}
+                initial={false}
               />
             ) : null}
             {active && shouldReduce ? (
