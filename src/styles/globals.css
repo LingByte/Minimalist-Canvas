@@ -609,269 +609,366 @@
     font-size: 0.75rem;
 }
 
-/* Homepage header over video + tile field: force light chrome for contrast */
-.aeris-site-header {
-  --foreground: #f5f4f1;
-  --muted-foreground: rgb(245 244 241 / 0.82);
-  --background: rgb(255 255 255 / 0.16);
-  --muted: rgb(255 255 255 / 0.12);
-  --border: rgb(255 255 255 / 0.2);
-  --accent: rgb(255 255 255 / 0.1);
-  color: #f5f4f1;
-}
-
-.aeris-site-header nav {
-  border-color: rgb(255 255 255 / 0.18) !important;
-  background: rgb(255 255 255 / 0.1) !important;
-}
-
-.aeris-site-header nav a {
-  color: rgb(245 244 241 / 0.82) !important;
-}
-
-.aeris-site-header nav a:hover {
-  color: #fff !important;
-}
-
-.aeris-site-header nav a > span.absolute {
-  background: rgb(255 255 255 / 0.2) !important;
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14) !important;
-}
-
-.aeris-site-header nav a.bg-foreground,
-.aeris-site-header a.bg-foreground {
-  background: #f5f4f1 !important;
-  color: #111216 !important;
-}
-
-.aeris-site-header button,
-.aeris-site-header .ant-btn {
-  color: rgb(245 244 241 / 0.88) !important;
-}
-
-.aeris-site-header button:hover,
-.aeris-site-header .ant-btn:hover {
-  color: #fff !important;
-  background: rgb(255 255 255 / 0.1) !important;
-}
-
-.aeris-site-header [class*='bg-border'],
-.aeris-site-header .mx-0\.5 {
-  background-color: rgb(255 255 255 / 0.28) !important;
-}
-
-/* Aeris tile-field homepage with looping video underlay */
+/* Landing — glow + scatter + equation + product fan */
 .aeris-landing {
+  --aeris-void: #f4f5f7;
+  --aeris-ink: #18181b;
+  --aeris-ink-muted: #5b616b;
+  --aeris-ink-inverse: #fafafa;
+  --aeris-shot-shadow: 0 24px 60px #18181b22;
   position: relative;
   width: 100%;
   min-height: 100%;
   height: 100%;
   overflow: hidden;
-  background: #0a0b0d;
-  color: #131416;
+  isolation: isolate;
+  background: var(--aeris-void);
+  color: var(--aeris-ink);
   font-family: var(--font-body);
+  transition: opacity 0.35s ease, transform 0.35s ease;
 }
 
-.aeris-media {
+.aeris-landing.is-leaving {
+  opacity: 0;
+  transform: scale(1.012);
+}
+
+.aeris-glow {
+  pointer-events: none;
+  position: absolute;
+  inset: 0 auto 0 50%;
+  z-index: 0;
+  width: 100vw;
+  transform: translateX(-50%);
+  background: radial-gradient(
+    ellipse 70% 58% at 50% 52%,
+    rgb(56 132 214 / 0.58) 0%,
+    rgb(56 132 214 / 0.22) 38%,
+    transparent 70%
+  );
+  animation: aeris-glow-breathe 9s ease-in-out infinite;
+}
+
+.aeris-scatter {
+  pointer-events: none;
   position: absolute;
   inset: 0;
   z-index: 0;
-  pointer-events: none;
+  overflow: hidden;
+  color: var(--aeris-ink);
 }
 
-.aeris-video {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.45s ease;
-  background: #0a0b0d;
-}
-
-.aeris-video.is-ready {
-  opacity: 0.92;
-}
-
-.aeris-veil {
+.aeris-scatter-mark {
   position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(
-      180deg,
-      rgb(8 10 14 / 0.42) 0%,
-      rgb(8 10 14 / 0.12) 38%,
-      rgb(8 10 14 / 0.08) 58%,
-      rgb(8 10 14 / 0.55) 100%
-    );
-  pointer-events: none;
+  display: grid;
+  place-items: center;
 }
 
-.aeris-canvas {
-  position: absolute;
-  inset: 0;
+.aeris-intro {
+  position: relative;
   z-index: 1;
-  pointer-events: auto;
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 48px 16px 0;
 }
 
-.aeris-canvas > div,
-.aeris-canvas canvas {
-  display: block;
-  width: 100% !important;
-  height: 100% !important;
-}
-
-.aeris-copy {
-  position: absolute;
-  inset: 0;
+.aeris-intro-hero {
+  position: relative;
   z-index: 2;
+  display: flex;
+  width: min(840px, 100%);
+  flex-direction: column;
+  align-items: center;
+  margin: 0 auto;
+  padding-top: clamp(12px, 4vh, 40px);
+  text-align: center;
+}
+
+.aeris-intro-copy {
+  max-width: 840px;
+}
+
+.aeris-intro-copy h1 {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
-  gap: 1.75rem;
-  padding: 0 1.5rem 16vh;
-  text-align: center;
-  pointer-events: none;
-  transition: opacity 0.35s ease;
-}
-
-.aeris-copy.is-falling {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.aeris-copy > * {
-  pointer-events: none;
-}
-
-.aeris-copy .aeris-actions {
-  pointer-events: auto;
-}
-
-.aeris-hero {
-  max-width: 36rem;
-  color: #f4f6f8;
-}
-
-.aeris-hero-eyebrow {
   margin: 0;
-  font-size: 0.72rem;
+  color: var(--aeris-ink);
+  font-family: "Lora Variable", "Lora", "Noto Serif SC", "Songti SC", Georgia, serif;
+  font-size: clamp(2.5rem, 5.4vw, 3.75rem);
   font-weight: 600;
-  letter-spacing: 0.28em;
-  text-transform: uppercase;
-  color: rgb(186 230 253 / 0.88);
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+  text-wrap: balance;
 }
 
-.aeris-hero-title {
-  margin: 0.7rem 0 0;
-  font-family: var(--font-display, var(--font-body));
-  font-size: clamp(2.1rem, 4.6vw, 3.35rem);
-  font-weight: 700;
-  line-height: 1.08;
-  letter-spacing: -0.02em;
-  color: #ffffff;
-  text-shadow: 0 10px 36px rgb(0 0 0 / 0.35);
+.aeris-intro-copy h1 span + span {
+  margin-top: 10px;
 }
 
-.aeris-hero-tagline {
-  margin: 0.85rem 0 0;
-  font-size: clamp(0.98rem, 1.6vw, 1.15rem);
+.aeris-intro-copy > p {
+  max-width: 42rem;
+  margin: 20px auto 0;
+  color: var(--aeris-ink-muted);
+  font-size: clamp(1.05rem, 1.6vw, 1.25rem);
   font-weight: 500;
   line-height: 1.45;
-  color: rgb(241 245 249 / 0.92);
 }
 
-.aeris-hero-subtitle {
-  margin: 0.55rem 0 0;
-  font-size: 0.92rem;
-  line-height: 1.55;
-  color: rgb(203 213 225 / 0.82);
-}
-
-.aeris-actions {
+.aeris-eq-line {
   display: flex;
+  max-width: 56rem;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 0.75rem;
-  margin-top: 0;
+  gap: 8px;
+  margin: 24px auto 0;
+  color: var(--aeris-ink);
+  font-size: 1.125rem;
+  font-weight: 500;
+}
+
+@media (min-width: 768px) {
+  .aeris-eq-line {
+    font-size: 1.25rem;
+  }
+}
+
+.aeris-eq-brand {
+  font-weight: 650;
+  font-family: "Lora Variable", "Lora", "Noto Serif SC", "Songti SC", Georgia, serif;
+}
+
+.aeris-eq-op {
+  color: var(--aeris-ink-muted);
+}
+
+.aeris-eq-slot {
+  position: relative;
+  display: inline-flex;
+  height: 1.35em;
+  align-items: center;
+  overflow: hidden;
+  transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.aeris-eq-slot-measure {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  visibility: hidden;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.aeris-eq-slot-in {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--aeris-ink);
+  font-weight: 600;
+  white-space: nowrap;
+  animation: aeris-eq-slot-in 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.aeris-eq-glyph {
+  width: 1em;
+  height: 1em;
+  flex: none;
+}
+
+@keyframes aeris-eq-slot-in {
+  from {
+    opacity: 0;
+    transform: translateY(45%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.aeris-actions {
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 32px;
 }
 
 .aeris-enter {
   display: inline-flex;
+  height: 40px;
   align-items: center;
   justify-content: center;
-  min-height: 3.1rem;
-  padding: 0 2rem;
-  border: 1px solid rgb(56 189 248 / 0.45);
-  border-radius: 999px;
-  color: #ffffff;
-  background: linear-gradient(180deg, rgb(14 165 233 / 0.95), rgb(2 132 199 / 0.98));
-  box-shadow:
-    0 10px 28px -14px rgb(14 165 233 / 0.65),
-    inset 0 1px 0 rgb(255 255 255 / 0.18);
-  font-size: 0.98rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-decoration: none;
+  border: 0;
+  border-radius: 0.875rem;
+  padding: 0 20px;
+  color: var(--aeris-ink-inverse);
+  background: var(--aeris-ink);
+  font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
-  transition:
-    opacity 200ms ease,
-    transform 200ms ease,
-    box-shadow 200ms ease,
-    border-color 200ms ease;
-}
-
-.aeris-enter--ghost {
-  color: #e2e8f0;
-  background: rgb(15 23 42 / 0.42);
-  border-color: rgb(148 163 184 / 0.35);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 10px 28px -16px rgb(0 0 0 / 0.45);
+  transition: filter 160ms ease, transform 160ms ease, opacity 160ms ease;
 }
 
 .aeris-enter:hover:not(:disabled),
 .aeris-enter:focus-visible:not(:disabled) {
-  opacity: 0.96;
-  transform: translateY(-2px);
-  box-shadow:
-    0 14px 32px -12px rgb(14 165 233 / 0.55),
-    inset 0 1px 0 rgb(255 255 255 / 0.2);
-}
-
-.aeris-enter--ghost:hover:not(:disabled),
-.aeris-enter--ghost:focus-visible:not(:disabled) {
-  border-color: rgb(125 211 252 / 0.5);
-  background: rgb(15 23 42 / 0.55);
+  filter: brightness(1.08);
+  transform: translateY(-1px);
 }
 
 .aeris-enter:disabled {
+  opacity: 0.5;
   cursor: default;
-  opacity: 0.55;
+}
+
+.aeris-product-stack {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 100%;
+  flex: 1 1 auto;
+  align-items: flex-end;
+  justify-content: center;
+  min-height: 0;
+  margin: 8px auto 0;
+  overflow: hidden;
+  padding: 12px 8px 0;
+  container-type: size;
+}
+
+.aeris-product-stage {
+  position: relative;
+  aspect-ratio: 7 / 4;
+  width: min(100%, 1100px, calc(100cqh * 7 / 4));
+  height: auto;
+}
+
+.aeris-product-shot {
+  position: absolute;
+  left: 14%;
+  top: 9%;
+  width: 72%;
+  height: 82%;
+  transform-origin: 50% 90%;
+  transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.aeris-product-shot-0 {
+  z-index: 1;
+  transform: translate(-8%, 8%) rotate(-7deg);
+}
+
+.aeris-product-shot-1 {
+  z-index: 3;
+  transform: translate(-4%, 4%) rotate(-3.5deg);
+}
+
+.aeris-product-shot-2 {
+  z-index: 5;
+  transform: translate(0, 0) rotate(0);
+}
+
+.aeris-product-shot-3 {
+  z-index: 3;
+  transform: translate(4%, 4%) rotate(3.5deg);
+}
+
+.aeris-product-shot-4 {
+  z-index: 1;
+  transform: translate(8%, 8%) rotate(7deg);
+}
+
+.aeris-product-stack:hover .aeris-product-shot-0 {
+  transform: translate(-48%, 16%) rotate(-22deg);
+}
+
+.aeris-product-stack:hover .aeris-product-shot-1 {
+  transform: translate(-26%, 8%) rotate(-11deg);
+}
+
+.aeris-product-stack:hover .aeris-product-shot-2 {
+  transform: translate(0, -6%) rotate(0) scale(1.03);
+}
+
+.aeris-product-stack:hover .aeris-product-shot-3 {
+  transform: translate(26%, 8%) rotate(11deg);
+}
+
+.aeris-product-stack:hover .aeris-product-shot-4 {
+  transform: translate(48%, 16%) rotate(22deg);
+}
+
+.aeris-product-frame {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 0.875rem;
+  background: transparent;
+  box-shadow: var(--aeris-shot-shadow);
+}
+
+.aeris-product-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@keyframes aeris-glow-breathe {
+  0%,
+  100% {
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aeris-glow,
+  .aeris-eq-slot-in {
+    animation: none;
+  }
+
+  .aeris-product-shot,
+  .aeris-eq-slot,
+  .aeris-landing {
+    transition: none;
+  }
+
+  .aeris-product-stack:hover .aeris-product-shot {
+    transform: none;
+  }
 }
 
 @media (max-width: 767px) {
-  .aeris-copy {
-    gap: 1.35rem;
-    padding-bottom: 12vh;
+  .aeris-intro {
+    padding-top: 40px;
   }
 
-  .aeris-hero-eyebrow {
-    letter-spacing: 0.2em;
+  .aeris-intro-copy h1 {
+    font-size: clamp(2rem, 8vw, 2.6rem);
   }
 
-  .aeris-actions {
-    flex-direction: column;
-    width: min(100%, 17.5rem);
-  }
-
-  .aeris-enter {
-    width: 100%;
-    padding: 0 1.35rem;
+  .aeris-eq-line {
     font-size: 0.95rem;
+    gap: 6px;
+  }
+
+  .aeris-product-shot {
+    left: 10%;
+    width: 80%;
   }
 }
 

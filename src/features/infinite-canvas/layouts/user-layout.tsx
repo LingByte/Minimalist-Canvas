@@ -7,11 +7,9 @@ import { CanvasToolsSidebar } from "@canvas/components/layout/canvas-tools-sideb
 import { navigationTools, navigationToolActive } from "@canvas/constant/navigation-tools";
 import { useMcpBridge } from "@canvas/hooks/use-mcp-bridge";
 import { scheduleAutoUpdateCheck } from "@canvas/services/app-updater";
-import { PublicHeader } from "@/components/layout/components/public-header";
-import { DEFAULT_SYSTEM_NAME } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
-/** Marketing / landing — top header with logo, no sidebar. */
+/** Marketing / landing — no chrome; brand lives in the page itself. */
 function isLandingPath(pathname: string) {
     return pathname === "/";
 }
@@ -30,9 +28,6 @@ function isCanvasToolsPath(pathname: string) {
     return navigationTools.some((tool) => navigationToolActive(tool.slug, slug));
 }
 
-const LANDING_HEADER_CLASS =
-    "aeris-site-header fixed inset-x-0 top-0 border-0 bg-transparent shadow-none backdrop-blur-none supports-[backdrop-filter]:bg-transparent before:opacity-0";
-
 export default function UserLayout({ children }: { children: ReactNode }) {
     useMcpBridge();
     useEffect(() => {
@@ -44,27 +39,18 @@ export default function UserLayout({ children }: { children: ReactNode }) {
     const isCanvasTools = isCanvasToolsPath(pathname);
 
     const showCanvasToolsSidebar = isCanvasTools;
-    const showLandingHeader = isLanding;
 
     return (
         <div
             className={cn(
                 "flex h-dvh overflow-hidden bg-background text-foreground",
-                isLanding && "dark bg-transparent",
+                isLanding && "bg-transparent",
                 isCanvasTools && "flex-col md:flex-row",
             )}
         >
             {showCanvasToolsSidebar ? <CanvasToolsSidebar /> : null}
             <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
-                {showLandingHeader ? (
-                    <PublicHeader
-                        className={LANDING_HEADER_CLASS}
-                        showThemeSwitch={false}
-                        showAuthButtons={false}
-                        siteName={DEFAULT_SYSTEM_NAME}
-                    />
-                ) : null}
-                {!showCanvasToolsSidebar ? <AppTopNav /> : null}
+                {!showCanvasToolsSidebar && !isLanding ? <AppTopNav /> : null}
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
             </div>
         </div>
