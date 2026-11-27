@@ -1321,7 +1321,7 @@ function InfiniteCanvasPage() {
     const deleteCurrentProject = useCallback(async () => {
         try {
             cleanupAssetImages();
-            navigate("/");
+            navigate("/canvas");
         } catch (error) {
             console.error(error);
             message.error(t("canvas.project.deleteFailed"));
@@ -4940,14 +4940,13 @@ function InfiniteCanvasPage() {
                     saveDirty={cloudDirty || manualSaving}
                     saveSaving={manualSaving}
                     onSaveProject={() => void saveCurrentProject()}
-                    onHome={() => {
+                    onProjects={() => {
                         if (embedded) {
-                            window.location.assign(homeHref);
+                            window.location.assign(homeHref.includes("/canvas") ? homeHref : `${homeHref.replace(/\/$/, "")}/canvas`);
                             return;
                         }
-                        navigate("/");
+                        navigate("/canvas");
                     }}
-                    onProjects={() => navigate("/canvas")}
                     onCreateProject={createAndOpenProject}
                     onDeleteProject={deleteCurrentProject}
                     onExportProject={exportCurrentProject}

@@ -286,8 +286,9 @@ export function BuiltinAgentPanel() {
 
     const sendPrompt = async (overrideText?: string) => {
         const text = (overrideText ?? prompt).trim();
+        const promptForModel = text.replace(/\$[a-z0-9]+(?:-[a-z0-9]+)*/gi, "").replace(/[ \t]{2,}/g, " ").trim();
         const files = useAgentStore.getState().attachments;
-        if ((!text && !files.length) || sending || waiting) return;
+        if ((!promptForModel && !files.length) || sending || waiting) return;
         if (!ready || !textModel) {
             openConfigDialog(false, "channels");
             message.warning(t("agent.connect.configureAiFirst"));
@@ -298,6 +299,7 @@ export function BuiltinAgentPanel() {
 
         const selectedSkill = builtinSkills.find((skill) => skill.name === selectedBuiltinName);
         const displayText =
+            promptForModel ||
             text ||
             t(files.some((item) => item.type.startsWith("image/")) ? "agent.runtime.imagesSent" : "agent.runtime.attachmentCount", {
                 count: files.length,
@@ -344,7 +346,7 @@ export function BuiltinAgentPanel() {
             await runBuiltinAgentHarness({
                 config: { ...config, model: textModel, textModel },
                 history,
-                userText: text,
+                userText: promptForModel || text,
                 attachments: files,
                 canvasContext,
                 navigate,
@@ -652,38 +654,70 @@ export function BuiltinAgentPanel() {
                                     <SmartImage src={logo} alt="" className="size-7 object-contain" fallbackIconClassName="size-5" />
                                 </div>
                                 <div className="text-base font-semibold leading-6">{t("agent.chat.emptyTitle")}</div>
-                                <div className="mt-1.5 max-w-[280px] text-sm leading-5" style={{ color: theme.node.muted }}>
-                                    {ready ? t("agent.chat.emptyHint") : t("agent.connect.configureAiFirst")}
-                                </div>
                                 {ready ? (
-                                    <div className="mt-5 flex max-w-[320px] flex-wrap justify-center gap-2">
-                                        {(
-                                            [
-                                                "agent.chat.suggestions.storyboard",
-                                                "agent.chat.suggestions.memeStoryboard",
-                                                "agent.chat.suggestions.shotList",
-                                            ] as const
-                                        ).map((key) => (
-                                            <button
-                                                key={key}
-                                                type="button"
-                                                className="rounded-full border px-3 py-1.5 text-left text-xs leading-4 transition hover:bg-black/5 dark:hover:bg-white/10"
-                                                style={{ borderColor: theme.node.stroke, color: theme.node.text }}
-                                                onClick={() => setAgentState({ prompt: t(key), activeTab: "chat" })}
-                                            >
-                                                {t(key)}
-                                            </button>
-                                        ))}
-                                    </div>
+                                    <>
+                                        <div className="mt-1.5 max-w-[280px] text-sm leading-5" style={{ color: theme.node.muted }}>
+                                            {t("agent.chat.emptyHint")}
+                                        </div>
+                                        <div className="mt-5 flex max-w-[320px] flex-wrap justify-center gap-2">
+                                            {(
+                                                [
+                                                    "agent.chat.suggestions.storyboard",
+                                                    "agent.chat.suggestions.memeStoryboard",
+                                                    "agent.chat.suggestions.shotList",
+                                                ] as const
+                                            ).map((key) => (
+                                                <button
+                                                    key={key}
+                                                    type="button"
+                                                    className="rounded-full border px-3 py-1.5 text-left text-xs leading-4 transition hover:bg-black/5 dark:hover:bg-white/10"
+                                                    style={{ borderColor: theme.node.stroke, color: theme.node.text }}
+                                                    onClick={() => setAgentState({ prompt: t(key), activeTab: "chat" })}
+                                                >
+                                                    {t(key)}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </>
                                 ) : (
-                                    <Button
-                                        className="mt-5"
-                                        type="primary"
-                                        icon={<Settings2 className="size-4" />}
-                                        onClick={() => openConfigDialog(false, "channels")}
-                                    >
-                                        {t("agent.connect.openAiConfig")}
-                                    </Button>
+                                    <>
+                                        <div className="mt-1.5 max-w-[260px] text-sm leading-5" style={{ color: theme.node.muted }}>
+                                            {t("agent.connect.configureAiFirst")}
+                                        </div>
+                                        <div
+                                            className="mt-4 w-full max-w-[280px] rounded-2xl border px-4 py-3 text-left"
+                                            style={{ borderColor: `${theme.node.stroke}88`, background: `${theme.toolbar.activeBg}` }}
+                                        >
+                                            <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.04em]" style={{ color: theme.node.muted }}>
+                                                {t("agent.connect.configureAiFirstHint")}
+                                            </div>
+                                            <ol className="space-y-2 text-sm leading-5" style={{ color: theme.node.text }}>
+                                                {[
+                                                    "agent.connect.configureAiStepChannel",
+                                                    "agent.connect.configureAiStepCredentials",
+                                                    "agent.connect.configureAiStepModel",
+                                                ].map((key, index) => (
+                                                    <li key={key} className="flex items-start gap-2.5">
+                                                        <span
+                                                            className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full text-[11px] font-semibold"
+                                                            style={{ background: theme.node.stroke, color: theme.node.text }}
+                                                        >
+                                                            {index + 1}
+                                                        </span>
+                                                        <span>{t(key)}</span>
+                                                    </li>
+                                                ))}
+                                            </ol>
+                                        </div>
+                                        <Button
+                                            className="mt-5"
+                                            type="primary"
+                                            icon={<Settings2 className="size-4" />}
+                                            onClick={() => openConfigDialog(false, "channels")}
+                                        >
+                                            {t("agent.connect.openAiConfig")}
+                                        </Button>
+                                    </>
                                 )}
                             </div>
                         }

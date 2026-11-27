@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Check, ChevronDown, CloudUpload, Download, FolderOpen, History, Home, Images, Plus, Redo2, Trash2, Undo2, Upload } from "lucide-react";
+import { Bot, Check, ChevronDown, CloudUpload, Download, FolderOpen, History, Images, Plus, Redo2, Trash2, Undo2, Upload } from "lucide-react";
 import { Button, Dropdown, Tooltip } from "antd";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -25,7 +25,6 @@ export function CanvasTopBar({
     saveDirty,
     saveSaving,
     onSaveProject,
-    onHome,
     onProjects,
     onCreateProject,
     onDeleteProject,
@@ -51,7 +50,6 @@ export function CanvasTopBar({
     saveDirty: boolean;
     saveSaving: boolean;
     onSaveProject: () => void;
-    onHome: () => void;
     onProjects: () => void;
     onCreateProject: () => void;
     onDeleteProject: () => void;
@@ -105,8 +103,7 @@ export function CanvasTopBar({
                             trigger={["click"]}
                             menu={{
                                 items: [
-                                    { key: "home", icon: <Home className="size-4" />, label: t("canvas.home"), onClick: onHome },
-                                    { key: "projects", icon: <Images className="size-4" />, label: t("canvas.projects"), onClick: onProjects || onHome },
+                                    { key: "projects", icon: <Images className="size-4" />, label: t("canvas.projects"), onClick: onProjects },
                                     { type: "divider" },
                                     { key: "new", icon: <Plus className="size-4" />, label: t("canvas.create"), onClick: onCreateProject },
                                     { key: "delete", danger: true, icon: <Trash2 className="size-4" />, label: t("canvas.deleteCurrent"), onClick: onDeleteProject },

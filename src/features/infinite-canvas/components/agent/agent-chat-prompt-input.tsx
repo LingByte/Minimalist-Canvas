@@ -63,15 +63,16 @@ export function AgentChatPromptInput({ value, disabled, placeholder, theme, onCh
         }
         return undefined;
     }, [selectedBuiltinSkill, selectedCodexSkill]);
-    // Builtin selection is shown as a chip only — never also render an inline @$ token for the same skill.
+    // Builtin skills stay in the store + removable chip above — not re-injected into the editor
+    // (re-injection made Backspace / delete feel like the skill was stuck).
     const tokens = useMemo(() => {
         const inlineSkill = selectedBuiltinSkill ? undefined : messageSkill;
-        return parseAgentInlineTokens(stripBuiltinSkillMarker(value, selectedBuiltinSkill?.name), canvasReferences, inlineSkill);
+        return parseAgentInlineTokens(stripAllSkillMarkers(value), canvasReferences, inlineSkill);
     }, [canvasReferences, messageSkill, selectedBuiltinSkill, value]);
 
     useEffect(() => {
         if (!selectedBuiltinSkill) return;
-        const cleaned = stripBuiltinSkillMarker(value, selectedBuiltinSkill.name);
+        const cleaned = stripAllSkillMarkers(value);
         if (cleaned !== value) onChange(cleaned);
     }, [onChange, selectedBuiltinSkill, value]);
     const selectedReferenceIds = useMemo(() => new Set(canvasReferences.map((item) => item.nodeId)), [canvasReferences]);
@@ -163,14 +164,12 @@ export function AgentChatPromptInput({ value, disabled, placeholder, theme, onCh
         removeTextBeforeCaret(command.length);
 
         if (candidate.type === "skill") {
+            editor.querySelectorAll<HTMLElement>("[data-agent-token-kind='skill']").forEach((node) => node.remove());
             if (candidate.source === "builtin") {
                 useBuiltinSkillStore.getState().select(candidate.skill.name);
                 useAgentSkillStore.getState().clearSelection();
-                // Builtin skills use the chip + system prompt — avoid a second inline @token.
-                const next = serializeEditor(editor)
-                    .replace(new RegExp(`\\$${candidate.skill.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "g"), "")
-                    .replace(/[ \t]{2,}/g, " ");
-                emit(next.trimStart());
+                // Chip above the input is the selection affordance; keep the typed text clean.
+                emit(stripAllSkillMarkers(serializeEditor(editor)).replace(/[ \t]{2,}/g, " ").trimStart());
                 closeCommand();
                 return;
             }
@@ -183,7 +182,17 @@ export function AgentChatPromptInput({ value, disabled, placeholder, theme, onCh
                 closeCommand();
                 return;
             }
-            insertTokenAtCaret(editor, createSkillToken({ name: candidate.skill.name, path: candidate.skill.path, displayName: candidate.skill.interface?.displayName || undefined }, theme));
+            insertTokenAtCaret(
+                editor,
+                createSkillToken(
+                    {
+                        name: candidate.skill.name,
+                        path: candidate.skill.path,
+                        displayName: candidate.skill.interface?.displayName || undefined,
+                    },
+                    theme,
+                ),
+            );
             emit(serializeEditor(editor));
         } else {
             const current = useAgentStore.getState().canvasReferences;
@@ -225,13 +234,17 @@ export function AgentChatPromptInput({ value, disabled, placeholder, theme, onCh
         setReferenceHover({ reference, left: tokenRect.left - containerRect.left, top: tokenRect.top - containerRect.top, width: tokenRect.width, height: tokenRect.height });
     };
 
-    const showPlaceholder = !stripBuiltinSkillMarker(value, selectedBuiltinSkill?.name).trim();
-    const clearBuiltinSkill = () => {
+    const showPlaceholder = !stripAllSkillMarkers(value).trim() && canvasReferences.length === 0;
+    const clearActiveSkill = () => {
         useBuiltinSkillStore.getState().select("");
+        useAgentSkillStore.getState().clearSelection();
         const editor = editorRef.current;
-        if (!editor) return;
-        editor.querySelectorAll<HTMLElement>("[data-agent-token-kind='skill']").forEach((node) => node.remove());
-        emit(stripBuiltinSkillMarker(serializeEditor(editor)));
+        if (editor) {
+            editor.querySelectorAll<HTMLElement>("[data-agent-token-kind='skill']").forEach((node) => node.remove());
+            emit(stripAllSkillMarkers(serializeEditor(editor)));
+            return;
+        }
+        emit(stripAllSkillMarkers(value));
     };
 
     return (
@@ -239,17 +252,19 @@ export function AgentChatPromptInput({ value, disabled, placeholder, theme, onCh
             {selectedBuiltinSkill ? (
                 <div className="mb-1.5 flex flex-wrap items-center gap-1.5 px-0.5">
                     <span
-                        className="inline-flex max-w-full items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] leading-4"
-                        style={{ background: theme.toolbar.activeBg, borderColor: theme.node.stroke, color: theme.node.text }}
+                        className="inline-flex max-w-full items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium leading-4"
+                        style={{ background: theme.toolbar.activeBg, borderColor: theme.node.text, color: theme.node.text }}
                         title={selectedBuiltinSkill.path}
                     >
                         <Sparkles className="size-3 shrink-0 opacity-70" />
-                        <span className="truncate">@{selectedBuiltinSkill.name}</span>
+                        <span className="truncate">
+                            {t("agent.composer.activeSkill", { name: selectedBuiltinSkill.name })}
+                        </span>
                         <button
                             type="button"
-                            className="grid size-4 shrink-0 place-items-center rounded-sm opacity-60 transition hover:opacity-100"
+                            className="grid size-4 shrink-0 place-items-center rounded-sm opacity-70 transition hover:opacity-100"
                             aria-label={t("agent.composer.removeSkill")}
-                            onClick={clearBuiltinSkill}
+                            onClick={clearActiveSkill}
                         >
                             <X className="size-3" />
                         </button>
@@ -393,10 +408,8 @@ function ReferencePreview({ reference }: { reference: CanvasResourceReference })
     return <span className="grid size-9 shrink-0 place-items-center"><Icon className="size-4" /></span>;
 }
 
-function stripBuiltinSkillMarker(text: string, skillName?: string) {
-    if (!skillName) return text;
-    const escaped = skillName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return text.replace(new RegExp(`\\$${escaped}\\b`, "g"), "").replace(/[ \t]{2,}/g, " ");
+function stripAllSkillMarkers(text: string) {
+    return text.replace(/\$[a-z0-9]+(?:-[a-z0-9]+)*/gi, "").replace(/[ \t]{2,}/g, " ").trimStart();
 }
 
 function createSkillToken(skill: AgentSkillReference, theme: (typeof canvasThemes)[keyof typeof canvasThemes]) {
@@ -581,9 +594,18 @@ function syncSelectedMetadata(editor: HTMLElement) {
     const nodeIds = new Set(Array.from(editor.querySelectorAll<HTMLElement>("[data-agent-token-kind='resource']")).map((item) => item.dataset.nodeId));
     const references = state.canvasReferences.filter((item) => nodeIds.has(item.nodeId));
     if (references.length !== state.canvasReferences.length) state.setAgentState({ canvasReferences: references });
-    const selectedSkill = useAgentSkillStore.getState().selectedSkill;
-    const skillName = editor.querySelector<HTMLElement>("[data-agent-token-kind='skill']")?.dataset.skillName;
-    if (selectedSkill && skillName !== selectedSkill.name) useAgentSkillStore.getState().clearSelection();
+    // Builtin skills live in the removable chip above the input — do not clear them when
+    // the editor has no inline skill token. Codex skills still sync from inline tokens.
+    const skillName = editor.querySelector<HTMLElement>("[data-agent-token-kind='skill']")?.dataset.skillName || "";
+    const codex = useAgentSkillStore.getState();
+    if (!skillName) {
+        if (codex.selectedSkill) codex.clearSelection();
+        return;
+    }
+    if (codex.selectedSkill?.name !== skillName) {
+        const match = codex.skills.find((skill) => skill.name === skillName);
+        if (match) codex.selectSkill(match);
+    }
 }
 
 function textBeforeCaret(editor: HTMLElement | null) {

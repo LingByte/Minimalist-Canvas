@@ -66,7 +66,8 @@ export function AgentChatComposer({
     const [dragging, setDragging] = useState(false);
     const dragDepthRef = useRef(0);
     const canvasReferences = useAgentStore((state) => state.canvasReferences);
-    const canSubmit = !disabled && !sending && Boolean(prompt.trim() || attachments.length || canvasReferences.length);
+    const promptWithoutSkill = prompt.replace(/\$[a-z0-9]+(?:-[a-z0-9]+)*/gi, "").trim();
+    const canSubmit = !disabled && !sending && Boolean(promptWithoutSkill || attachments.length || canvasReferences.length);
     const canDrop = Boolean(onAddFiles) && !disabled && !sending;
 
     const onDragEnter = (event: DragEvent<HTMLDivElement>) => {
