@@ -1,4 +1,4 @@
-import { FileText, Images, Maximize2, Sparkles, WandSparkles } from "lucide-react";
+import { Blocks, FileText, HardDrive, Images, LayoutDashboard, Sparkles } from "lucide-react";
 
 /**
  * Canvas tool rail. Image + video share one "generate" entry (/image);
@@ -8,7 +8,7 @@ import { FileText, Images, Maximize2, Sparkles, WandSparkles } from "lucide-reac
 export const navigationTools = [
     {
         slug: "canvas",
-        icon: Maximize2,
+        icon: LayoutDashboard,
     },
     {
         slug: "image",
@@ -26,7 +26,11 @@ export const navigationTools = [
     },
     {
         slug: "skills",
-        icon: WandSparkles,
+        icon: Blocks,
+    },
+    {
+        slug: "storage",
+        icon: HardDrive,
     },
 ] as const;
 

@@ -19,7 +19,7 @@ import { SmartImage } from "@/components/smart-image";
 import { useCanvasHost } from "@canvas/integration/canvas-host-context";
 import { DEFAULT_LOGO, DEFAULT_SYSTEM_NAME } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { useConfigStore } from "@canvas/stores/use-config-store";
+import { isObjectStorageConfigured, useConfigStore } from "@canvas/stores/use-config-store";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 
 function activeToolFromPath(pathname: string): NavigationToolSlug | undefined {
@@ -41,8 +41,11 @@ export function CanvasToolsSidebar(props: { className?: string }) {
     const { embedded, homeHref, logo, brandName } = useCanvasHost();
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
+    const objectStorage = useConfigStore((state) => state.objectStorage);
     const theme = useThemeStore((state) => state.theme);
     const setTheme = useThemeStore((state) => state.setTheme);
+    const storageConfigured = isObjectStorageConfigured(objectStorage);
+    const visibleTools = navigationTools.filter((tool) => tool.slug !== "storage" || storageConfigured);
 
     const activeToolSlug = activeToolFromPath(pathname);
     const brand = brandName || DEFAULT_SYSTEM_NAME;
@@ -90,7 +93,7 @@ export function CanvasToolsSidebar(props: { className?: string }) {
                 <div className="flex h-14 w-full items-center justify-center px-2">{homeLink}</div>
 
                 <nav className="flex w-full flex-1 flex-col items-center gap-1 overflow-y-auto px-1.5 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    {navigationTools.map((tool) => {
+                    {visibleTools.map((tool) => {
                         const href = `/${tool.slug}`;
                         return (
                             <SidebarNavItem
