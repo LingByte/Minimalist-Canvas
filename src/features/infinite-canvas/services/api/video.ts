@@ -8,10 +8,17 @@ import { ensurePublicFileUrl, ensurePublicImageUrl, isPubliclyReachableMediaUrl 
 import { getObjectStorageStatus, mirrorRemoteToObjectStorage, uploadCanvasMedia } from "@canvas/services/object-storage";
 import { VIDEO_SECONDS_MAX, VIDEO_SECONDS_MIN } from "@canvas/components/video-settings-panel";
 import { VIDEO_POLL_INTERVAL_MS, VIDEO_POLL_MAX_ATTEMPTS, VIDEO_POLL_TIMEOUT_MS } from "@canvas/constant/video-generation";
+import { trackUsageWithTokens, type UsageOrigin } from "@canvas/services/usage-meter";
 import { boolConfig, buildApiUrl, modelOptionName, resolveModelRequestConfig, resolveModelScript, type AiConfig } from "@canvas/stores/use-config-store";
 import { runModelPlugin } from "./model-plugin";
 import type { ReferenceImage } from "@canvas/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@canvas/types/media";
+
+function videoOrigin(source?: "canvas" | "workbench"): UsageOrigin {
+    if (source === "workbench") return "workbench";
+    if (source === "canvas") return "canvas";
+    return "other";
+}
 
 /** Soft caps aligned with Seedance2.5 / AICost docs. */
 const MAX_REFERENCE_IMAGES = 30;
@@ -46,6 +53,7 @@ type RequestOptions = {
     ignoreResultUrls?: string[];
     /** One id for this click, shared with the later generation-asset sync. */
     attemptId?: string;
+    generationSource?: "canvas" | "workbench";
 };
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
 
@@ -73,6 +81,9 @@ export type VideoGenerationTaskState =
 
 /** Results for scripted (plugin) video models, which run their own create+poll in one shot at task creation. */
 const pluginVideoResults = new Map<string, VideoGenerationResult>();
+/** Avoid double-counting when wait/poll loops observe the same terminal task. */
+const meteredVideoTasks = new Set<string>();
+const videoTaskStartedAt = new Map<string, number>();
 
 function aiApiUrl(config: AiConfig, path: string) {
     return buildApiUrl(config.baseUrl, path);
@@ -142,9 +153,15 @@ export async function createVideoGenerationTask(config: AiConfig, prompt: string
     const requestConfig = resolveModelRequestConfig(config, selectedModel);
     const script = resolveModelScript(config, selectedModel);
     const refs = normalizeVideoReferences(references);
-    if (script) return createPluginVideoTask(requestConfig, selectedModel, script, prompt, refs, options);
-    assertVideoConfig(requestConfig, requestConfig.model);
-    return createOpenAIVideoTask(requestConfig, selectedModel, prompt, refs, options);
+    let task: VideoGenerationTask;
+    if (script) {
+        task = await createPluginVideoTask(requestConfig, selectedModel, script, prompt, refs, options);
+    } else {
+        assertVideoConfig(requestConfig, requestConfig.model);
+        task = await createOpenAIVideoTask(requestConfig, selectedModel, prompt, refs, options);
+    }
+    videoTaskStartedAt.set(task.id, Date.now());
+    return task;
 }
 
 export function normalizeVideoReferences(references: ReferenceImage[] | VideoGenerationReferences): VideoGenerationReferences {
@@ -160,17 +177,46 @@ export function normalizeVideoReferences(references: ReferenceImage[] | VideoGen
 
 export async function pollVideoGenerationTask(config: AiConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationTaskState> {
     const pollOptions = withSubmittedReferenceIgnores(task, options);
+    let state: VideoGenerationTaskState;
     if (task.provider === "plugin") {
         const result = pluginVideoResults.get(task.id);
-        if (!result) return { status: "failed", error: apiText("pluginVideoExpired") };
-        if (result.url && isIgnoredResultUrl(result.url, pollOptions.ignoreResultUrls)) {
-            return { status: "failed", error: apiText("videoGenerationFailed") };
+        if (!result) state = { status: "failed", error: apiText("pluginVideoExpired") };
+        else if (result.url && isIgnoredResultUrl(result.url, pollOptions.ignoreResultUrls)) {
+            state = { status: "failed", error: apiText("videoGenerationFailed") };
+        } else {
+            state = { status: "completed", result };
         }
-        return { status: "completed", result };
+    } else {
+        const requestConfig = resolveModelRequestConfig(config, task.model);
+        assertVideoConfig(requestConfig, requestConfig.model);
+        state = await pollOpenAIVideoTask(requestConfig, task, pollOptions);
     }
-    const requestConfig = resolveModelRequestConfig(config, task.model);
-    assertVideoConfig(requestConfig, requestConfig.model);
-    return pollOpenAIVideoTask(requestConfig, task, pollOptions);
+    if (state.status === "completed" || state.status === "failed") {
+        meterVideoTaskOnce(config, task, state, options);
+    }
+    return state;
+}
+
+function meterVideoTaskOnce(
+    config: AiConfig,
+    task: VideoGenerationTask,
+    state: Extract<VideoGenerationTaskState, { status: "completed" } | { status: "failed" }>,
+    options?: RequestOptions,
+) {
+    if (meteredVideoTasks.has(task.id)) return;
+    meteredVideoTasks.add(task.id);
+    const startedAt = videoTaskStartedAt.get(task.id) || Date.now();
+    videoTaskStartedAt.delete(task.id);
+    trackUsageWithTokens({
+        capability: "video",
+        model: task.model,
+        origin: videoOrigin(options?.generationSource),
+        status: state.status === "completed" ? "success" : "failed",
+        durationMs: Date.now() - startedAt,
+        units: Math.max(1, Number(config.videoSeconds) || 5),
+        unitKind: "seconds",
+        error: state.status === "failed" ? state.error : undefined,
+    });
 }
 
 function withSubmittedReferenceIgnores(task: VideoGenerationTask, options?: RequestOptions): RequestOptions {

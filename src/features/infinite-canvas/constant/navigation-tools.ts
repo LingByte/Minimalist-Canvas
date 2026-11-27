@@ -1,4 +1,4 @@
-import { Blocks, BookOpen, FileText, HardDrive, Images, LayoutDashboard, Sparkles } from "lucide-react";
+import { BarChart3, Blocks, BookOpen, FileText, HardDrive, Images, LayoutDashboard, Sparkles } from "lucide-react";
 
 /**
  * Canvas tool rail. Image + video share one "generate" entry (/image);
@@ -27,6 +27,10 @@ export const navigationTools = [
     {
         slug: "skills",
         icon: Blocks,
+    },
+    {
+        slug: "usage",
+        icon: BarChart3,
     },
     {
         slug: "novels",

@@ -4,6 +4,7 @@ import i18n from "@canvas/i18n";
 import { audioMimeType, normalizeAudioFormatValue, normalizeAudioSpeedValue } from "@canvas/lib/audio-generation";
 import { resolveVoiceRuntime } from "@canvas/lib/tts-voices";
 import { uploadMediaFile, type UploadedFile } from "@canvas/services/file-storage";
+import { trackUsageWithTokens, type UsageOrigin } from "@canvas/services/usage-meter";
 import { resolveModelRequestConfig, resolveModelScript, type AiConfig } from "@canvas/stores/use-config-store";
 import { runModelPlugin } from "./model-plugin";
 import { synthesizeSpeech } from "./tts";
@@ -11,11 +12,21 @@ import { synthesizeSpeech } from "./tts";
 type RequestOptions = { signal?: AbortSignal; generationClientId?: string; generationSource?: "canvas" | "workbench"; generationAttemptId?: string };
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
 
+function audioOrigin(source?: "canvas" | "workbench"): UsageOrigin {
+    if (source === "workbench") return "workbench";
+    if (source === "canvas") return "canvas";
+    return "other";
+}
+
 export async function requestAudioGeneration(config: AiConfig, prompt: string, options?: RequestOptions): Promise<Blob> {
     const requestConfig = resolveModelRequestConfig(config, config.model || config.audioModel);
     const model = requestConfig.model.trim();
     const format = normalizeAudioFormatValue(config.audioFormat);
     const script = resolveModelScript(config, config.model || config.audioModel);
+    const startedAt = Date.now();
+    const characters = prompt.trim().length;
+    const origin = audioOrigin(options?.generationSource);
+    const meterModel = model || config.ttsVoiceId || "tts";
 
     let runtime;
     try {
@@ -31,54 +42,80 @@ export async function requestAudioGeneration(config: AiConfig, prompt: string, o
 
     const upstreamVoice = runtime?.upstreamVoice || (config.audioVoice || "").trim() || "alloy";
 
-    if (script) {
-        if (!model) throw new Error(apiText("audioModelRequired"));
-        if (!requestConfig.baseUrl.trim()) throw new Error(apiText("baseUrlRequired"));
-        if (!requestConfig.apiKey.trim()) throw new Error(apiText("apiKeyRequired"));
-        try {
-            const result = await runModelPlugin({
-                capability: "audio",
-                script,
-                config: requestConfig,
-                prompt,
-                params: {
-                    voice: upstreamVoice,
-                    format,
-                    speed: normalizeAudioSpeedValue(config.audioSpeed),
-                    instructions: config.audioInstructions.trim(),
-                },
-                signal: options?.signal,
-            });
-            return await audioPluginBlob(result, format);
-        } catch (error) {
-            throw new Error(readAxiosError(error, apiText("audioGenerationFailed")));
-        }
-    }
-
-    if (!runtime) throw new Error(apiText("ttsChannelRequired"));
-
     try {
-        let engine = runtime.engine;
-        if (engine.vendor === "openai" && (!engine.apiKey.trim() || !engine.baseUrl.trim())) {
-            engine = {
-                ...engine,
-                baseUrl: engine.baseUrl.trim() || requestConfig.baseUrl,
-                apiKey: engine.apiKey.trim() || requestConfig.apiKey,
-                model: engine.model.trim() || model || engine.model,
-            };
-        }
+        let blob: Blob;
+        if (script) {
+            if (!model) throw new Error(apiText("audioModelRequired"));
+            if (!requestConfig.baseUrl.trim()) throw new Error(apiText("baseUrlRequired"));
+            if (!requestConfig.apiKey.trim()) throw new Error(apiText("apiKeyRequired"));
+            try {
+                const result = await runModelPlugin({
+                    capability: "audio",
+                    script,
+                    config: requestConfig,
+                    prompt,
+                    params: {
+                        voice: upstreamVoice,
+                        format,
+                        speed: normalizeAudioSpeedValue(config.audioSpeed),
+                        instructions: config.audioInstructions.trim(),
+                    },
+                    signal: options?.signal,
+                });
+                blob = await audioPluginBlob(result, format);
+            } catch (error) {
+                throw new Error(readAxiosError(error, apiText("audioGenerationFailed")));
+            }
+        } else {
+            if (!runtime) throw new Error(apiText("ttsChannelRequired"));
+            try {
+                let engine = runtime.engine;
+                if (engine.vendor === "openai" && (!engine.apiKey.trim() || !engine.baseUrl.trim())) {
+                    engine = {
+                        ...engine,
+                        baseUrl: engine.baseUrl.trim() || requestConfig.baseUrl,
+                        apiKey: engine.apiKey.trim() || requestConfig.apiKey,
+                        model: engine.model.trim() || model || engine.model,
+                    };
+                }
 
-        const result = await synthesizeSpeech(engine, {
-            text: prompt,
-            voice: runtime.upstreamVoice,
-            format,
-            speed: Number(normalizeAudioSpeedValue(config.audioSpeed)),
-            instructions: config.audioInstructions.trim() || undefined,
-            signal: options?.signal,
+                const result = await synthesizeSpeech(engine, {
+                    text: prompt,
+                    voice: runtime.upstreamVoice,
+                    format,
+                    speed: Number(normalizeAudioSpeedValue(config.audioSpeed)),
+                    instructions: config.audioInstructions.trim() || undefined,
+                    signal: options?.signal,
+                });
+                blob = result.blob;
+            } catch (error) {
+                throw new Error(readAxiosError(error, apiText("audioGenerationFailed")));
+            }
+        }
+        trackUsageWithTokens({
+            capability: "audio",
+            model: meterModel,
+            origin,
+            status: "success",
+            durationMs: Date.now() - startedAt,
+            units: characters,
+            unitKind: "characters",
         });
-        return result.blob;
+        return blob;
     } catch (error) {
-        throw new Error(readAxiosError(error, apiText("audioGenerationFailed")));
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+            trackUsageWithTokens({
+                capability: "audio",
+                model: meterModel,
+                origin,
+                status: "failed",
+                durationMs: Date.now() - startedAt,
+                units: characters,
+                unitKind: "characters",
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
+        throw error;
     }
 }
 

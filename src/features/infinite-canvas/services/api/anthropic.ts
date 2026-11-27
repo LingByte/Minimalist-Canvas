@@ -1,4 +1,5 @@
 import { buildApiUrl } from "@canvas/stores/use-config-store";
+import { parseProviderUsage, type TokenUsage } from "@canvas/services/usage-meter";
 
 export const ANTHROPIC_BASE_URL = "https://api.anthropic.com";
 const ANTHROPIC_VERSION = "2023-06-01";
@@ -28,6 +29,7 @@ export type AnthropicToolDefinition = {
 export type AnthropicChatTurn = {
     content: string;
     toolCalls: AnthropicChatToolCall[];
+    usage?: TokenUsage | null;
 };
 
 type AnthropicContentBlock =
@@ -45,6 +47,7 @@ type StreamState = {
     buffer: string;
     text: string;
     toolCalls: Map<number, AnthropicChatToolCall>;
+    usage?: TokenUsage | null;
     error?: string;
 };
 
@@ -132,6 +135,7 @@ export async function requestAnthropicMessages(
                 arguments: call.arguments || "{}",
             }))
             .filter((call) => call.name),
+        usage: state.usage || null,
     };
 }
 
@@ -280,7 +284,7 @@ function parseNonStreamPayload(payload: Record<string, unknown>): AnthropicChatT
             });
         }
     }
-    return { content: text, toolCalls };
+    return { content: text, toolCalls, usage: parseProviderUsage(payload) };
 }
 
 function consumeStreamText(state: StreamState, text: string, onDelta?: (text: string) => void, flush = false) {
@@ -344,6 +348,15 @@ function consumeBlock(block: string, state: StreamState, onDelta?: (text: string
             current.arguments += delta.partial_json;
             state.toolCalls.set(index, current);
         }
+        return;
+    }
+    if (type === "message_start" || type === "message_delta") {
+        const message = isRecord(event.message) ? event.message : undefined;
+        const usage =
+            parseProviderUsage(event) ||
+            (message ? parseProviderUsage(message) : null) ||
+            (isRecord(event.usage) ? parseProviderUsage({ usage: event.usage }) : null);
+        if (usage) state.usage = { ...(state.usage || {}), ...usage };
         return;
     }
     if (type === "error") {

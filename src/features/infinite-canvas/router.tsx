@@ -15,6 +15,7 @@ import PromptsPage from "@canvas/pages/prompts";
 import SkillsPage from "@canvas/pages/skills";
 import NovelsPage from "@canvas/pages/novels";
 import StoragePage from "@canvas/pages/storage";
+import UsagePage from "@canvas/pages/usage";
 import VideoPage from "@canvas/pages/video";
 
 import { CANVAS_BASENAME } from "./integration/constants";
@@ -30,6 +31,7 @@ const appPages: RouteObject[] = [
     { path: "novels", element: <NovelsPage /> },
     { path: "ops", element: <Navigate to="/canvas" replace /> },
     { path: "storage", element: <StoragePage /> },
+    { path: "usage", element: <UsagePage /> },
     { path: "canvas", element: <CanvasPage /> },
     { path: "canvas/:id", element: <CanvasProjectPage /> },
     // Alias so navigate(`/${id}`) from the project chrome also opens a canvas.

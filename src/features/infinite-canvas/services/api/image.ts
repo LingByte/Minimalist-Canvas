@@ -24,9 +24,22 @@ import {
 } from "@canvas/lib/contract-image";
 import { imageToDataUrl } from "@canvas/services/image-storage";
 import { ensurePublicImageUrls } from "@canvas/services/ensure-public-media";
+import {
+    estimateTextTokens,
+    parseProviderUsage,
+    trackUsageWithTokens,
+    type TokenUsage,
+    type UsageOrigin,
+} from "@canvas/services/usage-meter";
 import type { ReferenceImage } from "@canvas/types/image";
 
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
+
+function usageOrigin(source?: "canvas" | "workbench"): UsageOrigin {
+    if (source === "workbench") return "workbench";
+    if (source === "canvas") return "canvas";
+    return "other";
+}
 
 export type AiTextMessage = {
     role: "system" | "user" | "assistant";
@@ -62,6 +75,7 @@ export type ResponseFunctionTool = {
 export type ToolResponseResult = {
     content: string;
     toolCalls: ResponseToolCall[];
+    usage?: TokenUsage | null;
 };
 
 type ToolChoice = "auto" | "required" | { type: "function"; name: string };
@@ -114,7 +128,13 @@ type GeminiPayload = {
     error?: { message?: string };
     promptFeedback?: { blockReason?: string };
 };
-type GeminiStreamState = { buffer: string; text: string; toolCalls: ResponseToolCall[]; error?: string };
+type GeminiStreamState = {
+    buffer: string;
+    text: string;
+    toolCalls: ResponseToolCall[];
+    usage?: TokenUsage | null;
+    error?: string;
+};
 type RequestOptions = { signal?: AbortSignal; generationClientId?: string; generationSource?: "canvas" | "workbench"; generationAttemptId?: string };
 
 const QUALITY_BASE: Record<string, number> = {
@@ -564,7 +584,13 @@ async function requestStreamingResponse(config: AiConfig, body: Record<string, u
     return { ...result, content: state.text || result.content };
 }
 
-type ChatCompletionsStreamState = { buffer: string; text: string; error?: string; toolCalls: Map<number, ResponseToolCall> };
+type ChatCompletionsStreamState = {
+    buffer: string;
+    text: string;
+    error?: string;
+    toolCalls: Map<number, ResponseToolCall>;
+    usage?: TokenUsage | null;
+};
 
 type ChatCompletionMessage =
     | { role: "system" | "user" | "assistant"; content: ResponseMessageContent }
@@ -624,6 +650,8 @@ function consumeChatCompletionsStreamBlock(block: string, state: ChatCompletions
         state.error = errorMessage;
         return;
     }
+    const usage = parseProviderUsage(event);
+    if (usage) state.usage = { ...(state.usage || {}), ...usage };
     const choices = Array.isArray(event.choices) ? event.choices : [];
     for (const choice of choices) {
         if (!isRecord(choice)) continue;
@@ -689,6 +717,7 @@ async function requestStreamingChatCompletions(
             model: config.model,
             messages: toChatCompletionsMessages(messages),
             stream: true,
+            stream_options: { include_usage: true },
             ...(tools?.length ? { tools, tool_choice: toolChoice ?? "auto" } : {}),
         }),
         signal: options?.signal,
@@ -711,7 +740,7 @@ async function requestStreamingChatCompletions(
                       function: { name: call.function.name || "", arguments: typeof call.function.arguments === "string" ? call.function.arguments : "{}" },
                   }))
             : [];
-        return { content, toolCalls };
+        return { content, toolCalls, usage: parseProviderUsage(payload) };
     }
 
     const reader = response.body.getReader();
@@ -725,7 +754,11 @@ async function requestStreamingChatCompletions(
     }
     consumeChatCompletionsStreamText(state, decoder.decode(), onDelta, true);
     if (state.error) throw new Error(state.error);
-    return { content: state.text, toolCalls: [...state.toolCalls.values()].filter((call) => call.function.name) };
+    return {
+        content: state.text,
+        toolCalls: [...state.toolCalls.values()].filter((call) => call.function.name),
+        usage: state.usage || null,
+    };
 }
 
 function enrichApiErrorMessage(message: string) {
@@ -840,7 +873,7 @@ async function requestGeminiStreamingResponse(config: AiConfig, body: Record<str
     }
     consumeGeminiStreamText(state, decoder.decode(), onDelta, true);
     if (state.error) throw new Error(state.error);
-    return { content: state.text, toolCalls: state.toolCalls };
+    return { content: state.text, toolCalls: state.toolCalls, usage: state.usage || null };
 }
 
 function consumeGeminiStreamText(state: GeminiStreamState, text: string, onDelta?: (text: string) => void, flush = false) {
@@ -866,12 +899,14 @@ function consumeGeminiStreamBlock(block: string, state: GeminiStreamState, onDel
         .join("\n")
         .trim();
     if (!data || data === "[DONE]") return;
-    const result = parseGeminiToolResponse(JSON.parse(data) as GeminiPayload);
+    const payload = JSON.parse(data) as GeminiPayload;
+    const result = parseGeminiToolResponse(payload);
     if (result.content) {
         state.text += result.content;
         onDelta?.(state.text);
     }
     state.toolCalls.push(...result.toolCalls);
+    if (result.usage) state.usage = { ...(state.usage || {}), ...result.usage };
 }
 
 function parseGeminiToolResponse(payload: GeminiPayload): ToolResponseResult {
@@ -891,7 +926,7 @@ function parseGeminiToolResponse(payload: GeminiPayload): ToolResponseResult {
                 ...(thoughtSignature ? { thoughtSignature } : {}),
             };
         });
-    return { content, toolCalls };
+    return { content, toolCalls, usage: parseProviderUsage(payload) };
 }
 
 async function requestGeminiImages(config: AiConfig, prompt: string, references: ReferenceImage[], count: number, options?: RequestOptions) {
@@ -934,6 +969,41 @@ function parseGeminiImagePayload(payload: GeminiPayload) {
 export async function requestGeneration(config: AiConfig, prompt: string, options?: RequestOptions) {
     const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.count)) || 1)));
+    const startedAt = Date.now();
+    try {
+        const images = await runImageGeneration(requestConfig, config, prompt, n, options);
+        trackUsageWithTokens({
+            capability: "image",
+            model: requestConfig.model,
+            origin: usageOrigin(options?.generationSource),
+            status: "success",
+            durationMs: Date.now() - startedAt,
+            units: images.length,
+            unitKind: "count",
+        });
+        return images;
+    } catch (error) {
+        trackUsageWithTokens({
+            capability: "image",
+            model: requestConfig.model,
+            origin: usageOrigin(options?.generationSource),
+            status: "failed",
+            durationMs: Date.now() - startedAt,
+            units: n,
+            unitKind: "count",
+            error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+    }
+}
+
+async function runImageGeneration(
+    requestConfig: ReturnType<typeof resolveModelRequestConfig>,
+    config: AiConfig,
+    prompt: string,
+    n: number,
+    options?: RequestOptions,
+) {
     const script = resolveModelScript(config, config.model || config.imageModel);
     if (script) {
         const quality = normalizeQuality(config.quality);
@@ -1002,6 +1072,37 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
 }
 
 export async function requestEdit(config: AiConfig, prompt: string, references: ReferenceImage[], mask?: ReferenceImage, options?: RequestOptions) {
+    const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
+    const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.count)) || 1)));
+    const startedAt = Date.now();
+    try {
+        const images = await requestEditUnmetered(config, prompt, references, mask, options);
+        trackUsageWithTokens({
+            capability: "image",
+            model: requestConfig.model,
+            origin: usageOrigin(options?.generationSource),
+            status: "success",
+            durationMs: Date.now() - startedAt,
+            units: images.length,
+            unitKind: "count",
+        });
+        return images;
+    } catch (error) {
+        trackUsageWithTokens({
+            capability: "image",
+            model: requestConfig.model,
+            origin: usageOrigin(options?.generationSource),
+            status: "failed",
+            durationMs: Date.now() - startedAt,
+            units: n,
+            unitKind: "count",
+            error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+    }
+}
+
+async function requestEditUnmetered(config: AiConfig, prompt: string, references: ReferenceImage[], mask?: ReferenceImage, options?: RequestOptions) {
     const requestConfig = resolveModelRequestConfig(config, config.model || config.imageModel);
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.count)) || 1)));
     // Local-first uploads may still be blob:; promote every ref to a public cloud URL before calling upstream.
@@ -1209,11 +1310,15 @@ function buildContractImageBody(requestConfig: AiConfig, config: AiConfig, promp
 export async function requestImageQuestion(config: AiConfig, messages: AiTextMessage[], onDelta: (text: string) => void, options?: RequestOptions) {
     const requestConfig = resolveModelRequestConfig(config, config.model || config.textModel);
     const script = resolveModelScript(config, config.model || config.textModel);
+    const startedAt = Date.now();
+    const promptChars = messages.reduce((sum, message) => sum + (typeof message.content === "string" ? message.content.length : 64), 0);
     // Skip legacy /v1/responses scripts — most NewAPI relays return 500 / "not implemented".
     const runnableScript = script && !/\/v1\/responses\b/.test(script) ? script : "";
-    if (runnableScript) {
-        try {
-            const answer = await runModelPlugin<string>({
+    try {
+        let answer = "";
+        let usage: TokenUsage | null | undefined;
+        if (runnableScript) {
+            const pluginAnswer = await runModelPlugin<string>({
                 capability: "text",
                 script: runnableScript,
                 config: requestConfig,
@@ -1221,38 +1326,51 @@ export async function requestImageQuestion(config: AiConfig, messages: AiTextMes
                 signal: options?.signal,
                 onDelta,
             });
-            const text = String(answer ?? "").trim() || apiText("noContent");
-            if (text === apiText("noContent")) onDelta(text);
-            return text;
-        } catch (error) {
-            throw new Error(enrichApiErrorMessage(readAxiosError(error, apiText("requestFailed"))));
-        }
-    }
-    try {
-        if (requestConfig.apiFormat === "gemini") {
-            const answer = (await requestGeminiStreamingResponse(requestConfig, toGeminiBody(requestConfig, messages), onDelta, options)).content || apiText("noContent");
+            answer = String(pluginAnswer ?? "").trim() || apiText("noContent");
             if (answer === apiText("noContent")) onDelta(answer);
-            return answer;
-        }
-        if (requestConfig.apiFormat === "anthropic") {
-            const answer =
-                (
-                    await requestAnthropicMessages(
-                        requestConfig,
-                        toAnthropicChatMessages(withSystemMessage(requestConfig, messages)),
-                        [],
-                        onDelta,
-                        { signal: options?.signal },
-                    )
-                ).content || apiText("noContent");
+        } else if (requestConfig.apiFormat === "gemini") {
+            const turn = await requestGeminiStreamingResponse(requestConfig, toGeminiBody(requestConfig, messages), onDelta, options);
+            answer = turn.content || apiText("noContent");
+            usage = turn.usage;
             if (answer === apiText("noContent")) onDelta(answer);
-            return answer;
+        } else if (requestConfig.apiFormat === "anthropic") {
+            const turn = await requestAnthropicMessages(
+                requestConfig,
+                toAnthropicChatMessages(withSystemMessage(requestConfig, messages)),
+                [],
+                onDelta,
+                { signal: options?.signal },
+            );
+            answer = turn.content || apiText("noContent");
+            usage = turn.usage;
+            if (answer === apiText("noContent")) onDelta(answer);
+        } else {
+            const turn = await requestStreamingChatCompletions(requestConfig, withSystemMessage(requestConfig, messages), onDelta, options);
+            answer = turn.content || apiText("noContent");
+            usage = turn.usage;
+            if (answer === apiText("noContent")) onDelta(answer);
         }
-        const answer = (await requestStreamingChatCompletions(requestConfig, withSystemMessage(requestConfig, messages), onDelta, options)).content || apiText("noContent");
-        if (answer === apiText("noContent")) onDelta(answer);
+        trackUsageWithTokens({
+            capability: "text",
+            model: requestConfig.model,
+            origin: usageOrigin(options?.generationSource),
+            status: "success",
+            durationMs: Date.now() - startedAt,
+            tokens: usage || estimateTextTokens(promptChars, answer.length),
+        });
         return answer;
     } catch (error) {
-        throw new Error(enrichApiErrorMessage(readAxiosError(error, apiText("requestFailed"))));
+        const message = enrichApiErrorMessage(readAxiosError(error, apiText("requestFailed")));
+        trackUsageWithTokens({
+            capability: "text",
+            model: requestConfig.model,
+            origin: usageOrigin(options?.generationSource),
+            status: "failed",
+            durationMs: Date.now() - startedAt,
+            error: message,
+            tokens: estimateTextTokens(promptChars, 0),
+        });
+        throw new Error(message);
     }
 }
 

@@ -1,5 +1,11 @@
 import i18n from "@canvas/i18n";
 import type { BuiltinAgentToolCall, BuiltinAgentToolDefinition } from "@canvas/lib/agent/builtin-agent-tools";
+import {
+    estimateTextTokens,
+    parseProviderUsage,
+    trackUsageWithTokens,
+    type TokenUsage,
+} from "@canvas/services/usage-meter";
 import { buildApiUrl, resolveModelRequestConfig, type AiConfig } from "@canvas/stores/use-config-store";
 import {
     requestAnthropicMessages,
@@ -21,12 +27,14 @@ export type BuiltinAgentChatMessage =
 export type BuiltinAgentChatTurn = {
     content: string;
     toolCalls: BuiltinAgentToolCall[];
+    usage?: TokenUsage | null;
 };
 
 type StreamState = {
     buffer: string;
     text: string;
     toolCalls: Map<number, { id: string; name: string; arguments: string }>;
+    usage?: TokenUsage | null;
     error?: string;
 };
 
@@ -41,67 +49,99 @@ export async function requestBuiltinAgentChatTurn(
 ): Promise<BuiltinAgentChatTurn> {
     const requestConfig = resolveModelRequestConfig(config, config.model || config.textModel);
     const toolChoice = options?.toolChoice === "required" ? "required" : "auto";
-    if (requestConfig.apiFormat === "anthropic") {
-        const turn = await requestAnthropicMessages(
-            requestConfig,
-            messages as AnthropicChatMessage[],
-            toAnthropicTools(tools),
-            onDelta,
-            { signal: options?.signal, toolChoice },
-        );
-        return {
-            content: turn.content,
-            toolCalls: turn.toolCalls.map((call) => ({
-                id: call.id,
-                name: call.name,
-                arguments: call.arguments,
-            })),
-        };
-    }
-    const response = await fetch(buildApiUrl(requestConfig.baseUrl, "/chat/completions"), {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Accept: "text/event-stream",
-            Authorization: `Bearer ${requestConfig.apiKey}`,
-        },
-        body: JSON.stringify({
+    const startedAt = Date.now();
+    const promptChars = estimateMessageChars(messages);
+    try {
+        let turn: BuiltinAgentChatTurn;
+        if (requestConfig.apiFormat === "anthropic") {
+            const anthropicTurn = await requestAnthropicMessages(
+                requestConfig,
+                messages as AnthropicChatMessage[],
+                toAnthropicTools(tools),
+                onDelta,
+                { signal: options?.signal, toolChoice },
+            );
+            turn = {
+                content: anthropicTurn.content,
+                toolCalls: anthropicTurn.toolCalls.map((call) => ({
+                    id: call.id,
+                    name: call.name,
+                    arguments: call.arguments,
+                })),
+                usage: anthropicTurn.usage,
+            };
+        } else {
+            const response = await fetch(buildApiUrl(requestConfig.baseUrl, "/chat/completions"), {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Accept: "text/event-stream",
+                    Authorization: `Bearer ${requestConfig.apiKey}`,
+                },
+                body: JSON.stringify({
+                    model: requestConfig.model,
+                    messages: toWireMessages(messages),
+                    tools: tools.length ? tools : undefined,
+                    tool_choice: tools.length ? toolChoice : undefined,
+                    stream: true,
+                    stream_options: { include_usage: true },
+                }),
+                signal: options?.signal,
+            });
+            if (!response.ok) throw new Error(await readFetchError(response, apiText("requestFailed")));
+            if (!response.body) {
+                const payload = (await response.json()) as Record<string, unknown>;
+                turn = parseNonStreamPayload(payload);
+            } else {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                const state: StreamState = { buffer: "", text: "", toolCalls: new Map() };
+                for (;;) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    consumeStreamText(state, decoder.decode(value, { stream: true }), onDelta);
+                    if (state.error) throw new Error(state.error);
+                }
+                consumeStreamText(state, decoder.decode(), onDelta, true);
+                if (state.error) throw new Error(state.error);
+                turn = {
+                    content: state.text,
+                    toolCalls: [...state.toolCalls.entries()]
+                        .sort((a, b) => a[0] - b[0])
+                        .map(([, item]) => ({
+                            id: item.id || `call_${item.name || "tool"}`,
+                            name: item.name,
+                            arguments: item.arguments || "{}",
+                        }))
+                        .filter((item) => item.name),
+                    usage: state.usage || null,
+                };
+            }
+        }
+        const usage =
+            turn.usage ||
+            estimateTextTokens(promptChars, turn.content.length);
+        trackUsageWithTokens({
+            capability: "text",
             model: requestConfig.model,
-            messages: toWireMessages(messages),
-            tools: tools.length ? tools : undefined,
-            tool_choice: tools.length ? toolChoice : undefined,
-            stream: true,
-        }),
-        signal: options?.signal,
-    });
-    if (!response.ok) throw new Error(await readFetchError(response, apiText("requestFailed")));
-    if (!response.body) {
-        const payload = (await response.json()) as Record<string, unknown>;
-        return parseNonStreamPayload(payload);
+            origin: "agent",
+            status: "success",
+            durationMs: Date.now() - startedAt,
+            tokens: usage,
+        });
+        return { ...turn, usage };
+    } catch (error) {
+        trackUsageWithTokens({
+            capability: "text",
+            model: requestConfig.model,
+            origin: "agent",
+            status: "failed",
+            durationMs: Date.now() - startedAt,
+            error: error instanceof Error ? error.message : String(error),
+            tokens: estimateTextTokens(promptChars, 0),
+        });
+        throw error;
     }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    const state: StreamState = { buffer: "", text: "", toolCalls: new Map() };
-    for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        consumeStreamText(state, decoder.decode(value, { stream: true }), onDelta);
-        if (state.error) throw new Error(state.error);
-    }
-    consumeStreamText(state, decoder.decode(), onDelta, true);
-    if (state.error) throw new Error(state.error);
-    return {
-        content: state.text,
-        toolCalls: [...state.toolCalls.entries()]
-            .sort((a, b) => a[0] - b[0])
-            .map(([, item]) => ({
-                id: item.id || `call_${item.name || "tool"}`,
-                name: item.name,
-                arguments: item.arguments || "{}",
-            }))
-            .filter((item) => item.name),
-    };
 }
 
 function toWireMessages(messages: BuiltinAgentChatMessage[]) {
@@ -145,7 +185,23 @@ function parseNonStreamPayload(payload: Record<string, unknown>): BuiltinAgentCh
             },
         ];
     });
-    return { content, toolCalls };
+    return { content, toolCalls, usage: parseProviderUsage(payload) };
+}
+
+function estimateMessageChars(messages: BuiltinAgentChatMessage[]) {
+    return messages.reduce((sum, message) => {
+        if (typeof message.content === "string") return sum + message.content.length;
+        if (Array.isArray(message.content)) {
+            return (
+                sum +
+                message.content.reduce((inner, part) => {
+                    if (part.type === "text") return inner + part.text.length;
+                    return inner + 64;
+                }, 0)
+            );
+        }
+        return sum;
+    }, 0);
 }
 
 function consumeStreamText(state: StreamState, text: string, onDelta: (text: string) => void, flush = false) {
@@ -182,6 +238,8 @@ function consumeBlock(block: string, state: StreamState, onDelta: (text: string)
         state.error = errorMessage;
         return;
     }
+    const usage = parseProviderUsage(event);
+    if (usage) state.usage = { ...(state.usage || {}), ...usage };
     const choices = Array.isArray(event.choices) ? event.choices : [];
     for (const choice of choices) {
         if (!isRecord(choice)) continue;
