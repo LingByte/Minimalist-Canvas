@@ -13,52 +13,73 @@ type MemeWikiFile = {
     source?: string;
     builtAt?: string;
     count?: number;
-    items: MemeWikiEntry[];
+    items: Array<Partial<MemeWikiEntry> & { title?: string; slug?: string }>;
 };
 
-let entriesPromise: Promise<MemeWikiEntry[]> | null = null;
-let entriesCache: MemeWikiEntry[] | null = null;
+type MemeWikiIndex = {
+    entries: MemeWikiEntry[];
+    byTitle: Map<string, MemeWikiEntry>;
+    bySlug: Map<string, MemeWikiEntry>;
+    byAlias: Map<string, MemeWikiEntry>;
+};
 
+let indexPromise: Promise<MemeWikiIndex> | null = null;
+let indexCache: MemeWikiIndex | null = null;
+
+/** Bundled static asset for the search_meme_wiki tool — not a temp preview dump. */
 function memeWikiUrl() {
     const base = (import.meta.env.BASE_URL || "/").replace(/\/?$/, "/");
-    return `${base}meme-wiki.json`;
+    return `${base}agent/meme-wiki.json`;
 }
 
-async function loadMemeWikiEntries(): Promise<MemeWikiEntry[]> {
-    if (entriesCache) return entriesCache;
-    if (!entriesPromise) {
-        entriesPromise = (async () => {
+function normalizeEntry(item: Partial<MemeWikiEntry> & { title?: string; slug?: string }): MemeWikiEntry | null {
+    const title = String(item.title || "").trim();
+    if (!title) return null;
+    return {
+        title,
+        slug: String(item.slug || "").trim(),
+        tags: String(item.tags || ""),
+        usage: String(item.usage || ""),
+        origin: String(item.origin || ""),
+        other: String(item.other || ""),
+        summary: String(item.summary || ""),
+        aliases: String(item.aliases || ""),
+    };
+}
+
+function buildIndex(entries: MemeWikiEntry[]): MemeWikiIndex {
+    const byTitle = new Map<string, MemeWikiEntry>();
+    const bySlug = new Map<string, MemeWikiEntry>();
+    const byAlias = new Map<string, MemeWikiEntry>();
+    for (const entry of entries) {
+        byTitle.set(entry.title.toLowerCase(), entry);
+        if (entry.slug) bySlug.set(entry.slug.toLowerCase(), entry);
+        if (!entry.aliases) continue;
+        for (const alias of entry.aliases.split(/[,，]/)) {
+            const key = alias.trim().toLowerCase();
+            if (key && !byAlias.has(key)) byAlias.set(key, entry);
+        }
+    }
+    return { entries, byTitle, bySlug, byAlias };
+}
+
+async function loadMemeWikiIndex(): Promise<MemeWikiIndex> {
+    if (indexCache) return indexCache;
+    if (!indexPromise) {
+        indexPromise = (async () => {
             const response = await fetch(memeWikiUrl());
             if (!response.ok) throw new Error(`meme wiki load failed: ${response.status}`);
             const payload = (await response.json()) as MemeWikiFile | MemeWikiEntry[];
             const items = Array.isArray(payload) ? payload : Array.isArray(payload.items) ? payload.items : [];
-            entriesCache = items.map((item) => ({
-                title: String(item.title || "").trim(),
-                slug: String(item.slug || "").trim(),
-                tags: String(item.tags || ""),
-                usage: String(item.usage || ""),
-                origin: String(item.origin || ""),
-                other: String(item.other || ""),
-                summary: String(item.summary || ""),
-                aliases: String(item.aliases || ""),
-            })).filter((item) => item.title);
-            return entriesCache;
+            const entries = items.map(normalizeEntry).filter((item): item is MemeWikiEntry => Boolean(item));
+            indexCache = buildIndex(entries);
+            return indexCache;
         })().catch((error) => {
-            entriesPromise = null;
+            indexPromise = null;
             throw error;
         });
     }
-    return entriesPromise;
-}
-
-function aliasHit(aliases: string, query: string) {
-    if (!aliases) return false;
-    const needle = query.toLowerCase();
-    return aliases
-        .split(/[,，]/)
-        .map((part) => part.trim().toLowerCase())
-        .filter(Boolean)
-        .includes(needle);
+    return indexPromise;
 }
 
 function truncate(value: string, max: number) {
@@ -67,17 +88,27 @@ function truncate(value: string, max: number) {
     return `${text.slice(0, max)}…`;
 }
 
-/** Match one meme entry. Priority mirrors dsh-memewiki: exact → alias → prefix → query contains title → title contains query. */
-export function matchMemeWikiEntry(entries: MemeWikiEntry[], query: string): MemeWikiEntry | null {
+/** Match one meme entry. Priority: exact title/slug → alias → prefix → query contains title → title contains query. */
+export function matchMemeWikiEntry(entries: MemeWikiEntry[], query: string, index?: Pick<MemeWikiIndex, "byTitle" | "bySlug" | "byAlias">): MemeWikiEntry | null {
     const q = String(query || "").trim();
     if (!q) return null;
     const lower = q.toLowerCase();
 
-    const exact = entries.find((item) => item.title === q || item.slug === q);
-    if (exact) return exact;
-
-    const byAlias = entries.find((item) => aliasHit(item.aliases, q));
-    if (byAlias) return byAlias;
+    if (index) {
+        const exact = index.byTitle.get(lower) || index.bySlug.get(lower) || index.byAlias.get(lower);
+        if (exact) return exact;
+    } else {
+        const exact = entries.find((item) => item.title === q || item.slug === q);
+        if (exact) return exact;
+        const byAlias = entries.find((item) =>
+            item.aliases
+                .split(/[,，]/)
+                .map((part) => part.trim().toLowerCase())
+                .filter(Boolean)
+                .includes(lower),
+        );
+        if (byAlias) return byAlias;
+    }
 
     const prefixes = entries
         .filter((item) => item.title.toLowerCase().startsWith(lower))
@@ -130,8 +161,8 @@ export async function searchMemeWiki(query: string): Promise<{
     if (!q) {
         return { ok: false, query: q, found: false, text: "要查什么？请提供一个梗名、缩写或黑话。" };
     }
-    const entries = await loadMemeWikiEntries();
-    const entry = matchMemeWikiEntry(entries, q);
+    const index = await loadMemeWikiIndex();
+    const entry = matchMemeWikiEntry(index.entries, q, index);
     if (!entry) {
         return {
             ok: true,
