@@ -1,30 +1,36 @@
 import axios from "axios";
 
 import i18n from "@canvas/i18n";
-import { audioMimeType, normalizeAudioFormatValue, normalizeAudioSpeedValue, normalizeAudioVoiceValue } from "@canvas/lib/audio-generation";
+import { audioMimeType, normalizeAudioFormatValue, normalizeAudioSpeedValue } from "@canvas/lib/audio-generation";
+import { resolveVoiceRuntime } from "@canvas/lib/tts-voices";
 import { uploadMediaFile, type UploadedFile } from "@canvas/services/file-storage";
-import { buildApiUrl, resolveModelRequestConfig, resolveModelScript, type AiConfig } from "@canvas/stores/use-config-store";
+import { resolveModelRequestConfig, resolveModelScript, type AiConfig } from "@canvas/stores/use-config-store";
 import { runModelPlugin } from "./model-plugin";
+import { synthesizeSpeech } from "./tts";
 
 type RequestOptions = { signal?: AbortSignal; generationClientId?: string; generationSource?: "canvas" | "workbench"; generationAttemptId?: string };
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
-
-function aiApiUrl(config: AiConfig, path: string) {
-    return buildApiUrl(config.baseUrl, path);
-}
-
-function aiHeaders(config: AiConfig) {
-    return {
-        Authorization: `Bearer ${config.apiKey}`,
-        "Content-Type": "application/json",
-    };
-}
 
 export async function requestAudioGeneration(config: AiConfig, prompt: string, options?: RequestOptions): Promise<Blob> {
     const requestConfig = resolveModelRequestConfig(config, config.model || config.audioModel);
     const model = requestConfig.model.trim();
     const format = normalizeAudioFormatValue(config.audioFormat);
     const script = resolveModelScript(config, config.model || config.audioModel);
+
+    let runtime;
+    try {
+        runtime = resolveVoiceRuntime(config.ttsEngines, config.ttsVoiceId);
+    } catch (error) {
+        if (script) {
+            // Plugin path can still run with a bare upstream voice string when catalog resolve fails.
+            runtime = null;
+        } else {
+            throw error instanceof Error ? error : new Error(apiText("ttsChannelRequired"));
+        }
+    }
+
+    const upstreamVoice = runtime?.upstreamVoice || (config.audioVoice || "").trim() || "alloy";
+
     if (script) {
         if (!model) throw new Error(apiText("audioModelRequired"));
         if (!requestConfig.baseUrl.trim()) throw new Error(apiText("baseUrlRequired"));
@@ -35,7 +41,12 @@ export async function requestAudioGeneration(config: AiConfig, prompt: string, o
                 script,
                 config: requestConfig,
                 prompt,
-                params: { voice: normalizeAudioVoiceValue(config.audioVoice), format, speed: normalizeAudioSpeedValue(config.audioSpeed), instructions: config.audioInstructions.trim() },
+                params: {
+                    voice: upstreamVoice,
+                    format,
+                    speed: normalizeAudioSpeedValue(config.audioSpeed),
+                    instructions: config.audioInstructions.trim(),
+                },
                 signal: options?.signal,
             });
             return await audioPluginBlob(result, format);
@@ -43,24 +54,29 @@ export async function requestAudioGeneration(config: AiConfig, prompt: string, o
             throw new Error(readAxiosError(error, apiText("audioGenerationFailed")));
         }
     }
-    assertAudioConfig(requestConfig, model);
-    const instructions = config.audioInstructions.trim();
+
+    if (!runtime) throw new Error(apiText("ttsChannelRequired"));
 
     try {
-        const response = await axios.post<Blob>(
-            aiApiUrl(requestConfig, "/audio/speech"),
-            {
-                model,
-                input: prompt,
-                voice: normalizeAudioVoiceValue(config.audioVoice),
-                response_format: format,
-                speed: Number(normalizeAudioSpeedValue(config.audioSpeed)),
-                ...(instructions ? { instructions } : {}),
-            },
-            { headers: aiHeaders(requestConfig), responseType: "blob", signal: options?.signal },
-        );
-        await assertAudioBlob(response.data);
-        return response.data.type.startsWith("audio/") ? response.data : new Blob([response.data], { type: audioMimeType(format) });
+        let engine = runtime.engine;
+        if (engine.vendor === "openai" && (!engine.apiKey.trim() || !engine.baseUrl.trim())) {
+            engine = {
+                ...engine,
+                baseUrl: engine.baseUrl.trim() || requestConfig.baseUrl,
+                apiKey: engine.apiKey.trim() || requestConfig.apiKey,
+                model: engine.model.trim() || model || engine.model,
+            };
+        }
+
+        const result = await synthesizeSpeech(engine, {
+            text: prompt,
+            voice: runtime.upstreamVoice,
+            format,
+            speed: Number(normalizeAudioSpeedValue(config.audioSpeed)),
+            instructions: config.audioInstructions.trim() || undefined,
+            signal: options?.signal,
+        });
+        return result.blob;
     } catch (error) {
         throw new Error(readAxiosError(error, apiText("audioGenerationFailed")));
     }
@@ -85,26 +101,6 @@ export async function storeGeneratedAudio(blob: Blob, format = "mp3"): Promise<U
     return uploadMediaFile(audio, "audio");
 }
 
-function assertAudioConfig(config: AiConfig, model: string) {
-    if (!model) throw new Error(apiText("audioModelRequired"));
-    if (!config.baseUrl.trim()) throw new Error(apiText("baseUrlRequired"));
-    if (!config.apiKey.trim()) throw new Error(apiText("apiKeyRequired"));
-    if (config.apiFormat === "gemini") throw new Error(apiText("geminiAudioUnsupported"));
-    if (config.apiFormat === "anthropic") throw new Error(apiText("anthropicAudioUnsupported"));
-}
-
-async function assertAudioBlob(blob: Blob) {
-    if (!blob.type.includes("json")) return;
-    let payload: { code?: number; msg?: string; error?: { message?: string } };
-    try {
-        payload = JSON.parse(await blob.text()) as { code?: number; msg?: string; error?: { message?: string } };
-    } catch {
-        return;
-    }
-    if (typeof payload.code === "number" && payload.code !== 0) throw new Error(payload.msg || apiText("audioGenerationFailed"));
-    if (payload.error?.message) throw new Error(payload.error.message);
-}
-
 function readApiErrorMessage(value: unknown): string {
     if (!value) return "";
     if (typeof value === "string") {
@@ -120,39 +116,21 @@ function readApiErrorMessage(value: unknown): string {
     }
     if (typeof value !== "object") return "";
     const payload = value as { msg?: unknown; message?: unknown; error?: unknown; detail?: unknown };
-    const errorMsg =
-        typeof payload.error === "string"
-            ? payload.error
-            : (payload.error as { message?: unknown })?.message;
-    return (
-        readApiErrorMessage(payload.msg) ||
-        readApiErrorMessage(payload.message) ||
-        readApiErrorMessage(errorMsg) ||
-        readApiErrorMessage(payload.detail) ||
-        ""
-    );
+    const errorMsg = typeof payload.error === "string" ? payload.error : (payload.error as { message?: unknown })?.message;
+    return readApiErrorMessage(payload.msg) || readApiErrorMessage(payload.message) || readApiErrorMessage(errorMsg) || readApiErrorMessage(payload.detail) || "";
 }
 
 function readAxiosError(error: unknown, fallback: string) {
     if (axios.isCancel(error)) return apiText("requestCanceled");
     if (axios.isAxiosError(error)) {
         if (!error.response && error.code === "ERR_NETWORK") return apiText("networkRequestFailed");
-        const responseData = error.response?.data;
-        const apiMsg = readApiErrorMessage(responseData);
+        const apiMsg = readApiErrorMessage(error.response?.data);
         if (apiMsg) return apiMsg;
-        const statusMsg = statusMessage(error.response?.status, fallback);
-        if (statusMsg) return statusMsg;
+        const status = error.response?.status;
+        if (status === 401 || status === 403) return apiText("authenticationFailed");
+        if (status === 429) return apiText("rateLimited");
         return error.message || fallback;
     }
     if (error instanceof DOMException && error.name === "AbortError") return apiText("requestCanceled");
-    return error instanceof Error ? readApiErrorMessage(error.message) || error.message : fallback;
-}
-
-function statusMessage(status: number | undefined, fallback: string) {
-    if (status === 401 || status === 403) return apiText("authenticationFailed");
-    if (status === 429) return apiText("rateLimited");
-    if (status === 404) return apiText("notFound");
-    if (status === 502) return apiText("badGateway");
-    if (status === 503) return apiText("serviceBusy");
-    return status ? apiText("httpFailed", { status }) : fallback;
+    return error instanceof Error ? error.message || fallback : fallback;
 }

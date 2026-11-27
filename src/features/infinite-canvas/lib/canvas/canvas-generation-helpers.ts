@@ -224,6 +224,8 @@ export function buildGenerationConfig(config: AiConfig, node: CanvasNodeData | u
         audioFormat: node?.metadata?.audioFormat || config.audioFormat || defaultConfig.audioFormat,
         audioSpeed: node?.metadata?.audioSpeed || config.audioSpeed || defaultConfig.audioSpeed,
         audioInstructions: node?.metadata?.audioInstructions || config.audioInstructions || defaultConfig.audioInstructions,
+        ttsVoiceId: node?.metadata?.ttsVoiceId || config.ttsVoiceId || defaultConfig.ttsVoiceId,
+        ttsEngineId: node?.metadata?.ttsEngineId || config.ttsEngineId || defaultConfig.ttsEngineId,
         count: String(node?.metadata?.count || (mode === "image" ? config.canvasImageCount || config.count : config.count) || defaultConfig.count),
     };
 }

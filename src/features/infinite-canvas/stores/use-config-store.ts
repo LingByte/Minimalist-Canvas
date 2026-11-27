@@ -9,9 +9,35 @@ import {
     defaultObjectStorageConfig,
     type ObjectStorageConfig,
 } from "@canvas/lib/object-storage/types";
+import {
+    createTtsEngine,
+    normalizeTtsEngines,
+    resolveTtsEngine,
+    type TtsEngine,
+    type TtsVendor,
+} from "@canvas/lib/tts-engines";
+import { DEFAULT_TTS_VOICE_ID, migrateLegacyAudioVoiceId } from "@canvas/lib/tts-voices";
 
 export type { ObjectStorageConfig, ObjectStorageProvider } from "@canvas/lib/object-storage/types";
 export { defaultObjectStorageConfig, OBJECT_STORAGE_PROVIDERS, isObjectStorageConfigured } from "@canvas/lib/object-storage/types";
+export type { TtsEngine, TtsVendor } from "@canvas/lib/tts-engines";
+export {
+    TTS_VENDORS,
+    TTS_VENDOR_META,
+    createTtsEngine,
+    normalizeTtsEngines,
+    resolveTtsEngine,
+    isTtsEngineReady,
+    ttsVendorMeta,
+} from "@canvas/lib/tts-engines";
+export {
+    DEFAULT_TTS_VOICE_ID,
+    listTtsVoices,
+    resolveTtsVoice,
+    ttsVoiceLabel,
+    hasReadyTtsChannel,
+    resolveVoiceRuntime,
+} from "@canvas/lib/tts-voices";
 
 export type ApiCallFormat = "openai" | "gemini" | "anthropic";
 export type ModelCapability = "image" | "video" | "text" | "audio";
@@ -50,6 +76,12 @@ export type AiConfig = {
     audioFormat: string;
     audioSpeed: string;
     audioInstructions: string;
+    /** Native TTS engines (separate from LLM channels) — credentials only. */
+    ttsEngines: TtsEngine[];
+    /** @deprecated Kept for migrate; runtime selects channels by voice vendor. */
+    ttsEngineId: string;
+    /** Builtin catalog voice id (`vendor:upstreamId`) used by canvas audio generation. */
+    ttsVoiceId: string;
     videoSeconds: string;
     vquality: string;
     videoGenerateAudio: string;
@@ -73,7 +105,7 @@ export type WebdavSyncConfig = {
     directory: string;
     lastSyncedAt: string;
 };
-export type ConfigTabKey = "channels" | "preferences" | "prompt-sources" | "local-storage" | "object-storage" | "webdav";
+export type ConfigTabKey = "channels" | "preferences" | "tts" | "prompt-sources" | "local-storage" | "object-storage" | "webdav";
 
 const CHANNEL_MODEL_SEPARATOR = "::";
 const CONFIG_STORE_KEY = "minimalist-canvas:ai_config_store";
@@ -105,6 +137,9 @@ export const defaultConfig: AiConfig = {
     audioFormat: "mp3",
     audioSpeed: "1",
     audioInstructions: "",
+    ttsEngines: [],
+    ttsEngineId: "",
+    ttsVoiceId: DEFAULT_TTS_VOICE_ID,
     videoSeconds: "6",
     vquality: "720",
     videoGenerateAudio: "true",
@@ -218,6 +253,23 @@ function isAiConfigReady(config: AiConfig, model: string) {
     return Boolean(model.trim() && channel.baseUrl.trim() && channel.apiKey.trim());
 }
 
+/** Normalize TTS engines / voice selection; drop unused placeholder engines. */
+export function migrateAiConfig(config: AiConfig): AiConfig {
+    const channels = Array.isArray(config.channels) ? config.channels : defaultConfig.channels;
+    let ttsEngines = normalizeTtsEngines(config.ttsEngines);
+    // Remove the auto-seeded incomplete OpenAI placeholder from earlier builds.
+    ttsEngines = ttsEngines.filter((engine) => {
+        if (engine.id !== "tts-openai-default" || engine.vendor !== "openai") return true;
+        return Boolean(engine.apiKey.trim() || engine.baseUrl.trim());
+    });
+    const ttsEngineId = ttsEngines.some((engine) => engine.id === config.ttsEngineId)
+        ? config.ttsEngineId
+        : ttsEngines[0]?.id || "";
+    const ttsVoiceId = migrateLegacyAudioVoiceId(config.audioVoice, config.ttsVoiceId);
+    const audioVoice = ttsVoiceId.includes(":") ? ttsVoiceId.slice(ttsVoiceId.indexOf(":") + 1) : config.audioVoice || defaultConfig.audioVoice;
+    return { ...config, channels, ttsEngines, ttsEngineId, ttsVoiceId, audioVoice };
+}
+
 export const useConfigStore = create<ConfigStore>()(
     persist(
         (set) => ({
@@ -265,10 +317,11 @@ export const useConfigStore = create<ConfigStore>()(
             }),
             merge: (persisted, current) => {
                 const partial = (persisted || {}) as Partial<ConfigStore>;
+                const mergedConfig = migrateAiConfig({ ...current.config, ...(partial.config || {}) });
                 return {
                     ...current,
                     ...partial,
-                    config: { ...current.config, ...(partial.config || {}) },
+                    config: mergedConfig,
                     webdav: { ...current.webdav, ...(partial.webdav || {}) },
                     objectStorage: { ...defaultObjectStorageConfig, ...(partial.objectStorage || {}) },
                 };

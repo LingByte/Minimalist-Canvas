@@ -23,8 +23,12 @@ export const audioFormatOptions = [
     { value: "pcm", label: "PCM" },
 ];
 
+/** Keep OpenAI preset voices; allow arbitrary vendor voice ids through unchanged. */
 export function normalizeAudioVoiceValue(value: string) {
-    return audioVoiceOptions.some((item) => item.value === value) ? value : "alloy";
+    const trimmed = (value || "").trim();
+    if (!trimmed) return "alloy";
+    if (audioVoiceOptions.some((item) => item.value === trimmed)) return trimmed;
+    return trimmed;
 }
 
 export function normalizeAudioFormatValue(value: string) {
@@ -39,7 +43,7 @@ export function normalizeAudioSpeedValue(value: string) {
 
 export function audioVoiceLabel(value: string) {
     const voice = normalizeAudioVoiceValue(value);
-    return audioVoiceOptions.find((item) => item.value === voice)?.label || voice;
+    return audioVoiceOptions.find((item) => item.value === voice)?.label || voice || "alloy";
 }
 
 export function audioFormatLabel(value: string) {

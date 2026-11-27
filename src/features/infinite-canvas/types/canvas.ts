@@ -85,6 +85,10 @@ export type CanvasNodeMetadata = {
     audioFormat?: string;
     audioSpeed?: string;
     audioInstructions?: string;
+    /** @deprecated Engine pick removed; channels resolve from ttsVoiceId vendor. */
+    ttsEngineId?: string;
+    /** Builtin catalog voice id (`vendor:upstreamId`). */
+    ttsVoiceId?: string;
     references?: string[];
     naturalWidth?: number;
     naturalHeight?: number;
