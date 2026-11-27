@@ -2,6 +2,7 @@ import type { NavigateFunction } from "react-router-dom";
 
 import i18n from "@canvas/i18n";
 import { isSiteTool, runSiteTool, type SiteToolName } from "@canvas/lib/agent/agent-site-tools";
+import { compactCanvasSnapshot } from "@canvas/lib/agent/builtin-agent-context";
 import { searchMemeWiki } from "@canvas/lib/agent/meme-wiki";
 import { applyCanvasAgentOps, type CanvasAgentOp, type CanvasAgentSnapshot } from "@canvas/lib/canvas/canvas-agent-ops";
 import { isMcpToolName } from "@canvas/lib/mcp/mcp-client";
@@ -9,7 +10,7 @@ import { callMcpTool, mcpAgentTools } from "@canvas/stores/use-mcp-client-store"
 import { useBuiltinSkillStore } from "@canvas/stores/use-builtin-skill-store";
 import { randomId } from "@canvas/lib/utils";
 import type { ResponseFunctionTool } from "@canvas/services/api/image";
-import { useAgentStore, type AgentPermissionMode } from "@canvas/stores/use-agent-store";
+import { useAgentStore, type AgentCanvasContext, type AgentPermissionMode } from "@canvas/stores/use-agent-store";
 
 export type BuiltinAgentToolDefinition = {
     type: "function";
@@ -232,7 +233,8 @@ export function builtinAgentTools(hasCanvas: boolean): ResponseFunctionTool[] {
             type: "function",
             function: {
                 name: "canvas_get_state",
-                description: "Get the current canvas snapshot: nodes (id/type/title/position/metadata), connections, selection, and viewport.",
+                description:
+                    "Get a compact canvas snapshot for planning: node id/type/title/position, text/prompt excerpts, Script storyboard row summaries (shot/duration/plot/imageNodeId/videoNodeId), connections, selection, and viewport. Prefer this over guessing ids.",
                 parameters: { type: "object", properties: {} },
             },
         },
@@ -241,7 +243,7 @@ export function builtinAgentTools(hasCanvas: boolean): ResponseFunctionTool[] {
             function: {
                 name: "canvas_apply_ops",
                 description:
-                    "Apply operations to the open canvas. Each op in ops[] is one of: {type:'add_node',nodeType?,title?,x?,y?,width?,height?,metadata?} | {type:'update_node',id,metadata?|patch?} | {type:'delete_node',id?|ids?|nodeType?} | {type:'connect_nodes',fromNodeId,toNodeId} | {type:'delete_connections',id?|ids?|all?} | {type:'set_viewport',viewport:{x,y,zoom}} | {type:'select_nodes',ids[]} | {type:'run_generation',nodeId,mode?('text'|'image'|'video'|'audio'),prompt?}. nodeType values come from the canvas node registry (e.g. 'text','image','video','audio'). Returns the updated snapshot.",
+                    "Apply operations to the open canvas. Ops: {type:'add_node',nodeType?,title?,x?,y?,width?,height?,metadata?} | {type:'update_node',id,metadata?|patch?} | {type:'delete_node',id?|ids?|nodeType?} | {type:'connect_nodes',fromNodeId,toNodeId} | {type:'delete_connections',id?|ids?|all?} | {type:'set_viewport',viewport:{x,y,zoom}} | {type:'select_nodes',ids[]} | {type:'run_generation',nodeId,mode?('text'|'image'|'video'|'audio'),prompt?}. nodeType includes 'text','image','video','audio','config','script','director','group'. For storyboards prefer nodeType 'script' with metadata.storyboard.rows[] = [{id?,shotNumber,durationSeconds,plotDescription,imageNodeId?,videoNodeId?}]. Missing script storyboard is auto-initialized. Returns an audit + updated counts.",
                 parameters: {
                     type: "object",
                     properties: { ops: { type: "array", items: { type: "object" } } },
@@ -263,22 +265,15 @@ export function builtinAgentTools(hasCanvas: boolean): ResponseFunctionTool[] {
     ];
 }
 
-/** System prompt describing the built-in agent's canvas capabilities. */
-export function builtinAgentSystemPrompt(hasCanvas: boolean): string {
-    const base = i18n.t("agent.builtin.systemPrompt", {
-        defaultValue:
-            "You are the built-in canvas agent of this app. You can call tools to inspect and modify the canvas, search prompts and assets, look up Chinese meme/slang via search_meme_wiki, and drive image/video generation. For multi-step tasks call update_plan first to outline steps, then update it as steps complete. When a use_skill tool is available, activate the relevant skill before doing that kind of work. If you see an unfamiliar meme or slang term, call search_meme_wiki before guessing.",
-    });
-    if (!hasCanvas) return base;
-    return `${base}\n${i18n.t("agent.builtin.systemPromptCanvas", {
-        defaultValue:
-            "Canvas rules: use canvas_get_state first to see current nodes. Create/update/connect/delete nodes via canvas_apply_ops. Chain image -> video workflows by connecting nodes, then run_generation. Node ids come from the snapshot — never invent ids. Prefer small batches of ops and verify with canvas_get_state after large changes. canvas_apply_ops returns an audit report: check `skipped` for failed ops (with reasons) and fix them in the next round; use `createdNodeIds` for follow-up connect_nodes; run_generation is queued — poll generation_get_status to verify.",
-    })}`;
-}
-
 /** Dispatch a tool call for the built-in agent. */
-export async function runBuiltinAgentTool(name: string, args: Record<string, unknown>, navigate: NavigateFunction): Promise<unknown> {
-    const canvasContext = useAgentStore.getState().canvasContext;
+export async function runBuiltinAgentTool(
+    name: string,
+    args: Record<string, unknown>,
+    navigate: NavigateFunction,
+    canvasContextOverride?: AgentCanvasContext | null,
+): Promise<unknown> {
+    // Prefer the harness live context so multi-round tool loops see ops applied in this turn.
+    const canvasContext = canvasContextOverride ?? useAgentStore.getState().canvasContext;
     switch (name) {
         case "update_plan": {
             // The panel renders the plan card; the model just needs confirmation.
@@ -299,7 +294,7 @@ export async function runBuiltinAgentTool(name: string, args: Record<string, unk
         case "canvas_get_state": {
             const snapshot = canvasContext?.snapshot;
             if (!snapshot) throw new Error(i18n.t("agent.mcp.noCanvas"));
-            return snapshot;
+            return compactCanvasSnapshot(snapshot);
         }
         case "canvas_apply_ops": {
             const applyOps = canvasContext?.applyOps;
@@ -320,12 +315,14 @@ export async function runBuiltinAgentTool(name: string, args: Record<string, unk
                 nodes: next.nodes.length,
                 connections: next.connections.length,
                 selectedNodeIds: next.selectedNodeIds,
+                state: compactCanvasSnapshot(next),
             };
         }
         case "canvas_undo_ops": {
             const undoOps = canvasContext?.undoOps;
             if (!undoOps || !canvasContext?.canUndo) throw new Error(i18n.t("agent.mcp.nothingToUndo"));
-            return undoOps();
+            const undone = undoOps();
+            return undone ? { ok: true, state: compactCanvasSnapshot(undone) } : undone;
         }
         default:
             if (isMcpToolName(name)) return callMcpTool(name, args);
@@ -451,12 +448,12 @@ export const BUILTIN_AGENT_TOOLS = builtinAgentTools(true) as BuiltinAgentToolDe
 
 export async function executeBuiltinAgentTool(
     call: BuiltinAgentToolCall,
-    ctx: { canvasContext?: unknown; navigate: NavigateFunction },
+    ctx: { canvasContext?: AgentCanvasContext | null; navigate: NavigateFunction },
 ): Promise<BuiltinAgentToolResult> {
     try {
         const parsed = call.arguments ? JSON.parse(call.arguments) : {};
         const args = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
-        const result = await runBuiltinAgentTool(call.name, args, ctx.navigate);
+        const result = await runBuiltinAgentTool(call.name, args, ctx.navigate, ctx.canvasContext);
         const ok = !(result && typeof result === "object" && "ok" in result && (result as { ok?: unknown }).ok === false);
         return {
             callId: call.id,

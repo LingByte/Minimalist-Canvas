@@ -1,7 +1,9 @@
 import { nanoid } from "nanoid";
 
 import i18n from "@canvas/i18n";
-import { getNodeSpec, isRegisteredNodeType } from "@canvas/lib/canvas/node-registry";
+import { getNodeSpec as getBuiltinNodeSpec } from "@canvas/constant/canvas";
+import { normalizeStoryboard } from "@canvas/lib/canvas/canvas-storyboard";
+import { getNodeSpec, isBuiltinNodeType, isRegisteredNodeType } from "@canvas/lib/canvas/node-registry";
 import { CanvasNodeType, type CanvasConnection, type CanvasNodeData, type CanvasNodeMetadata, type CanvasNodeTypeId, type ViewportTransform } from "@canvas/types/canvas";
 
 export type CanvasAgentOp =
@@ -43,8 +45,9 @@ export function applyCanvasAgentOps(snapshot: CanvasAgentSnapshot, ops?: CanvasA
     (Array.isArray(ops) ? ops : []).forEach((op, index) => {
         if (!op?.type) return;
         if (op.type === "add_node") {
-            const nodeType = op.nodeType && isRegisteredNodeType(op.nodeType) ? op.nodeType : CanvasNodeType.Text;
-            const spec = getNodeSpec(nodeType);
+            const nodeType = resolveAgentNodeType(op.nodeType);
+            const spec = resolveAgentNodeSpec(nodeType);
+            const metadata = withScriptStoryboard(nodeType, { ...spec.metadata, ...op.metadata });
             const node: CanvasNodeData = {
                 id: op.id || `${nodeType}-${Date.now()}-${index}`,
                 type: nodeType,
@@ -52,14 +55,27 @@ export function applyCanvasAgentOps(snapshot: CanvasAgentSnapshot, ops?: CanvasA
                 position: op.position || { x: op.x ?? index * 36, y: op.y ?? index * 36 },
                 width: op.width || spec.width,
                 height: op.height || spec.height,
-                metadata: { ...spec.metadata, ...op.metadata },
+                metadata,
             };
-            nodes = [...nodes, node];
+            // Same id → replace (avoids duplicate Script nodes when the model retries add_node).
+            const existing = nodes.findIndex((item) => item.id === node.id);
+            nodes = existing >= 0 ? nodes.map((item, i) => (i === existing ? node : item)) : [...nodes, node];
             selectedNodeIds = [node.id];
         }
         if (op.type === "update_node") {
             if (!op.id) return;
-            nodes = nodes.map((node) => (node.id === op.id ? { ...node, ...op.patch, metadata: { ...node.metadata, ...op.patch?.metadata, ...op.metadata } } : node));
+            nodes = nodes.map((node) => {
+                if (node.id !== op.id) return node;
+                const merged: CanvasNodeData = {
+                    ...node,
+                    ...op.patch,
+                    metadata: { ...node.metadata, ...op.patch?.metadata, ...op.metadata },
+                };
+                return {
+                    ...merged,
+                    metadata: withScriptStoryboard(merged.type, merged.metadata || {}),
+                };
+            });
         }
         if (op.type === "delete_node") {
             const ids = new Set(op.ids || (op.id ? [op.id] : op.nodeType ? nodes.filter((node) => node.type === op.nodeType).map((node) => node.id) : []));
@@ -82,6 +98,29 @@ export function applyCanvasAgentOps(snapshot: CanvasAgentSnapshot, ops?: CanvasA
     });
 
     return { ...snapshot, nodes, connections, selectedNodeIds, viewport };
+}
+
+function resolveAgentNodeType(nodeType?: CanvasNodeTypeId) {
+    if (nodeType && (isRegisteredNodeType(nodeType) || isBuiltinNodeType(nodeType))) return nodeType;
+    return CanvasNodeType.Text;
+}
+
+function resolveAgentNodeSpec(nodeType: CanvasNodeTypeId) {
+    if (isRegisteredNodeType(nodeType)) return getNodeSpec(nodeType);
+    if (isBuiltinNodeType(nodeType)) {
+        const spec = getBuiltinNodeSpec(nodeType);
+        return { width: spec.width, height: spec.height, title: spec.title, metadata: spec.metadata || {} };
+    }
+    return getNodeSpec(nodeType);
+}
+
+function withScriptStoryboard(nodeType: CanvasNodeTypeId, metadata: CanvasNodeMetadata): CanvasNodeMetadata {
+    if (nodeType !== CanvasNodeType.Script) return metadata;
+    return {
+        ...metadata,
+        workflowKind: metadata.workflowKind || "storyboard",
+        storyboard: normalizeStoryboard(metadata.storyboard),
+    };
 }
 
 function opLabel(type: string) {

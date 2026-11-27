@@ -1,5 +1,5 @@
 import { getNodeSpec, NODE_DEFAULT_SIZE } from "@canvas/constant/canvas";
-import { createEmptyStoryboard } from "@canvas/lib/canvas/canvas-storyboard";
+import { normalizeStoryboard } from "@canvas/lib/canvas/canvas-storyboard";
 import { nodeSizeFromRatio } from "@canvas/lib/canvas/canvas-node-size";
 import type { AiConfig } from "@canvas/stores/use-config-store";
 import type { UploadedImage } from "@canvas/services/image-storage";
@@ -10,10 +10,15 @@ import { CanvasNodeType, type CanvasImageGenerationType, type CanvasNodeData, ty
 export function createCanvasNode(type: CanvasNodeTypeId, position: Position, metadata?: CanvasNodeMetadata): CanvasNodeData {
     const spec = getNodeSpec(type);
     const id = `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const merged = { ...spec.metadata, ...metadata };
     const nextMetadata =
         type === CanvasNodeType.Script
-            ? { ...spec.metadata, storyboard: createEmptyStoryboard(), ...metadata }
-            : { ...spec.metadata, ...metadata };
+            ? {
+                  ...merged,
+                  workflowKind: merged.workflowKind || "storyboard",
+                  storyboard: normalizeStoryboard(merged.storyboard),
+              }
+            : merged;
 
     return {
         id,

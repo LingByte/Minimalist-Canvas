@@ -15,7 +15,7 @@ import type { AiConfig } from "@canvas/stores/use-config-store";
 import type { AgentCanvasContext, AgentChatItem } from "@canvas/stores/use-agent-store";
 import { randomId } from "@canvas/lib/utils";
 
-export const BUILTIN_AGENT_MAX_TOOL_ROUNDS = 8;
+export const BUILTIN_AGENT_MAX_TOOL_ROUNDS = 12;
 
 export type BuiltinAgentHarnessHandlers = {
     onAssistantDelta: (assistantId: string, text: string) => void;
@@ -117,9 +117,10 @@ export async function runBuiltinAgentHarness(options: {
             // Prefer store's latest canvasContext (bridge may have refreshed) while keeping liveSnapshot.
             const storeContext = liveContext;
             const result = await executeBuiltinAgentTool(call, { canvasContext: storeContext, navigate });
-            if (result.ok && result.result && typeof result.result === "object" && result.result !== null && "nodeCount" in result.result) {
-                // applyOps already updated liveSnapshot via wrapper
-            } else if (call.name === "canvas_get_state" || call.name === "canvas_get_selection") {
+            if (call.name === "canvas_apply_ops" && result.ok) {
+                // liveSnapshot is updated by liveContext.applyOps; also accept compact state payloads.
+                liveSnapshot = storeContext?.snapshot || liveSnapshot;
+            } else if (call.name === "canvas_get_state" || call.name === "canvas_get_selection" || call.name === "canvas_undo_ops") {
                 liveSnapshot = storeContext?.snapshot || liveSnapshot;
             }
             handlers.onToolFinish(toolItemId, {

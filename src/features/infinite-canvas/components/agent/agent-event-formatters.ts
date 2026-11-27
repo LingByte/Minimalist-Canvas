@@ -389,7 +389,7 @@ function canvasContentSummary(nodes: unknown[], connections: number) {
         result[type] = (result[type] || 0) + 1;
         return result;
     }, {});
-    const known = new Set(["text", "image", "config", "video", "audio", "group"]);
+    const known = new Set(["text", "image", "config", "video", "audio", "group", "script", "director"]);
     const other = Object.entries(counts).reduce((total, [type, count]) => total + (known.has(type) ? 0 : count), 0);
     const parts = [
         counts.text ? tr("textNodes", { count: counts.text }) : "",
@@ -397,6 +397,8 @@ function canvasContentSummary(nodes: unknown[], connections: number) {
         counts.config ? tr("configNodes", { count: counts.config }) : "",
         counts.video ? tr("videoNodes", { count: counts.video }) : "",
         counts.audio ? tr("audioNodes", { count: counts.audio }) : "",
+        counts.script ? tr("scriptNodes", { count: counts.script, defaultValue: `${counts.script} 个分镜` }) : "",
+        counts.director ? tr("directorNodes", { count: counts.director, defaultValue: `${counts.director} 个导演台` }) : "",
         counts.group ? tr("groupNodes", { count: counts.group }) : "",
         other ? tr("otherNodes", { count: other }) : "",
         connections ? tr("connections", { count: connections }) : "",
@@ -417,6 +419,7 @@ export function routeName(path: string) {
     if (path.startsWith("/video")) return tr("routes.video");
     if (path.startsWith("/prompts")) return tr("routes.prompts");
     if (path.startsWith("/assets")) return tr("routes.assets");
+    if (path.startsWith("/skills")) return tr("routes.skills", { defaultValue: "Skills" });
     if (path.startsWith("/config")) return tr("routes.config");
     return path;
 }
