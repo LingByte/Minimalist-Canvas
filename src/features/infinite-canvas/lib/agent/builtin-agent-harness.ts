@@ -143,6 +143,23 @@ export async function runBuiltinAgentHarness(options: {
 }
 
 function serializeToolResult(result: BuiltinAgentToolResult) {
+    // Prefer the human-readable meme wiki text for the model when present.
+    if (
+        result.name === "search_meme_wiki" &&
+        result.result &&
+        typeof result.result === "object" &&
+        typeof (result.result as { text?: unknown }).text === "string"
+    ) {
+        return {
+            ok: result.ok,
+            name: result.name,
+            summary: result.summary,
+            text: (result.result as { text: string }).text,
+            found: Boolean((result.result as { found?: boolean }).found),
+            query: (result.result as { query?: string }).query || "",
+            title: (result.result as { entry?: { title?: string } }).entry?.title || "",
+        };
+    }
     return {
         ok: result.ok,
         name: result.name,

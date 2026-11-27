@@ -2,6 +2,7 @@ import type { NavigateFunction } from "react-router-dom";
 
 import i18n from "@canvas/i18n";
 import { isSiteTool, runSiteTool, type SiteToolName } from "@canvas/lib/agent/agent-site-tools";
+import { searchMemeWiki } from "@canvas/lib/agent/meme-wiki";
 import { applyCanvasAgentOps, type CanvasAgentOp, type CanvasAgentSnapshot } from "@canvas/lib/canvas/canvas-agent-ops";
 import { isMcpToolName } from "@canvas/lib/mcp/mcp-client";
 import { callMcpTool, mcpAgentTools } from "@canvas/stores/use-mcp-client-store";
@@ -116,6 +117,21 @@ export function builtinAgentTools(hasCanvas: boolean): ResponseFunctionTool[] {
                         page: { type: "number" },
                         pageSize: { type: "number" },
                     },
+                },
+            },
+        },
+        {
+            type: "function",
+            function: {
+                name: "search_meme_wiki",
+                description:
+                    "Look up Chinese internet meme / slang / abbreviation meanings from the local meme wiki (~6800 entries). Use when a term looks like a meme or slang and you are not sure. Prefer this over guessing.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        query: { type: "string", description: "Meme name, slang, or abbreviation to look up" },
+                    },
+                    required: ["query"],
                 },
             },
         },
@@ -251,7 +267,7 @@ export function builtinAgentTools(hasCanvas: boolean): ResponseFunctionTool[] {
 export function builtinAgentSystemPrompt(hasCanvas: boolean): string {
     const base = i18n.t("agent.builtin.systemPrompt", {
         defaultValue:
-            "You are the built-in canvas agent of this app. You can call tools to inspect and modify the canvas, search prompts and assets, and drive image/video generation. For multi-step tasks call update_plan first to outline steps, then update it as steps complete. When a use_skill tool is available, activate the relevant skill before doing that kind of work.",
+            "You are the built-in canvas agent of this app. You can call tools to inspect and modify the canvas, search prompts and assets, look up Chinese meme/slang via search_meme_wiki, and drive image/video generation. For multi-step tasks call update_plan first to outline steps, then update it as steps complete. When a use_skill tool is available, activate the relevant skill before doing that kind of work. If you see an unfamiliar meme or slang term, call search_meme_wiki before guessing.",
     });
     if (!hasCanvas) return base;
     return `${base}\n${i18n.t("agent.builtin.systemPromptCanvas", {
@@ -276,6 +292,9 @@ export async function runBuiltinAgentTool(name: string, args: Record<string, unk
             if (!skill) throw new Error(i18n.t("agent.builtin.skillNotFound", { name: skillName }));
             store.select(skill.name);
             return { ok: true, skill: skill.name, instructions: skill.instructions };
+        }
+        case "search_meme_wiki": {
+            return searchMemeWiki(String(args.query || ""));
         }
         case "canvas_get_state": {
             const snapshot = canvasContext?.snapshot;
@@ -438,9 +457,30 @@ export async function executeBuiltinAgentTool(
         const parsed = call.arguments ? JSON.parse(call.arguments) : {};
         const args = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
         const result = await runBuiltinAgentTool(call.name, args, ctx.navigate);
-        return { callId: call.id, name: call.name, ok: true, summary: call.name, result };
+        const ok = !(result && typeof result === "object" && "ok" in result && (result as { ok?: unknown }).ok === false);
+        return {
+            callId: call.id,
+            name: call.name,
+            ok,
+            summary: summarizeBuiltinToolResult(call.name, result),
+            result,
+        };
     } catch (error) {
         const summary = error instanceof Error ? error.message : String(error);
         return { callId: call.id, name: call.name, ok: false, summary, result: { error: summary } };
     }
+}
+
+function summarizeBuiltinToolResult(name: string, result: unknown) {
+    if (name === "search_meme_wiki" && result && typeof result === "object") {
+        const hit = result as { ok?: boolean; found?: boolean; query?: string; entry?: { title?: string }; text?: string };
+        if (hit.found && hit.entry?.title) {
+            return i18n.t("agent.eventMore.memeFound", { title: hit.entry.title, defaultValue: `查到「${hit.entry.title}」` });
+        }
+        if (hit.query) {
+            return i18n.t("agent.eventMore.memeMissing", { query: hit.query, defaultValue: `未收录「${hit.query}」` });
+        }
+        if (typeof hit.text === "string" && hit.text.trim()) return hit.text.trim();
+    }
+    return name;
 }

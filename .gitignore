@@ -34,3 +34,6 @@ src-tauri/gen/
 
 # Local tooling
 tools/
+
+# Local meme-wiki preview dumps
+tmp-memewiki-preview/
