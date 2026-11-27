@@ -8,13 +8,16 @@ import { buildCanvasResourceReferences, type CanvasResourceReference } from "@ca
 import { isImeComposing, isPlainEnterKey } from "@canvas/lib/keyboard-event";
 import type { AgentSkillSummary } from "@canvas/services/api/canvas-agent";
 import { useAgentSkillStore } from "@canvas/stores/use-agent-skill-store";
+import { builtinSkillToSummary, useBuiltinSkillStore } from "@canvas/stores/use-builtin-skill-store";
 import { useAgentStore, type AgentCanvasReference, type AgentSkillReference } from "@canvas/stores/use-agent-store";
 import { AgentCanvasReferencePreview, canvasReferenceIcon, canvasReferenceKindLabel } from "./agent-canvas-reference-preview";
 import { agentInlineTokenClass, agentInlineTokenMediaClass, agentReferenceMarker, agentSkillMarker, parseAgentInlineTokens } from "./agent-chat-inline-tokens";
 import { SmartImage } from "@/components/smart-image";
 
-type ComposerCommand = { type: "skill" | "resource"; query: string; length: number };
-type ComposerCandidate = { type: "skill"; skill: AgentSkillSummary } | { type: "resource"; reference: CanvasResourceReference };
+type ComposerCommand = { type: "skill" | "resource" | "mention"; query: string; length: number };
+type ComposerCandidate =
+    | { type: "skill"; skill: AgentSkillSummary; source: "builtin" | "codex" }
+    | { type: "resource"; reference: CanvasResourceReference };
 type ReferenceHover = { reference: AgentCanvasReference; left: number; top: number; width: number; height: number };
 
 export function AgentChatPromptInput({ value, disabled, placeholder, theme, onChange, onSubmit, onAddFiles }: {
@@ -30,34 +33,59 @@ export function AgentChatPromptInput({ value, disabled, placeholder, theme, onCh
     const editorRef = useRef<HTMLDivElement>(null);
     const composingRef = useRef(false);
     const lastEmittedRef = useRef(value);
-    const skills = useAgentSkillStore((state) => state.skills);
-    const skillsLoading = useAgentSkillStore((state) => state.loading);
-    const selectedSkill = useAgentSkillStore((state) => state.selectedSkill);
+    const codexSkills = useAgentSkillStore((state) => state.skills);
+    const codexSkillsLoading = useAgentSkillStore((state) => state.loading);
+    const selectedCodexSkill = useAgentSkillStore((state) => state.selectedSkill);
+    const builtinSkills = useBuiltinSkillStore((state) => state.skills);
+    const builtinSkillsLoading = useBuiltinSkillStore((state) => state.loading);
+    const selectedBuiltinName = useBuiltinSkillStore((state) => state.selectedName);
     const canvasReferences = useAgentStore((state) => state.canvasReferences);
     const [command, setCommand] = useState<ComposerCommand | null>(null);
     const [activeIndex, setActiveIndex] = useState(0);
     const [resourceCandidates, setResourceCandidates] = useState<CanvasResourceReference[]>([]);
     const [referenceHover, setReferenceHover] = useState<ReferenceHover | null>(null);
 
-    const messageSkill = useMemo<AgentSkillReference | undefined>(() => selectedSkill ? {
-        name: selectedSkill.name,
-        path: selectedSkill.path,
-        displayName: selectedSkill.interface?.displayName || undefined,
-    } : undefined, [selectedSkill]);
+    const selectedBuiltinSkill = useMemo(
+        () => builtinSkills.find((skill) => skill.name === selectedBuiltinName),
+        [builtinSkills, selectedBuiltinName],
+    );
+    const messageSkill = useMemo<AgentSkillReference | undefined>(() => {
+        if (selectedBuiltinSkill) {
+            return { name: selectedBuiltinSkill.name, path: selectedBuiltinSkill.path, displayName: selectedBuiltinSkill.name };
+        }
+        if (selectedCodexSkill) {
+            return {
+                name: selectedCodexSkill.name,
+                path: selectedCodexSkill.path,
+                displayName: selectedCodexSkill.interface?.displayName || undefined,
+            };
+        }
+        return undefined;
+    }, [selectedBuiltinSkill, selectedCodexSkill]);
     const tokens = useMemo(() => parseAgentInlineTokens(value, canvasReferences, messageSkill), [canvasReferences, messageSkill, value]);
     const selectedReferenceIds = useMemo(() => new Set(canvasReferences.map((item) => item.nodeId)), [canvasReferences]);
+    const skillCandidates = useMemo<ComposerCandidate[]>(() => {
+        const query = command?.query.trim().toLowerCase() || "";
+        const matches = (skill: { name: string; description?: string; shortDescription?: string | null; interface?: { displayName?: string | null; shortDescription?: string | null } | null }) =>
+            !query || [skill.name, skill.description, skill.interface?.displayName, skill.interface?.shortDescription, skill.shortDescription].some((item) => item?.toLowerCase().includes(query));
+        const builtin = builtinSkills.filter(matches).map((skill) => ({ type: "skill" as const, skill: builtinSkillToSummary(skill), source: "builtin" as const }));
+        const codexNames = new Set(builtin.map((item) => item.skill.name));
+        const codex = codexSkills
+            .filter((skill) => skill.enabled && matches(skill) && !codexNames.has(skill.name))
+            .map((skill) => ({ type: "skill" as const, skill, source: "codex" as const }));
+        return [...builtin, ...codex];
+    }, [builtinSkills, codexSkills, command?.query]);
     const candidates = useMemo<ComposerCandidate[]>(() => {
         if (!command) return [];
         const query = command.query.trim().toLowerCase();
-        if (command.type === "skill") {
-            return skills
-                .filter((skill) => skill.enabled && (!query || [skill.name, skill.description, skill.interface?.displayName, skill.interface?.shortDescription, skill.shortDescription].some((item) => item?.toLowerCase().includes(query))))
-                .map((skill) => ({ type: "skill", skill }));
-        }
-        return resourceCandidates
+        const resources = resourceCandidates
             .filter((reference) => !selectedReferenceIds.has(reference.nodeId) && (!query || `${reference.label} ${reference.title} ${reference.kind} ${reference.text || ""}`.toLowerCase().includes(query)))
-            .map((reference) => ({ type: "resource", reference }));
-    }, [command, resourceCandidates, selectedReferenceIds, skills]);
+            .map((reference) => ({ type: "resource" as const, reference }));
+        if (command.type === "skill") return skillCandidates;
+        if (command.type === "resource") return resources;
+        return [...skillCandidates, ...resources];
+    }, [command, resourceCandidates, selectedReferenceIds, skillCandidates]);
+    const skillsLoading = builtinSkillsLoading || codexSkillsLoading;
 
     useEffect(() => {
         const editor = editorRef.current;
@@ -85,19 +113,23 @@ export function AgentChatPromptInput({ value, disabled, placeholder, theme, onCh
         const text = textBeforeCaret(editorRef.current);
         const match = /(^|\s)([/@])([^\s/@]*)$/.exec(text);
         if (!match) return closeCommand();
-        const type = match[2] === "/" ? "skill" : "resource";
+        // `/` → skills only; `@` → skills + canvas references (Cursor-style mentions).
+        const type: ComposerCommand["type"] = match[2] === "/" ? "skill" : "mention";
         setCommand({ type, query: match[3] || "", length: (match[3] || "").length + 1 });
         setActiveIndex(0);
-        if (type === "skill") {
-            const agent = useAgentStore.getState();
-            const skillState = useAgentSkillStore.getState();
-            if (agent.connected && !skillState.loaded && !skillState.loading) void skillState.loadSkills(agent.url.trim().replace(/\/$/, ""), agent.token);
-            return;
+        const builtinStore = useBuiltinSkillStore.getState();
+        if (!builtinStore.loaded && !builtinStore.loading) void builtinStore.load();
+        const agent = useAgentStore.getState();
+        const skillState = useAgentSkillStore.getState();
+        if (agent.connected && !skillState.loaded && !skillState.loading) void skillState.loadSkills(agent.url.trim().replace(/\/$/, ""), agent.token);
+        if (type === "mention") {
+            const snapshot = agent.canvasContext?.snapshot;
+            const references = buildCanvasResourceReferences(snapshot?.nodes || []);
+            const selectedIds = new Set(snapshot?.selectedNodeIds || []);
+            setResourceCandidates([...references.filter((item) => selectedIds.has(item.nodeId)), ...references.filter((item) => !selectedIds.has(item.nodeId))]);
+        } else {
+            setResourceCandidates([]);
         }
-        const snapshot = useAgentStore.getState().canvasContext?.snapshot;
-        const references = buildCanvasResourceReferences(snapshot?.nodes || []);
-        const selectedIds = new Set(snapshot?.selectedNodeIds || []);
-        setResourceCandidates([...references.filter((item) => selectedIds.has(item.nodeId)), ...references.filter((item) => !selectedIds.has(item.nodeId))]);
     };
 
     const syncFromEditor = () => {
@@ -118,16 +150,21 @@ export function AgentChatPromptInput({ value, disabled, placeholder, theme, onCh
         if (candidate.type === "skill") {
             const base = serializeEditor(editor);
             const defaultPrompt = candidate.skill.interface?.defaultPrompt?.trim();
+            if (candidate.source === "builtin") {
+                useBuiltinSkillStore.getState().select(candidate.skill.name);
+                useAgentSkillStore.getState().clearSelection();
+            } else {
+                useBuiltinSkillStore.getState().select("");
+                useAgentSkillStore.getState().selectSkill(candidate.skill);
+            }
             if (!base.trim() && defaultPrompt) {
                 emit("");
-                useAgentSkillStore.getState().selectSkill(candidate.skill);
                 closeCommand();
                 return;
             }
             insertTokenAtCaret(editor, createSkillToken({ name: candidate.skill.name, path: candidate.skill.path, displayName: candidate.skill.interface?.displayName || undefined }, theme));
             const next = serializeEditor(editor);
             emit(next);
-            useAgentSkillStore.getState().selectSkill(candidate.skill);
         } else {
             const current = useAgentStore.getState().canvasReferences;
             if (!current.some((item) => item.nodeId === candidate.reference.nodeId)) useAgentStore.getState().setAgentState({ canvasReferences: [...current, candidate.reference] });
@@ -242,7 +279,7 @@ export function AgentChatPromptInput({ value, disabled, placeholder, theme, onCh
                     />
                 </Popover>
             ) : null}
-            {command ? <AgentCommandMenu command={command} candidates={candidates} activeIndex={Math.min(activeIndex, Math.max(candidates.length - 1, 0))} loading={command.type === "skill" && skillsLoading} theme={theme} onSelect={insertCandidate} /> : null}
+            {command ? <AgentCommandMenu command={command} candidates={candidates} activeIndex={Math.min(activeIndex, Math.max(candidates.length - 1, 0))} loading={(command.type === "skill" || command.type === "mention") && skillsLoading} theme={theme} onSelect={insertCandidate} /> : null}
         </div>
     );
 }
@@ -254,21 +291,33 @@ function AgentCommandMenu({ command, candidates, activeIndex, loading, theme, on
     return (
         <div data-agent-command-menu className="absolute bottom-[calc(100%+8px)] left-0 z-[120] w-full min-w-64 overflow-hidden rounded-xl border shadow-xl" style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }} onPointerDown={stopPropagation} onMouseDown={stopPropagation}>
             <div className="border-b px-3 py-2 text-xs" style={{ borderColor: theme.toolbar.border, color: theme.node.muted }}>
-                {t(command.type === "skill" ? "agent.composer.mentions.selectSkill" : "agent.composer.mentions.selectResource")}{command.query ? ` · ${command.query}` : ""}
+                {t(
+                    command.type === "skill"
+                        ? "agent.composer.mentions.selectSkill"
+                        : command.type === "mention"
+                          ? "agent.composer.mentions.selectMention"
+                          : "agent.composer.mentions.selectResource",
+                    { defaultValue: command.type === "mention" ? "选择技能或画布素材" : undefined },
+                )}
+                {command.query ? ` · ${command.query}` : ""}
             </div>
             <div className="thin-scrollbar max-h-[min(21rem,52vh)] overflow-y-auto p-1">
                 {candidates.length ? candidates.map((candidate, index) => {
                     const skill = candidate.type === "skill" ? candidate.skill : null;
                     const reference = candidate.type === "resource" ? candidate.reference : null;
                     const title = skill ? skill.interface?.displayName || skill.name : reference?.title || "";
-                    const description = skill ? skill.interface?.shortDescription || skill.shortDescription || skill.description : reference ? `${agentReferenceMarker(reference)} · ${canvasReferenceKindLabel(reference.kind)}` : "";
+                    const description = skill
+                        ? `${candidate.source === "builtin" ? "@" : "/"}${skill.name} · ${skill.interface?.shortDescription || skill.shortDescription || skill.description || ""}`
+                        : reference
+                          ? `${agentReferenceMarker(reference)} · ${canvasReferenceKindLabel(reference.kind)}`
+                          : "";
                     return (
-                        <button key={skill ? `${skill.name}:${skill.path}` : reference?.nodeId} ref={index === activeIndex ? activeItemRef : undefined} type="button" className="flex w-full min-w-0 items-center gap-2.5 rounded-lg px-2 py-2 text-left transition hover:bg-black/5 dark:hover:bg-white/10" style={{ background: index === activeIndex ? theme.toolbar.activeBg : undefined, color: index === activeIndex ? theme.toolbar.activeText : theme.node.text }} onPointerDown={(event) => { event.preventDefault(); onSelect(candidate); }}>
+                        <button key={skill ? `${candidate.source}:${skill.name}:${skill.path}` : reference?.nodeId} ref={index === activeIndex ? activeItemRef : undefined} type="button" className="flex w-full min-w-0 items-center gap-2.5 rounded-lg px-2 py-2 text-left transition hover:bg-black/5 dark:hover:bg-white/10" style={{ background: index === activeIndex ? theme.toolbar.activeBg : undefined, color: index === activeIndex ? theme.toolbar.activeText : theme.node.text }} onPointerDown={(event) => { event.preventDefault(); onSelect(candidate); }}>
                             {skill ? <span className="grid size-9 shrink-0 place-items-center"><Sparkles className="size-4" /></span> : reference ? <ReferencePreview reference={reference} /> : null}
                             <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{title}</span><span className="mt-0.5 block truncate text-xs" style={{ color: theme.node.muted }}>{description}</span></span>
                         </button>
                     );
-                }) : <div className="px-3 py-6 text-center text-xs" style={{ color: theme.node.muted }}>{t(loading ? "agent.composer.mentions.loadingSkills" : command.type === "skill" ? "agent.composer.mentions.noSkills" : "agent.composer.mentions.noResources")}</div>}
+                }) : <div className="px-3 py-6 text-center text-xs" style={{ color: theme.node.muted }}>{t(loading ? "agent.composer.mentions.loadingSkills" : command.type === "resource" ? "agent.composer.mentions.noResources" : "agent.composer.mentions.noSkills")}</div>}
             </div>
         </div>
     );
@@ -284,7 +333,7 @@ function createSkillToken(skill: AgentSkillReference, theme: (typeof canvasTheme
     const token = createToken("skill", agentSkillMarker(skill), theme);
     token.dataset.skillName = skill.name;
     token.title = skill.path;
-    token.textContent = `/${skill.displayName || skill.name}`;
+    token.textContent = `@${skill.displayName || skill.name}`;
     return token;
 }
 

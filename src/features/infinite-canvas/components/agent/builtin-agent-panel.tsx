@@ -3,9 +3,9 @@ import { App, Button, Popover, Tooltip } from "antd";
 import {
     ChevronDown,
     MessageSquare,
-    PanelRightClose,
     Plus,
     Settings2,
+    Sparkles,
     Trash2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -14,6 +14,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { AgentChatTimeline } from "./agent-chat";
 import { AgentChatComposer } from "./agent-chat-composer";
 import { AgentPanelTabs } from "./agent-panel-tabs";
+import { BuiltinAgentSkillsView } from "./builtin-agent-skills-view";
 import { runBuiltinAgentHarness } from "@canvas/lib/agent/builtin-agent-harness";
 import {
     deleteBuiltinAgentThread,
@@ -25,7 +26,8 @@ import {
 import { useCanvasHost } from "@canvas/integration/canvas-host-context";
 import { canvasThemes } from "@canvas/lib/canvas-theme";
 import { randomId } from "@canvas/lib/utils";
-import { useAgentStore, type AgentChatItem, type AgentModel } from "@canvas/stores/use-agent-store";
+import { useAgentStore, type AgentChatItem, type AgentModel, type AgentPanelTab } from "@canvas/stores/use-agent-store";
+import { useBuiltinSkillStore } from "@canvas/stores/use-builtin-skill-store";
 import {
     encodeChannelModel,
     guessCapability,
@@ -51,9 +53,11 @@ export function BuiltinAgentPanel() {
     const isAiConfigReady = useConfigStore((state) => state.isAiConfigReady);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const updateConfig = useConfigStore((state) => state.updateConfig);
-    const { prompt, sending, waiting, messages } = useAgentStore();
+    const { prompt, sending, waiting, messages, activeTab } = useAgentStore();
     const setAgentState = useAgentStore((state) => state.setAgentState);
-    const closePanel = useAgentStore((state) => state.closePanel);
+    const loadBuiltinSkills = useBuiltinSkillStore((state) => state.load);
+    const builtinSkills = useBuiltinSkillStore((state) => state.skills);
+    const selectedBuiltinName = useBuiltinSkillStore((state) => state.selectedName);
     const abortRef = useRef<AbortController | null>(null);
     const [threads, setThreads] = useState<BuiltinAgentThread[]>(() => loadBuiltinAgentThreads(projectId));
     const [activeThreadId, setActiveThreadId] = useState(() => {
@@ -91,7 +95,8 @@ export function BuiltinAgentPanel() {
             connectError: "",
         });
         hydratedRef.current = true;
-    }, [projectId, setAgentState]);
+        void loadBuiltinSkills();
+    }, [loadBuiltinSkills, projectId, setAgentState]);
 
     useEffect(() => {
         if (!hydratedRef.current || sending || waiting || !messages.length) return;
@@ -217,11 +222,15 @@ export function BuiltinAgentPanel() {
             return;
         }
 
+        const selectedSkill = builtinSkills.find((skill) => skill.name === selectedBuiltinName);
         const userMessage: AgentChatItem = {
             id: randomId(),
             role: "user",
             text,
             threadId: activeThreadId,
+            skill: selectedSkill
+                ? { name: selectedSkill.name, path: selectedSkill.path, displayName: selectedSkill.name }
+                : undefined,
         };
         const history = [...messages]
             .filter((item) => item.role === "user" || item.role === "assistant")
@@ -349,20 +358,12 @@ export function BuiltinAgentPanel() {
         }
         return listed;
     }, [activeThreadId, t, threads]);
-    const suggestions = useMemo(
-        () => [
-            t("agent.chat.suggestions.storyboard"),
-            t("agent.chat.suggestions.prompt"),
-            t("agent.chat.suggestions.shotList"),
-            t("agent.chat.suggestions.review"),
-        ],
-        [t],
-    );
+    const panelTab: AgentPanelTab = activeTab === "skills" ? "skills" : "chat";
 
     return (
         <>
             <AgentPanelTabs
-                value="chat"
+                value={panelTab}
                 theme={theme}
                 leading={
                     <Tooltip title={brandName || t("agent.panel.brandName")} placement="bottom">
@@ -456,6 +457,42 @@ export function BuiltinAgentPanel() {
                 onChange={() => undefined}
                 right={
                     <>
+                        <nav className="mr-1 flex items-center gap-0.5 text-sm" role="tablist" aria-label={t("agent.panel.content")}>
+                            {(
+                                [
+                                    { value: "chat" as const, label: t("agent.panel.chat"), icon: <MessageSquare className="size-3.5" /> },
+                                    {
+                                        value: "skills" as const,
+                                        label: t("agent.panel.skills"),
+                                        icon: <Sparkles className="size-3.5" />,
+                                        count: builtinSkills.length || undefined,
+                                    },
+                                ] as const
+                            ).map((item) => {
+                                const active = panelTab === item.value;
+                                return (
+                                    <button
+                                        key={item.value}
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={active}
+                                        className="inline-flex h-9 items-center gap-1 rounded-lg px-2.5 transition"
+                                        style={{
+                                            background: active ? theme.toolbar.activeBg : "transparent",
+                                            color: active ? theme.node.text : theme.node.muted,
+                                            fontWeight: active ? 600 : 400,
+                                        }}
+                                        onClick={() => setAgentState({ activeTab: item.value })}
+                                    >
+                                        {item.icon}
+                                        <span>{item.label}</span>
+                                        {"count" in item && item.count ? (
+                                            <span className="text-[10px] tabular-nums opacity-60">{item.count > 99 ? "99+" : item.count}</span>
+                                        ) : null}
+                                    </button>
+                                );
+                            })}
+                        </nav>
                         <Tooltip title={t("agent.history.newThread")} placement="bottom">
                             <Button
                                 size="small"
@@ -467,86 +504,68 @@ export function BuiltinAgentPanel() {
                                 onClick={startNewThread}
                             />
                         </Tooltip>
-                        <Tooltip title={t("agent.panel.collapse")}>
-                            <Button
-                                type="text"
-                                shape="circle"
-                                className="!h-8 !w-8 !min-w-8"
-                                aria-label={t("agent.panel.collapseLabel")}
-                                style={{ color: theme.node.muted }}
-                                icon={<PanelRightClose className="size-4" />}
-                                onClick={closePanel}
-                            />
-                        </Tooltip>
                     </>
                 }
             />
 
-            <AgentChatTimeline
-                theme={theme}
-                pendingTool={null}
-                pendingApprovals={[]}
-                sending={sending}
-                waiting={waiting}
-                onRejectTool={() => undefined}
-                onApproveTool={() => undefined}
-                onApprovalDecision={() => undefined}
-                emptyState={
-                    <div className="flex h-full min-h-[280px] flex-col items-center justify-center px-6 py-10 text-center">
-                        <div
-                            className="mb-4 grid size-12 place-items-center overflow-hidden rounded-2xl ring-1 ring-black/5 dark:ring-white/10"
-                            style={{ background: theme.toolbar.activeBg, color: theme.node.text }}
-                        >
-                            <SmartImage src={logo} alt="" className="size-7 object-contain" fallbackIconClassName="size-5" />
-                        </div>
-                        <div className="text-base font-semibold leading-6">{t("agent.chat.emptyTitle")}</div>
-                        <div className="mt-1.5 max-w-[280px] text-sm leading-5" style={{ color: theme.node.muted }}>
-                            {ready ? t("agent.chat.emptyHint") : t("agent.connect.configureAiFirst")}
-                        </div>
-                        {ready ? (
-                            <div className="mt-5 flex w-full max-w-[340px] flex-col gap-2">
-                                {suggestions.map((item) => (
-                                    <button
-                                        key={item}
-                                        type="button"
-                                        className="rounded-xl border px-3.5 py-2.5 text-left text-sm leading-5 transition hover:bg-black/[.03] dark:hover:bg-white/[.04]"
-                                        style={{ borderColor: theme.node.stroke, color: theme.node.text }}
-                                        onClick={() => void sendPrompt(item)}
+            {panelTab === "skills" ? (
+                <BuiltinAgentSkillsView />
+            ) : (
+                <>
+                    <AgentChatTimeline
+                        theme={theme}
+                        pendingTool={null}
+                        pendingApprovals={[]}
+                        sending={sending}
+                        waiting={waiting}
+                        onRejectTool={() => undefined}
+                        onApproveTool={() => undefined}
+                        onApprovalDecision={() => undefined}
+                        emptyState={
+                            <div className="flex h-full min-h-[280px] flex-col items-center justify-center px-6 py-10 text-center">
+                                <div
+                                    className="mb-4 grid size-12 place-items-center overflow-hidden rounded-2xl ring-1 ring-black/5 dark:ring-white/10"
+                                    style={{ background: theme.toolbar.activeBg, color: theme.node.text }}
+                                >
+                                    <SmartImage src={logo} alt="" className="size-7 object-contain" fallbackIconClassName="size-5" />
+                                </div>
+                                <div className="text-base font-semibold leading-6">{t("agent.chat.emptyTitle")}</div>
+                                <div className="mt-1.5 max-w-[280px] text-sm leading-5" style={{ color: theme.node.muted }}>
+                                    {ready ? t("agent.chat.emptyHint") : t("agent.connect.configureAiFirst")}
+                                </div>
+                                {!ready ? (
+                                    <Button
+                                        className="mt-5"
+                                        type="primary"
+                                        icon={<Settings2 className="size-4" />}
+                                        onClick={() => openConfigDialog(false, "channels")}
                                     >
-                                        {item}
-                                    </button>
-                                ))}
+                                        {t("agent.connect.openAiConfig")}
+                                    </Button>
+                                ) : null}
                             </div>
-                        ) : (
-                            <Button
-                                className="mt-5"
-                                type="primary"
-                                icon={<Settings2 className="size-4" />}
-                                onClick={() => openConfigDialog(false, "channels")}
-                            >
-                                {t("agent.connect.openAiConfig")}
-                            </Button>
-                        )}
+                        }
+                    />
+                    <div className="shrink-0 px-1 pb-1 pt-1">
+                        <AgentChatComposer
+                            prompt={prompt}
+                            disabled={!ready}
+                            sending={sending || waiting}
+                            placeholder={
+                                ready ? t("agent.panel.placeholderBuiltinMention") : t("agent.connect.configureAiFirst")
+                            }
+                            theme={theme}
+                            models={composerModels}
+                            model={textModel || composerModels[0]?.model}
+                            onModelChange={changeModel}
+                            onPromptChange={(next) => setAgentState({ prompt: next })}
+                            onSubmit={() => void sendPrompt()}
+                            onStop={stopTurn}
+                            hint={ready ? t("skillsLibrary.composerHint") : undefined}
+                        />
                     </div>
-                }
-            />
-            <div className="shrink-0 px-1 pb-1 pt-1">
-                <AgentChatComposer
-                    prompt={prompt}
-                    disabled={!ready}
-                    sending={sending || waiting}
-                    placeholder={
-                        ready ? t("agent.panel.placeholderBuiltinShort") : t("agent.connect.configureAiFirst")
-                    }
-                    theme={theme}
-                    models={composerModels}
-                    model={textModel || composerModels[0]?.model}
-                    onModelChange={changeModel}
-                    onPromptChange={(next) => setAgentState({ prompt: next })}
-                    onSubmit={() => void sendPrompt()}
-                    onStop={stopTurn}
-                />
-            </div>
+                </>
+            )}
         </>
     );
 }
