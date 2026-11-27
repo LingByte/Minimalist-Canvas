@@ -168,6 +168,8 @@ function buildNodeConfig(globalConfig: AiConfig, node: CanvasNodeData, mode: Can
         audioFormat: node.metadata?.audioFormat || globalConfig.audioFormat || defaultConfig.audioFormat,
         audioSpeed: node.metadata?.audioSpeed || globalConfig.audioSpeed || defaultConfig.audioSpeed,
         audioInstructions: node.metadata?.audioInstructions || globalConfig.audioInstructions || defaultConfig.audioInstructions,
+        ttsVoiceId: node.metadata?.ttsVoiceId || globalConfig.ttsVoiceId || defaultConfig.ttsVoiceId,
+        ttsEngineId: node.metadata?.ttsEngineId || globalConfig.ttsEngineId || defaultConfig.ttsEngineId,
         count: String(node.metadata?.count || (mode === "image" ? globalConfig.canvasImageCount || globalConfig.count : globalConfig.count) || defaultConfig.count),
     };
 }
@@ -180,7 +182,10 @@ function videoConfigPatch(key: keyof AiConfig, value: string) {
 }
 
 function audioConfigPatch(key: CanvasAudioSettingKey, value: string) {
-    if (key === "audioVoice") return { audioVoice: value };
+    if (key === "ttsVoiceId") {
+        const upstream = value.includes(":") ? value.slice(value.indexOf(":") + 1) : value;
+        return { ttsVoiceId: value, audioVoice: upstream };
+    }
     if (key === "audioFormat") return { audioFormat: value };
     if (key === "audioSpeed") return { audioSpeed: value };
     return { audioInstructions: value };

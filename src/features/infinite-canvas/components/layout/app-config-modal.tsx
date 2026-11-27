@@ -8,13 +8,17 @@ import { ChannelEditorDrawer } from "@canvas/components/layout/channel-editor-dr
 import { ConfigLocalStorage } from "@canvas/components/layout/config-local-storage";
 import { ConfigObjectStorage } from "@canvas/components/layout/config-object-storage";
 import { ConfigPromptSources } from "@canvas/components/layout/config-prompt-sources";
+import { ConfigTtsEngines } from "@canvas/components/layout/config-tts-engines";
 import { exportAppConfig, importAppConfig } from "@canvas/services/config-file";
-import { audioFormatOptions, audioVoiceOptions, normalizeAudioSpeedValue } from "@canvas/lib/audio-generation";
+import { audioFormatOptions, normalizeAudioSpeedValue } from "@canvas/lib/audio-generation";
+import { hasReadyTtsChannel, listTtsVoices, resolveTtsVoice } from "@canvas/lib/tts-voices";
 import {
     createModelChannel,
     modelOptionsFromChannels,
     normalizeModelOptionValue,
+    normalizeTtsEngines,
     selectableModelsByCapability,
+    ttsVendorMeta,
     useConfigStore,
     type AiConfig,
     type ConfigTabKey,
@@ -209,8 +213,29 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                                             onBlur={(event) => updateConfig("canvasImageCount", normalizeImageCount(event.target.value))}
                                         />
                                     </Form.Item>
-                                    <Form.Item label={t("config.preferences.audioVoice")} className="mb-4">
-                                        <Select value={config.audioVoice} options={audioVoiceOptions} onChange={(value) => updateConfig("audioVoice", value)} />
+                                    <Form.Item label={t("config.preferences.audioVoice")} extra={t("config.preferences.audioVoiceHint")} className="mb-4 md:col-span-2">
+                                        <Select
+                                            showSearch
+                                            allowClear={false}
+                                            optionFilterProp="search"
+                                            value={resolveTtsVoice(config.ttsVoiceId)?.id || config.ttsVoiceId}
+                                            options={listTtsVoices().map((voice) => {
+                                                const ready = hasReadyTtsChannel(config.ttsEngines, voice.vendor);
+                                                const vendorLabel = t(ttsVendorMeta(voice.vendor).labelKey);
+                                                const desc = voice.description ? ` · ${voice.description}` : "";
+                                                return {
+                                                    value: voice.id,
+                                                    label: `${voice.name}${desc} · ${vendorLabel}${ready ? "" : ` (${t("config.tts.noChannel")})`}`,
+                                                    disabled: !ready,
+                                                    search: `${voice.name} ${voice.description} ${vendorLabel} ${voice.upstreamId}`,
+                                                };
+                                            })}
+                                            onChange={(value) => {
+                                                const upstream = value.includes(":") ? value.slice(value.indexOf(":") + 1) : value;
+                                                updateConfig("ttsVoiceId", value);
+                                                updateConfig("audioVoice", upstream);
+                                            }}
+                                        />
                                     </Form.Item>
                                     <Form.Item label={t("config.preferences.audioFormat")} className="mb-4">
                                         <Select value={config.audioFormat} options={audioFormatOptions} onChange={(value) => updateConfig("audioFormat", value)} />
@@ -235,6 +260,16 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                                 </Form.Item>
                             </Form>
                             </div>
+                        ),
+                    },
+                    {
+                        key: "tts",
+                        label: <span data-tour="config-tab-tts">{t("config.tabs.tts")}</span>,
+                        children: (
+                            <ConfigTtsEngines
+                                engines={normalizeTtsEngines(config.ttsEngines)}
+                                onChange={(ttsEngines) => updateConfig("ttsEngines", ttsEngines)}
+                            />
                         ),
                     },
                     {

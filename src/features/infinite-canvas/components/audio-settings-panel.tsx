@@ -1,14 +1,16 @@
-import { type ReactNode } from "react";
+import { Select } from "antd";
+import { type ReactNode, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ImageSettingsTheme } from "@canvas/components/image-settings-panel";
-import { audioFormatOptions, audioSpeedLabel, audioVoiceOptions, normalizeAudioFormatValue, normalizeAudioSpeedValue, normalizeAudioVoiceValue } from "@canvas/lib/audio-generation";
+import { audioFormatOptions, audioSpeedLabel, normalizeAudioFormatValue, normalizeAudioSpeedValue } from "@canvas/lib/audio-generation";
 import { type CanvasTheme } from "@canvas/lib/canvas-theme";
-import type { AiConfig } from "@canvas/stores/use-config-store";
+import { hasReadyTtsChannel, listTtsVoices, resolveTtsVoice } from "@canvas/lib/tts-voices";
+import { ttsVendorMeta, type AiConfig } from "@canvas/stores/use-config-store";
 
 const speedOptions = ["0.75", "1", "1.25", "1.5"];
 
-type AudioSettingKey = "audioVoice" | "audioFormat" | "audioSpeed" | "audioInstructions";
+type AudioSettingKey = "ttsVoiceId" | "audioFormat" | "audioSpeed" | "audioInstructions";
 
 type AudioSettingsPanelProps = {
     config: AiConfig;
@@ -20,22 +22,45 @@ type AudioSettingsPanelProps = {
 
 export function AudioSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5" }: AudioSettingsPanelProps) {
     const { t } = useTranslation();
-    const voice = normalizeAudioVoiceValue(config.audioVoice);
     const format = normalizeAudioFormatValue(config.audioFormat);
     const speed = normalizeAudioSpeedValue(config.audioSpeed);
+    const selected = resolveTtsVoice(config.ttsVoiceId);
+    const voiceOptions = useMemo(
+        () =>
+            listTtsVoices().map((voice) => {
+                const ready = hasReadyTtsChannel(config.ttsEngines, voice.vendor);
+                const vendorLabel = t(ttsVendorMeta(voice.vendor).labelKey);
+                const desc = voice.description ? ` · ${voice.description}` : "";
+                return {
+                    value: voice.id,
+                    label: `${voice.name}${desc} · ${vendorLabel}${ready ? "" : ` (${t("config.tts.noChannel")})`}`,
+                    disabled: !ready,
+                    search: `${voice.name} ${voice.description} ${vendorLabel} ${voice.upstreamId} ${voice.locale || ""} ${voice.category || ""}`,
+                };
+            }),
+        [config.ttsEngines, t],
+    );
 
     return (
         <ImageSettingsTheme theme={theme}>
             <div className={className} style={{ color: theme.node.text }} onMouseDown={(event) => event.stopPropagation()}>
                 {showTitle ? <div className="text-lg font-semibold">{t("settingsPanels.audio.title")}</div> : null}
                 <SettingGroup title={t("settingsPanels.audio.voice")} color={theme.node.muted}>
-                    <div className="grid grid-cols-3 gap-2.5">
-                        {audioVoiceOptions.map((item) => (
-                            <OptionPill key={item.value} selected={voice === item.value} theme={theme} onClick={() => onConfigChange("audioVoice", item.value)}>
-                                {item.label}
-                            </OptionPill>
-                        ))}
-                    </div>
+                    <Select
+                        className="w-full"
+                        showSearch
+                        optionFilterProp="search"
+                        value={selected?.id || config.ttsVoiceId || undefined}
+                        placeholder={t("settingsPanels.audio.voiceSearch")}
+                        options={voiceOptions}
+                        onChange={(value) => onConfigChange("ttsVoiceId", value)}
+                        onMouseDown={(event) => event.stopPropagation()}
+                        popupMatchSelectWidth={false}
+                        listHeight={280}
+                    />
+                    {selected && !hasReadyTtsChannel(config.ttsEngines, selected.vendor) ? (
+                        <div className="text-xs opacity-70">{t("config.tts.noChannelHint", { vendor: t(ttsVendorMeta(selected.vendor).labelKey) })}</div>
+                    ) : null}
                 </SettingGroup>
                 <SettingGroup title={t("settingsPanels.audio.format")} color={theme.node.muted}>
                     <div className="grid grid-cols-3 gap-2.5">
