@@ -25,28 +25,27 @@ bun run skills:sync    # rebuild bundled/ from existing _vendor
 
 Attribution: `skills/bundled/ATTRIBUTION.md`.
 
-## Publishable media skill (external projects)
+## Publishable external skills (Integrate page)
 
-`minimalist-canvas-media` lets **other repos / other people** reuse Minimalist Canvas desktop
-channels to generate images and videos.
+Built-in novel/drama packs live under `skills/bundled/`. Installable packs for other repos:
 
 | Path | Role |
 | --- | --- |
-| `skills/minimalist-canvas-media/` | Agent skill (for `npx skills add`) |
+| `skills/minimalist-canvas-media/` | Image / video via live desktop media API |
+| `skills/minimalist-canvas-game-assets/` | Game asset pipeline (sheets, 8-dir, action packs, VFX) |
 | `skills/cursor-media/` | npm package (`minimalist-canvas-media`) + CLI bin |
+
+Download / preview both from the in-app **外部接入** page.
 
 ### Install elsewhere
 
 ```bash
-# CLI (no skill files required)
+# Media CLI
 npx minimalist-canvas-media image --prompt "海报" --out ./out.png
 
-# Cursor / Claude skill from this GitHub repo
+# Cursor / Claude skills from this GitHub repo
 npx skills add LingByte/Minimalist-Canvas --skill minimalist-canvas-media -g -a cursor -y
-
-# Or npm + sync
-npm i -D minimalist-canvas-media skills
-npx skills experimental_sync -a cursor -y
+npx skills add LingByte/Minimalist-Canvas --skill minimalist-canvas-game-assets -g -a cursor -y
 ```
 
 Details: [`skills/cursor-media/README.md`](./cursor-media/README.md).

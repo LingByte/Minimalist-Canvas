@@ -595,6 +595,7 @@ export default {
     },
     integrate: {
         title: "外部接入",
+        subtitle: "下载对外技能包，装到 Cursor / Claude / Codex，复用本机正在运行的画布渠道。",
         downloadZip: "下载技能包",
         downloadStarted: "已开始下载技能包",
         downloadSaved: "已保存到 {{path}}",
@@ -609,6 +610,22 @@ export default {
             cursorUser: "Cursor 本机",
             claudeProject: "Claude 项目",
             claudeUser: "Claude 本机",
+        },
+        pillars: {
+            novel: "小说",
+            drama: "短剧",
+            assets: "素材",
+            media: "媒体",
+        },
+        packs: {
+            media: {
+                title: "通用生图 / 视频",
+                blurb: "文生图、图生图、文生视频，走本机画布渠道。",
+            },
+            "game-assets": {
+                title: "游戏素材流水线",
+                blurb: "HD2D / 像素角色、八方向与动作包、特效道具。",
+            },
         },
         localApi: "本机接口（需保持画布运行）",
         skillsCli: "skills CLI 安装",
@@ -988,6 +1005,7 @@ export default {
         showcaseTitle: "沉淀每一次好结果",
         showcaseDescription: "收藏稳定出图的提示词、参考风格和结果图片，让下一次创作从已有经验开始。",
         viewPrompts: "查看提示词库",
+        productName: "至简画布",
         aerisTagline: "至简即道，创造未来。",
         aerisSupport: "图像、视频与语音，在同一工作室从想法推到成片。",
         enterCanvas: "进入画布",

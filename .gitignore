@@ -43,3 +43,6 @@ tmp-memewiki-preview/
 
 # Local media API smoke outputs
 tmp-media-test/
+
+# Third-party reference skill drop (not shipped; internalized as minimalist-canvas-game-assets)
+frameronin/

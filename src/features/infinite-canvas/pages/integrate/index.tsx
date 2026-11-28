@@ -4,18 +4,17 @@ import { Check, Copy, Download, ExternalLink, FileText, FolderTree } from "lucid
 import { useTranslation } from "react-i18next";
 
 import {
-    buildExternalMediaSkillZip,
-    EXTERNAL_MEDIA_SKILL_FILES,
-    EXTERNAL_MEDIA_SKILL_NAME,
-    EXTERNAL_MEDIA_SKILL_ZIP,
+    buildExternalSkillPackZip,
+    EXTERNAL_SKILL_PACKS,
     formatExternalSkillTree,
+    getExternalSkillPack,
     parseExternalSkillFrontmatter,
-} from "@canvas/lib/external-media-skill-pack";
+    type ExternalSkillPackId,
+} from "@canvas/lib/external-skill-packs";
 import { saveBlobAs } from "@canvas/lib/save-file";
 import { isTauri } from "@canvas/services/fs-store";
 import { cn } from "@canvas/lib/utils";
 
-const GITHUB_SKILL_URL = "https://github.com/LingByte/Minimalist-Canvas/tree/main/skills/minimalist-canvas-media";
 const DEFAULT_MEDIA_API = "http://127.0.0.1:17373";
 
 const INSTALL_TARGETS = [
@@ -29,19 +28,22 @@ const INSTALL_TARGETS = [
 export default function IntegratePage() {
     const { t } = useTranslation();
     const { message } = App.useApp();
+    const [packId, setPackId] = useState<ExternalSkillPackId>("media");
     const [downloading, setDownloading] = useState(false);
     const [copied, setCopied] = useState<string | null>(null);
     const [previewPath, setPreviewPath] = useState("SKILL.md");
     const [mediaApi, setMediaApi] = useState(DEFAULT_MEDIA_API);
 
-    const skillMd = EXTERNAL_MEDIA_SKILL_FILES.find((file) => file.path === "SKILL.md")?.content || "";
-    const meta = useMemo(() => parseExternalSkillFrontmatter(skillMd), [skillMd]);
-    const tree = useMemo(
-        () => formatExternalSkillTree(EXTERNAL_MEDIA_SKILL_NAME, EXTERNAL_MEDIA_SKILL_FILES),
-        [],
-    );
-    const previewContent =
-        EXTERNAL_MEDIA_SKILL_FILES.find((file) => file.path === previewPath)?.content || "";
+    const pack = useMemo(() => getExternalSkillPack(packId), [packId]);
+    const skillMd = pack.files.find((file) => file.path === "SKILL.md")?.content || "";
+    const meta = useMemo(() => parseExternalSkillFrontmatter(skillMd, pack.name), [skillMd, pack.name]);
+    const tree = useMemo(() => formatExternalSkillTree(pack.name, pack.files), [pack]);
+    const previewContent = pack.files.find((file) => file.path === previewPath)?.content || "";
+    const githubUrl = `https://github.com/LingByte/Minimalist-Canvas/tree/main/${pack.githubPath}`;
+
+    useEffect(() => {
+        setPreviewPath("SKILL.md");
+    }, [packId]);
 
     useEffect(() => {
         if (!isTauri()) return;
@@ -53,15 +55,15 @@ export default function IntegratePage() {
             .catch(() => undefined);
     }, []);
 
-    const skillsAddCmd = `npx skills add LingByte/Minimalist-Canvas --skill ${EXTERNAL_MEDIA_SKILL_NAME} -g -y`;
+    const skillsAddCmd = `npx skills add LingByte/Minimalist-Canvas --skill ${pack.name} -g -y`;
     const healthCmd = `curl -s ${mediaApi}/health`;
-    const cliCmd = `node ${EXTERNAL_MEDIA_SKILL_NAME}/scripts/canvas-media.mjs image --prompt "海报" --out ./out.png`;
+    const cliCmd = pack.smokeCommand(pack.name);
 
     const downloadZip = async () => {
         setDownloading(true);
         try {
-            const zip = await buildExternalMediaSkillZip();
-            const path = await saveBlobAs(zip, EXTERNAL_MEDIA_SKILL_ZIP);
+            const zip = await buildExternalSkillPackZip(pack);
+            const path = await saveBlobAs(zip, `${pack.name}.zip`);
             message.success(path ? t("integrate.downloadSaved", { path }) : t("integrate.downloadStarted"));
         } catch (error) {
             message.error(error instanceof Error ? error.message : t("integrate.downloadFailed"));
@@ -84,42 +86,76 @@ export default function IntegratePage() {
     return (
         <div className="flex h-full flex-col overflow-hidden bg-background text-stone-800 dark:text-stone-100">
             <div className="mx-auto flex h-full min-h-0 w-full max-w-[1100px] flex-col px-4 py-4 sm:px-6">
-                <header className="flex shrink-0 items-center justify-between gap-3">
-                    <div className="min-w-0">
-                        <h1 className="truncate text-xl font-semibold tracking-tight text-stone-950 dark:text-stone-50">
-                            {t("integrate.title")}
-                        </h1>
-                        <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                            <span className="font-mono text-sm font-medium text-stone-700 dark:text-stone-200">
-                                @{meta.name}
-                            </span>
-                            <span className="text-[11px] text-stone-400">
-                                {t("integrate.fileCount", { count: EXTERNAL_MEDIA_SKILL_FILES.length })}
-                            </span>
-                            <code className="font-mono text-[11px] text-stone-500 dark:text-stone-400">{mediaApi}</code>
+                <header className="shrink-0">
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                            <h1 className="truncate text-xl font-semibold tracking-tight text-stone-950 dark:text-stone-50">
+                                {t("integrate.title")}
+                            </h1>
+                            <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-stone-500 dark:text-stone-400">
+                                {t("integrate.subtitle")}
+                            </p>
+                        </div>
+                        <div className="flex shrink-0 gap-2">
+                            <Button
+                                type="primary"
+                                icon={<Download className="size-3.5" />}
+                                loading={downloading}
+                                onClick={() => void downloadZip()}
+                            >
+                                {t("integrate.downloadZip")}
+                            </Button>
+                            <Button
+                                href={githubUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                icon={<ExternalLink className="size-3.5" />}
+                            >
+                                {t("integrate.viewOnGithub")}
+                            </Button>
                         </div>
                     </div>
-                    <div className="flex shrink-0 gap-2">
-                        <Button
-                            type="primary"
-                            icon={<Download className="size-3.5" />}
-                            loading={downloading}
-                            onClick={() => void downloadZip()}
-                        >
-                            {t("integrate.downloadZip")}
-                        </Button>
-                        <Button
-                            href={GITHUB_SKILL_URL}
-                            target="_blank"
-                            rel="noreferrer"
-                            icon={<ExternalLink className="size-3.5" />}
-                        >
-                            {t("integrate.viewOnGithub")}
-                        </Button>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                        {EXTERNAL_SKILL_PACKS.map((item) => {
+                            const active = item.id === packId;
+                            return (
+                                <button
+                                    key={item.id}
+                                    type="button"
+                                    onClick={() => setPackId(item.id)}
+                                    aria-pressed={active}
+                                    className={cn(
+                                        "min-w-[11rem] flex-1 rounded-xl border px-3 py-2.5 text-left transition sm:flex-none sm:min-w-[14rem]",
+                                        active
+                                            ? "border-emerald-400/50 bg-emerald-400/10 dark:border-emerald-400/40 dark:bg-emerald-400/10"
+                                            : "border-stone-200/80 bg-stone-50/60 hover:bg-stone-100/80 dark:border-stone-800 dark:bg-stone-900/40 dark:hover:bg-stone-900",
+                                    )}
+                                >
+                                    <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-stone-400">
+                                        {t(`integrate.pillars.${item.pillar}`)}
+                                    </div>
+                                    <div className="mt-0.5 text-[13px] font-semibold text-stone-900 dark:text-stone-50">
+                                        {t(`integrate.packs.${item.id}.title`)}
+                                    </div>
+                                    <div className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-stone-500 dark:text-stone-400">
+                                        {t(`integrate.packs.${item.id}.blurb`)}
+                                    </div>
+                                </button>
+                            );
+                        })}
                     </div>
                 </header>
 
-                <div className="mt-4 grid min-h-0 flex-1 gap-6 overflow-hidden lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.28fr)] lg:gap-8">
+                <div className="mt-4 flex min-w-0 shrink-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                    <span className="font-mono text-sm font-medium text-stone-700 dark:text-stone-200">@{meta.name}</span>
+                    <span className="text-[11px] text-stone-400">
+                        {t("integrate.fileCount", { count: pack.files.length })}
+                    </span>
+                    <code className="font-mono text-[11px] text-stone-500 dark:text-stone-400">{mediaApi}</code>
+                </div>
+
+                <div className="mt-3 grid min-h-0 flex-1 gap-6 overflow-hidden lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.28fr)] lg:gap-8">
                     <section className="thin-scrollbar min-h-0 overflow-y-auto pr-1">
                         <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-stone-400">
                             <FolderTree className="size-3.5" />
@@ -179,7 +215,7 @@ export default function IntegratePage() {
                             {t("integrate.preview")}
                         </div>
                         <div className="mb-2 flex shrink-0 flex-wrap gap-1">
-                            {EXTERNAL_MEDIA_SKILL_FILES.map((file) => {
+                            {pack.files.map((file) => {
                                 const active = previewPath === file.path;
                                 return (
                                     <button

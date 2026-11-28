@@ -593,6 +593,7 @@ export default {
     },
     integrate: {
         title: "External integrate",
+        subtitle: "Download installable skill packs for Cursor / Claude / Codex. They reuse the channels on your running Minimalist Canvas desktop app.",
         downloadZip: "Download skill pack",
         downloadStarted: "Download started",
         downloadSaved: "Saved to {{path}}",
@@ -608,13 +609,29 @@ export default {
             claudeProject: "Claude project",
             claudeUser: "Claude user",
         },
+        pillars: {
+            novel: "Novels",
+            drama: "Drama",
+            assets: "Assets",
+            media: "Media",
+        },
+        packs: {
+            media: {
+                title: "Image / video media",
+                blurb: "Text-to-image, edits, and video via live canvas channels.",
+            },
+            "game-assets": {
+                title: "Game asset pipeline",
+                blurb: "HD2D / pixel characters, 8-dir sheets, action packs, VFX.",
+            },
+        },
         localApi: "Local API (keep the app running)",
         skillsCli: "Install via skills CLI",
         cliSmoke: "CLI smoke test",
         preview: "Skill preview",
         copyCommand: "Copy command",
         copyFailed: "Copy failed",
-        footnote: "The skill calls the live app on localhost:17373 — no hardcoded data directory.",
+        footnote: "Skills call localhost:17373 on the running app — no hardcoded data directory.",
     },
     usage: {
         title: "Usage",
@@ -986,6 +1003,7 @@ export default {
         showcaseTitle: "Keep every great result",
         showcaseDescription: "Save reliable prompts, visual references, and generated images so your next creation starts from proven ideas.",
         viewPrompts: "View prompt library",
+        productName: "Minimalist Canvas",
         aerisTagline: "Simplicity is the way. Create the future.",
         aerisSupport: "Image, video, and voice—pushed from idea to finished work in one studio.",
         enterCanvas: "Enter Canvas",
