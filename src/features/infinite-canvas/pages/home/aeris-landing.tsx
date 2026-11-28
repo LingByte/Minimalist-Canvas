@@ -193,7 +193,7 @@ export function AerisLanding(props: AerisLandingProps) {
     const [leaving, setLeaving] = useState(false);
 
     const titleParts = useMemo(() => {
-        const full = t("Simplicity is the way. Create the future.");
+        const full = t("home.aerisTagline");
         if (full.includes("，")) {
             const [a, b] = full.split("，");
             return { a: a.trim(), b: (b || "").replace(/。$/, "").trim() };
@@ -204,7 +204,7 @@ export function AerisLanding(props: AerisLandingProps) {
         }
         return { a: full, b: "" };
     }, [t]);
-    const support = t("One studio for frontier image, video, and voice—from idea to finished work.");
+    const support = t("home.aerisSupport");
 
     const enterCanvas = useCallback(() => {
         if (leaving) return;
@@ -240,7 +240,7 @@ export function AerisLanding(props: AerisLandingProps) {
                                 void enterCanvas();
                             }}
                         >
-                            {t("Enter Canvas")}
+                            {t("home.enterCanvas")}
                         </button>
                     </div>
                 </div>

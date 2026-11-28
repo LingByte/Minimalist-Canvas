@@ -15,7 +15,7 @@ const LOCALE_STORAGE_KEY = "minimalist-canvas:locale";
 
 function hostToCanvasLocale(hostLang?: string | null): AppLocale {
     const normalized = normalizeInterfaceLanguage(hostLang);
-    if (normalized === "zhCN" || normalized === "zhTW") return "zh-CN";
+    if (normalized === "zhCN") return "zh-CN";
     return "en-US";
 }
 

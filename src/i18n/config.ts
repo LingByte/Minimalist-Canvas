@@ -25,11 +25,6 @@ import canvasZh from '@canvas/i18n/locales/zh-CN'
 
 import { convertDetectedLanguage } from './languages'
 import en from './locales/en.json'
-import fr from './locales/fr.json'
-import ja from './locales/ja.json'
-import ru from './locales/ru.json'
-import vi from './locales/vi.json'
-import zhTW from './locales/zh-TW.json'
 import zhCN from './locales/zh.json'
 
 function mergeTranslation(
@@ -52,36 +47,6 @@ export const resources = {
       canvasZh as Record<string, unknown>
     ),
   },
-  fr: {
-    translation: mergeTranslation(
-      fr.translation as Record<string, unknown>,
-      canvasEn as Record<string, unknown>
-    ),
-  },
-  ru: {
-    translation: mergeTranslation(
-      ru.translation as Record<string, unknown>,
-      canvasEn as Record<string, unknown>
-    ),
-  },
-  ja: {
-    translation: mergeTranslation(
-      ja.translation as Record<string, unknown>,
-      canvasEn as Record<string, unknown>
-    ),
-  },
-  vi: {
-    translation: mergeTranslation(
-      vi.translation as Record<string, unknown>,
-      canvasEn as Record<string, unknown>
-    ),
-  },
-  zhTW: {
-    translation: mergeTranslation(
-      zhTW.translation as Record<string, unknown>,
-      canvasZh as Record<string, unknown>
-    ),
-  },
 } as const
 
 i18n
@@ -90,18 +55,16 @@ i18n
   .init({
     resources,
     fallbackLng: 'en',
-    supportedLngs: ['en', 'zhCN', 'fr', 'ru', 'ja', 'vi', 'zhTW'],
+    supportedLngs: ['en', 'zhCN'],
     load: 'currentOnly',
-    nsSeparator: false, // Allow literal colons in keys (e.g., URLs, labels)
+    nsSeparator: false,
     debug: import.meta.env.DEV,
     interpolation: {
-      escapeValue: false, // not needed for react as it escapes by default
+      escapeValue: false,
     },
     detection: {
       order: ['localStorage', 'navigator'],
       caches: ['localStorage'],
-      // Browsers report `zh-CN`/`zh-TW`/`zh`; map them onto our `zhCN`/`zhTW`
-      // codes (non-Chinese codes pass through for normal supportedLngs matching).
       convertDetectedLanguage,
     },
   })

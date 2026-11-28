@@ -962,6 +962,9 @@ export default {
         showcaseTitle: "沉淀每一次好结果",
         showcaseDescription: "收藏稳定出图的提示词、参考风格和结果图片，让下一次创作从已有经验开始。",
         viewPrompts: "查看提示词库",
+        aerisTagline: "至简即道，创造未来。",
+        aerisSupport: "一个工作室搞定前沿图像、视频与语音——从想法到成片。",
+        enterCanvas: "进入画布",
     },
     version: {
         viewUpdates: "查看版本更新",

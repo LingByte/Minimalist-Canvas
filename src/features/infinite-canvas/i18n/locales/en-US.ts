@@ -960,6 +960,9 @@ export default {
         showcaseTitle: "Keep every great result",
         showcaseDescription: "Save reliable prompts, visual references, and generated images so your next creation starts from proven ideas.",
         viewPrompts: "View prompt library",
+        aerisTagline: "Simplicity is the way. Create the future.",
+        aerisSupport: "One studio for frontier image, video, and voice—from idea to finished work.",
+        enterCanvas: "Enter Canvas",
     },
     version: {
         viewUpdates: "View release updates",
