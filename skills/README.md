@@ -25,6 +25,16 @@ bun run skills:sync    # rebuild bundled/ from existing _vendor
 
 Attribution: `skills/bundled/ATTRIBUTION.md`.
 
+## Cursor personal skill (cross-project media)
+
+`skills/cursor-media/` is a Cursor Agent Skill that reuses Minimalist Canvas desktop
+channels to generate images/videos from **any** local project.
+
+Copy it into your Cursor **user Agent Store** `skills/` as `minimalist-canvas-media`
+(or keep the vendored folder and point agents at `skills/cursor-media/SKILL.md`).
+
+Then in another repo ask Cursor to use `minimalist-canvas-media` / 用画布渠道生图.
+
 ## Optional user installs
 
 You can still drop extra folders under `{storageRoot}/skills/<name>/SKILL.md`, or upload a skill zip from the Skills library page.

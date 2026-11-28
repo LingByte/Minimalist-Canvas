@@ -6,7 +6,6 @@
 
 + [新增] 默认提示词源补充 Toolcentral / YouArt / NeXra / Reviral / ImgEdify Nano Banana / AIGC Hackers；解析兼容 prompts/items 包装与常见字段别名。
 + [调整] 提示词中心本地优先：拉取后写入本机缓存，日常只读缓存；仅「同步 / 立即拉取」才联网；桌面端用 Tauri HTTP 绕过 CORS。
-+ [移除] 遗留站点后端探测与大量死代码（`/api/status`、auth/admin/data-table/public 布局、currency/quota、demo login 等）；系统名/Logo 仅用本地默认值。
 + [优化] 宿主 i18n 精简为中/英实际文案，首页标语迁入 canvas `home.*`；清理未引用 npm 依赖。
 + [调整] 用量「最近调用」记录请求路径 / 方法 / 参数与正文摘要；列表默认展示路径，详情抽屉精简预览。
 + [调整] 小说阅读器真实翻页与目录选中对比度修复。
