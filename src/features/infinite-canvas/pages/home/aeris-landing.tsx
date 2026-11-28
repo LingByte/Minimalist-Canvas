@@ -27,7 +27,6 @@ import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 
 import { APP_VERSION, DOCS_URL } from "@canvas/constant/env";
-import { DEFAULT_SYSTEM_NAME } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 const EXIT_NAV_MS = 380;
@@ -211,7 +210,7 @@ export function AerisLanding(props: AerisLandingProps) {
             setIntroDone(true);
             return;
         }
-        const id = window.setTimeout(() => setIntroDone(true), 1680);
+        const id = window.setTimeout(() => setIntroDone(true), 3100);
         return () => window.clearTimeout(id);
     }, [reduceMotion]);
 
@@ -236,8 +235,17 @@ export function AerisLanding(props: AerisLandingProps) {
             )}
         >
             <div className="aeris-intro-veil" aria-hidden="true">
-                <img className="aeris-intro-bloom" src="/images/home/intro-bloom.png" alt="" decoding="async" />
-                <img className="aeris-intro-spark" src="/images/home/intro-spark.png" alt="" decoding="async" />
+                <div className="aeris-intro-letterbox aeris-intro-letterbox-top" />
+                <div className="aeris-intro-letterbox aeris-intro-letterbox-bottom" />
+                <div className="aeris-intro-stage">
+                    <img className="aeris-intro-plate" src="/images/home/intro-plate.png" alt="" decoding="async" />
+                    <img className="aeris-intro-focus" src="/images/home/intro-focus.png" alt="" decoding="async" />
+                    <img className="aeris-intro-canvas" src="/images/home/intro-canvas.png" alt="" decoding="async" />
+                    <div className="aeris-intro-shade" />
+                </div>
+                <div className="aeris-intro-brand">
+                    <p className="aeris-intro-brand-name">{t("home.productName")}</p>
+                </div>
             </div>
 
             <section className="aeris-hero">
@@ -249,9 +257,9 @@ export function AerisLanding(props: AerisLandingProps) {
 
                 <motion.div
                     className="aeris-hero-stage"
-                    initial={reduceMotion ? false : { opacity: 0, y: 32 }}
-                    animate={introDone || reduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: 32 }}
-                    transition={{ duration: 0.9, delay: reduceMotion ? 0 : 0.2, ease: [0.16, 1, 0.3, 1] }}
+                    initial={reduceMotion ? false : { opacity: 0, y: 18 }}
+                    animate={introDone || reduceMotion ? { opacity: 1, y: 0 } : { opacity: 0.35, y: 10 }}
+                    transition={{ duration: 1.05, delay: reduceMotion ? 0 : 0.05, ease: [0.22, 1, 0.36, 1] }}
                 >
                     <motion.div className="aeris-hero-stage-inner" style={{ opacity: heroFade }}>
                         <div className="aeris-hero-copy">
@@ -302,7 +310,7 @@ export function AerisLanding(props: AerisLandingProps) {
             <footer className="aeris-footer">
                 <div className="aeris-footer-main">
                     <div className="aeris-footer-brand">
-                        <p className="aeris-footer-name">{DEFAULT_SYSTEM_NAME}</p>
+                        <p className="aeris-footer-name">{t("home.productName")}</p>
                         <p className="aeris-footer-tag">{t("home.footerTag")}</p>
                     </div>
                     <nav className="aeris-footer-nav" aria-label={t("home.footerNav")}>
@@ -321,7 +329,7 @@ export function AerisLanding(props: AerisLandingProps) {
                         {t("home.footerVersion", { version: APP_VERSION })}
                     </span>
                     <span>{t("home.footerLocal")}</span>
-                    <span>© {new Date().getFullYear()} {DEFAULT_SYSTEM_NAME}</span>
+                    <span>© {new Date().getFullYear()} {t("home.productName")}</span>
                 </div>
             </footer>
         </main>
