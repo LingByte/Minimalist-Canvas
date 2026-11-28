@@ -609,13 +609,12 @@
     font-size: 0.75rem;
 }
 
-/* Landing — glow + scatter + equation + product fan */
+/* Landing — glow + scatter + equation + product fan + scroll chapters */
 .aeris-landing {
-  --aeris-void: #f4f5f7;
-  --aeris-ink: #18181b;
-  --aeris-ink-muted: #5b616b;
-  --aeris-ink-inverse: #fafafa;
-  --aeris-shot-shadow: 0 24px 60px #18181b22;
+  --aeris-void: #0e1013;
+  --aeris-ink: #f3f0ea;
+  --aeris-ink-muted: rgb(243 240 234 / 0.68);
+  --aeris-accent: #c48a5a;
   position: relative;
   width: 100%;
   min-height: 100%;
@@ -628,34 +627,158 @@
   transition: opacity 0.35s ease, transform 0.35s ease;
 }
 
+.aeris-landing-scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+
 .aeris-landing.is-leaving {
   opacity: 0;
   transform: scale(1.012);
 }
 
-.aeris-glow {
+.aeris-intro-veil {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: var(--aeris-void);
+  opacity: 1;
+  overflow: hidden;
+  transition:
+    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.35s,
+    visibility 0s linear 1.2s;
+}
+
+.aeris-landing.is-ready .aeris-intro-veil {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.aeris-intro-bloom,
+.aeris-intro-spark {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+}
+
+.aeris-intro-bloom {
+  width: min(92vw, 720px);
+  transform: translate(-50%, -50%) scale(0.82);
+  opacity: 0;
+  animation: aeris-intro-bloom 1.35s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both;
+}
+
+.aeris-intro-spark {
+  width: min(42vw, 280px);
+  transform: translate(-50%, -50%) scale(0.4);
+  opacity: 0;
+  animation: aeris-intro-spark 1.1s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.aeris-landing.is-ready .aeris-intro-bloom {
+  animation: aeris-intro-bloom-out 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.aeris-landing.is-ready .aeris-intro-spark {
+  animation: aeris-intro-spark-out 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes aeris-intro-spark {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.25);
+    filter: blur(8px);
+  }
+  35% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0.85;
+    transform: translate(-50%, -50%) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes aeris-intro-bloom {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.72);
+    filter: blur(12px);
+  }
+  40% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.05);
+    filter: blur(0);
+  }
+}
+
+@keyframes aeris-intro-spark-out {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.35);
+    filter: blur(10px);
+  }
+}
+
+@keyframes aeris-intro-bloom-out {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.18);
+    filter: blur(16px);
+  }
+}
+
+.aeris-hero {
+  position: relative;
+  min-height: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.aeris-hero-bleed {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.aeris-hero-bleed img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.aeris-hero-mist {
   pointer-events: none;
   position: absolute;
-  inset: 0 auto 0 50%;
-  z-index: 0;
-  width: 100vw;
-  transform: translateX(-50%);
-  background: radial-gradient(
-    ellipse 70% 58% at 50% 52%,
-    rgb(56 132 214 / 0.58) 0%,
-    rgb(56 132 214 / 0.22) 38%,
-    transparent 70%
-  );
-  animation: aeris-glow-breathe 9s ease-in-out infinite;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(180deg, rgb(14 16 19 / 0.42) 0%, rgb(14 16 19 / 0.2) 36%, rgb(14 16 19 / 0.82) 100%),
+    radial-gradient(ellipse 70% 55% at 18% 78%, rgb(196 138 90 / 0.16), transparent 60%);
 }
 
 .aeris-scatter {
   pointer-events: none;
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: 1;
   overflow: hidden;
-  color: var(--aeris-ink);
+  color: rgb(243 240 234 / 0.85);
 }
 
 .aeris-scatter-mark {
@@ -664,86 +787,71 @@
   place-items: center;
 }
 
-.aeris-intro {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  height: 100%;
-  min-height: 0;
-  flex-direction: column;
-  overflow: hidden;
-  padding: 48px 16px 0;
-}
-
-.aeris-intro-hero {
+.aeris-hero-stage {
   position: relative;
   z-index: 2;
   display: flex;
-  width: min(840px, 100%);
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  padding: clamp(40px, 8vh, 80px) clamp(20px, 5vw, 56px) 0;
+}
+
+.aeris-hero-stage-inner {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
   flex-direction: column;
   align-items: center;
-  margin: 0 auto;
-  padding-top: clamp(12px, 4vh, 40px);
+  justify-content: space-between;
+}
+
+.aeris-hero-copy {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  width: min(100%, 52rem);
+  flex-direction: column;
+  align-items: center;
   text-align: center;
 }
 
-.aeris-intro-copy {
-  max-width: 840px;
-}
-
-.aeris-intro-copy h1 {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+.aeris-hero-copy h1 {
   margin: 0;
+  max-width: 14ch;
   color: var(--aeris-ink);
   font-family: "Lora Variable", "Lora", "Noto Serif SC", "Songti SC", Georgia, serif;
-  font-size: clamp(2.5rem, 5.4vw, 3.75rem);
+  font-size: clamp(2rem, 4.8vw, 3.1rem);
   font-weight: 600;
-  letter-spacing: -0.025em;
-  line-height: 1.1;
+  letter-spacing: -0.035em;
+  line-height: 1.18;
   text-wrap: balance;
 }
 
-.aeris-intro-copy h1 span + span {
-  margin-top: 10px;
-}
-
-.aeris-intro-copy > p {
-  max-width: 42rem;
-  margin: 20px auto 0;
+.aeris-hero-support {
+  max-width: 30rem;
+  margin: 14px 0 0;
   color: var(--aeris-ink-muted);
-  font-size: clamp(1.05rem, 1.6vw, 1.25rem);
-  font-weight: 500;
-  line-height: 1.45;
+  font-size: clamp(0.98rem, 1.4vw, 1.1rem);
+  line-height: 1.55;
 }
 
 .aeris-eq-line {
   display: flex;
-  max-width: 56rem;
+  max-width: 52rem;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  margin: 24px auto 0;
+  margin: 22px 0 0;
   color: var(--aeris-ink);
-  font-size: 1.125rem;
+  font-size: clamp(0.95rem, 1.4vw, 1.12rem);
   font-weight: 500;
 }
 
-@media (min-width: 768px) {
-  .aeris-eq-line {
-    font-size: 1.25rem;
-  }
-}
-
-.aeris-eq-brand {
-  font-weight: 650;
-  font-family: "Lora Variable", "Lora", "Noto Serif SC", "Songti SC", Georgia, serif;
-}
-
 .aeris-eq-op {
-  color: var(--aeris-ink-muted);
+  color: rgb(243 240 234 / 0.45);
 }
 
 .aeris-eq-slot {
@@ -780,6 +888,7 @@
   width: 1em;
   height: 1em;
   flex: none;
+  color: var(--aeris-accent);
 }
 
 @keyframes aeris-eq-slot-in {
@@ -794,117 +903,60 @@
 }
 
 .aeris-actions {
-  z-index: 4;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  margin-top: 32px;
-}
-
-.aeris-enter {
-  display: inline-flex;
-  height: 40px;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 0.875rem;
-  padding: 0 20px;
-  color: var(--aeris-ink-inverse);
-  background: var(--aeris-ink);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: filter 160ms ease, transform 160ms ease, opacity 160ms ease;
-}
-
-.aeris-enter:hover:not(:disabled),
-.aeris-enter:focus-visible:not(:disabled) {
-  filter: brightness(1.08);
-  transform: translateY(-1px);
-}
-
-.aeris-enter:disabled {
-  opacity: 0.5;
-  cursor: default;
+  margin-top: 26px;
 }
 
 .aeris-product-stack {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   display: flex;
   width: 100%;
   flex: 1 1 auto;
   align-items: flex-end;
   justify-content: center;
   min-height: 0;
-  margin: 8px auto 0;
+  margin-top: 12px;
   overflow: hidden;
-  padding: 12px 8px 0;
+  padding: 8px 0 0;
   container-type: size;
 }
 
 .aeris-product-stage {
   position: relative;
   aspect-ratio: 7 / 4;
-  width: min(100%, 1100px, calc(100cqh * 7 / 4));
+  width: min(100%, 1080px, calc(100cqh * 7 / 4));
   height: auto;
 }
 
 .aeris-product-shot {
   position: absolute;
   left: 14%;
-  top: 9%;
+  top: 8%;
   width: 72%;
-  height: 82%;
+  height: 84%;
   transform-origin: 50% 90%;
-  transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
 }
 
 .aeris-product-shot-0 {
   z-index: 1;
-  transform: translate(-8%, 8%) rotate(-7deg);
 }
-
 .aeris-product-shot-1 {
   z-index: 3;
-  transform: translate(-4%, 4%) rotate(-3.5deg);
 }
-
 .aeris-product-shot-2 {
   z-index: 5;
-  transform: translate(0, 0) rotate(0);
 }
-
 .aeris-product-shot-3 {
   z-index: 3;
-  transform: translate(4%, 4%) rotate(3.5deg);
 }
-
 .aeris-product-shot-4 {
   z-index: 1;
-  transform: translate(8%, 8%) rotate(7deg);
-}
-
-.aeris-product-stack:hover .aeris-product-shot-0 {
-  transform: translate(-48%, 16%) rotate(-22deg);
-}
-
-.aeris-product-stack:hover .aeris-product-shot-1 {
-  transform: translate(-26%, 8%) rotate(-11deg);
-}
-
-.aeris-product-stack:hover .aeris-product-shot-2 {
-  transform: translate(0, -6%) rotate(0) scale(1.03);
-}
-
-.aeris-product-stack:hover .aeris-product-shot-3 {
-  transform: translate(26%, 8%) rotate(11deg);
-}
-
-.aeris-product-stack:hover .aeris-product-shot-4 {
-  transform: translate(48%, 16%) rotate(22deg);
 }
 
 .aeris-product-frame {
@@ -913,9 +965,10 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border-radius: 0.875rem;
-  background: transparent;
-  box-shadow: var(--aeris-shot-shadow);
+  border-radius: 0.75rem;
+  background: rgb(14 16 19 / 0.35);
+  box-shadow: 0 22px 50px rgb(0 0 0 / 0.45);
+  border: 1px solid rgb(243 240 234 / 0.08);
 }
 
 .aeris-product-frame img {
@@ -925,50 +978,236 @@
   object-fit: cover;
 }
 
-@keyframes aeris-glow-breathe {
-  0%,
-  100% {
-    opacity: 0.9;
-  }
-  50% {
-    opacity: 1;
-  }
+.aeris-enter {
+  display: inline-flex;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 22px;
+  color: #141210;
+  background: var(--aeris-ink);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 160ms ease, transform 160ms ease, opacity 160ms ease;
+}
+
+.aeris-enter:hover:not(:disabled),
+.aeris-enter:focus-visible:not(:disabled) {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.aeris-enter:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.aeris-secondary {
+  display: inline-flex;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  color: var(--aeris-ink-muted);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  border-bottom: 1px solid rgb(243 240 234 / 0.28);
+  transition: color 160ms ease, border-color 160ms ease;
+}
+
+.aeris-secondary:hover {
+  color: var(--aeris-ink);
+  border-color: rgb(243 240 234 / 0.55);
+}
+
+.aeris-chapter {
+  position: relative;
+  display: grid;
+  min-height: 100%;
+  align-items: end;
+  overflow: hidden;
+}
+
+.aeris-chapter-media {
+  position: absolute;
+  inset: -6% 0;
+  z-index: 0;
+}
+
+.aeris-chapter-media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(0.95) contrast(1.04);
+}
+
+.aeris-chapter-media::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, rgb(14 16 19 / 0.82) 0%, rgb(14 16 19 / 0.45) 48%, rgb(14 16 19 / 0.2) 100%);
+}
+
+.aeris-chapter-flip .aeris-chapter-media::after {
+  background: linear-gradient(255deg, rgb(14 16 19 / 0.82) 0%, rgb(14 16 19 / 0.42) 48%, rgb(14 16 19 / 0.18) 100%);
+}
+
+.aeris-chapter-copy {
+  position: relative;
+  z-index: 2;
+  max-width: 36rem;
+  padding: 72px clamp(20px, 5vw, 56px);
+  color: var(--aeris-ink);
+}
+
+.aeris-chapter-flip .aeris-chapter-copy {
+  justify-self: end;
+  margin-left: auto;
+  text-align: right;
+}
+
+.aeris-chapter-copy h2 {
+  margin: 0;
+  font-family: "Lora Variable", "Lora", "Noto Serif SC", "Songti SC", Georgia, serif;
+  font-size: clamp(1.75rem, 3.8vw, 2.5rem);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+.aeris-chapter-copy > p:last-child {
+  margin: 14px 0 0;
+  max-width: 32rem;
+  color: var(--aeris-ink-muted);
+  font-size: 1.05rem;
+  line-height: 1.55;
+}
+
+.aeris-chapter-flip .aeris-chapter-copy > p:last-child {
+  margin-left: auto;
+}
+
+.aeris-footer {
+  border-top: 1px solid rgb(243 240 234 / 0.08);
+  background:
+    linear-gradient(180deg, rgb(196 138 90 / 0.05), transparent 40%),
+    var(--aeris-void);
+  padding: 40px clamp(20px, 5vw, 56px) 28px;
+}
+
+.aeris-footer-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 28px 48px;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+.aeris-footer-name {
+  margin: 0;
+  font-family: "Lora Variable", "Lora", "Noto Serif SC", "Songti SC", Georgia, serif;
+  font-size: 1.15rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.aeris-footer-tag {
+  margin: 6px 0 0;
+  color: var(--aeris-ink-muted);
+  font-size: 13px;
+}
+
+.aeris-footer-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  max-width: 36rem;
+}
+
+.aeris-footer-nav a {
+  color: rgb(243 240 234 / 0.72);
+  font-size: 13px;
+  text-decoration: none;
+  transition: color 160ms ease;
+}
+
+.aeris-footer-nav a:hover {
+  color: var(--aeris-ink);
+}
+
+.aeris-footer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  max-width: 1080px;
+  margin: 28px auto 0;
+  padding-top: 18px;
+  border-top: 1px solid rgb(243 240 234 / 0.06);
+  color: rgb(243 240 234 / 0.42);
+  font-size: 12px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .aeris-glow,
-  .aeris-eq-slot-in {
+  .aeris-eq-slot-in,
+  .aeris-intro-bloom,
+  .aeris-intro-spark {
     animation: none;
   }
 
-  .aeris-product-shot,
+  .aeris-intro-bloom,
+  .aeris-intro-spark {
+    opacity: 0;
+  }
+
   .aeris-eq-slot,
-  .aeris-landing {
+  .aeris-landing,
+  .aeris-intro-veil {
     transition: none;
   }
 
-  .aeris-product-stack:hover .aeris-product-shot {
-    transform: none;
+  .aeris-landing-scroll {
+    scroll-behavior: auto;
+  }
+
+  .aeris-landing.is-ready .aeris-intro-veil {
+    visibility: hidden;
   }
 }
 
-@media (max-width: 767px) {
-  .aeris-intro {
-    padding-top: 40px;
-  }
-
-  .aeris-intro-copy h1 {
-    font-size: clamp(2rem, 8vw, 2.6rem);
+@media (max-width: 860px) {
+  .aeris-hero-stage {
+    padding-top: 32px;
   }
 
   .aeris-eq-line {
-    font-size: 0.95rem;
+    font-size: 0.92rem;
     gap: 6px;
   }
 
   .aeris-product-shot {
     left: 10%;
     width: 80%;
+  }
+
+  .aeris-chapter-flip .aeris-chapter-copy {
+    text-align: left;
+    margin-left: 0;
+  }
+
+  .aeris-chapter-flip .aeris-chapter-copy > p:last-child {
+    margin-left: 0;
+  }
+
+  .aeris-footer-main {
+    flex-direction: column;
   }
 }
 
