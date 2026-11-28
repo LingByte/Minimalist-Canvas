@@ -14,7 +14,7 @@ export function sidebarNavItemClassName(
     'active:scale-[0.98]',
     orientation === 'horizontal'
       ? 'flex-row items-center gap-2 rounded-lg px-2 py-1'
-      : 'flex-col items-center gap-1 rounded-xl px-1 py-1.5',
+      : 'flex-col items-center justify-center rounded-lg px-0.5 py-0.5',
     active
       ? 'text-stone-950 dark:text-stone-50'
       : 'text-sidebar-foreground/55 hover:text-sidebar-foreground',
@@ -31,12 +31,12 @@ export function sidebarNavIconChipClassName(
     'transition-[background,border-color,color,box-shadow,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
     orientation === 'horizontal'
       ? 'size-7 shrink-0 rounded-lg'
-      : 'size-9 rounded-[0.7rem]',
+      : 'size-8 rounded-lg',
     active
       ? 'border-transparent bg-transparent text-current'
       : orientation === 'horizontal'
         ? 'border-transparent bg-transparent text-current'
-        : 'border-transparent bg-transparent text-current group-hover/nav:border-stone-200/80 group-hover/nav:bg-stone-100/80 dark:group-hover/nav:border-stone-700/80 dark:group-hover/nav:bg-stone-800/70',
+        : 'border-transparent bg-transparent text-current group-hover/nav:bg-stone-100/70 dark:group-hover/nav:bg-white/[0.06]',
   )
 }
 
@@ -57,9 +57,9 @@ export function sidebarNavLabelClassName(
 /** Soft selected surface — readable in light/dark without forcing white-on-black. */
 export function sidebarNavPillClassName(orientation: SidebarNavOrientation = 'vertical') {
   return cn(
-    'pointer-events-none absolute z-0 border border-stone-900/10 bg-stone-900/[0.08] shadow-none dark:border-white/10 dark:bg-white/[0.1]',
+    'pointer-events-none absolute z-0 border border-stone-900/10 bg-stone-900/[0.08] shadow-none dark:border-white/10 dark:bg-white/[0.08]',
     orientation === 'horizontal'
       ? 'inset-0 rounded-lg'
-      : 'inset-0 rounded-xl',
+      : 'inset-0 rounded-lg',
   )
 }

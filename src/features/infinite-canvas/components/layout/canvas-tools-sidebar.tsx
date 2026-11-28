@@ -137,7 +137,10 @@ export function CanvasToolsSidebar(props: { className?: string }) {
         <SmartImage
             src={logoUrl}
             alt={t("Logo")}
-            className="h-8 w-auto max-w-[2.5rem] object-contain"
+            className={cn(
+                "w-auto object-contain",
+                expanded ? "h-8 max-w-[2.5rem]" : "h-7 max-w-[1.75rem]",
+            )}
             fallbackIconClassName="text-sidebar-foreground size-5"
         />
     );
@@ -182,8 +185,8 @@ export function CanvasToolsSidebar(props: { className?: string }) {
             >
                 <div
                     className={cn(
-                        "flex h-14 w-full items-center gap-1",
-                        expanded ? "justify-between px-3" : "flex-col justify-center gap-1 px-1.5 py-2",
+                        "flex w-full items-center gap-1",
+                        expanded ? "h-14 justify-between px-3" : "flex-col justify-center gap-1.5 px-1 pb-1.5 pt-2.5",
                     )}
                 >
                     <div className={cn("min-w-0", expanded ? "flex-1" : "flex justify-center")}>{homeLink}</div>
@@ -195,7 +198,10 @@ export function CanvasToolsSidebar(props: { className?: string }) {
                                         type="button"
                                         variant="ghost"
                                         size="icon"
-                                        className="text-sidebar-foreground/55 hover:text-sidebar-foreground size-8 shrink-0 rounded-lg border border-transparent hover:border-stone-200/80 hover:bg-stone-100/80 dark:hover:border-stone-700/80 dark:hover:bg-stone-800/70"
+                                        className={cn(
+                                            "text-sidebar-foreground/55 hover:text-sidebar-foreground shrink-0 rounded-lg border border-transparent hover:bg-stone-100/80 dark:hover:bg-white/[0.06]",
+                                            expanded ? "size-8" : "size-7",
+                                        )}
                                         onClick={() => toggleCollapsed()}
                                         aria-label={collapsed ? t("topNav.expandSidebar") : t("topNav.collapseSidebar")}
                                         aria-pressed={collapsed}
@@ -203,9 +209,9 @@ export function CanvasToolsSidebar(props: { className?: string }) {
                                 }
                             >
                                 {collapsed ? (
-                                    <PanelLeftOpen className="size-4 stroke-[2]" />
+                                    <PanelLeftOpen className="size-3.5 stroke-[1.75]" />
                                 ) : (
-                                    <PanelLeftClose className="size-4 stroke-[2]" />
+                                    <PanelLeftClose className="size-4 stroke-[1.75]" />
                                 )}
                             </TooltipTrigger>
                             <TooltipContent side={expanded ? "bottom" : "right"} sideOffset={8}>
@@ -217,17 +223,19 @@ export function CanvasToolsSidebar(props: { className?: string }) {
 
                 <nav
                     className={cn(
-                        "flex w-full flex-1 flex-col gap-1 overflow-y-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-                        expanded ? "px-2" : "items-center px-1.5",
+                        "flex w-full flex-1 flex-col overflow-y-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+                        expanded ? "gap-1 px-2" : "items-center gap-0.5 px-1",
                     )}
                 >
                     {sections.map((section, sectionIndex) => (
                         <div
                             key={section.id}
                             className={cn(
-                                "flex w-full flex-col gap-px",
-                                expanded ? "" : "items-center",
-                                sectionIndex > 0 && "border-sidebar-border/80 border-t pt-1.5",
+                                "flex w-full flex-col",
+                                expanded ? "gap-px" : "items-center gap-0.5",
+                                sectionIndex > 0 && (expanded
+                                    ? "border-sidebar-border/80 border-t pt-1.5"
+                                    : "mt-1 border-t border-white/[0.06] pt-1.5 dark:border-white/[0.06]"),
                             )}
                             aria-label={t(`navigation.groups.${section.id}`)}
                         >
@@ -249,7 +257,6 @@ export function CanvasToolsSidebar(props: { className?: string }) {
                                         orientation={expanded ? "horizontal" : "vertical"}
                                         showTooltip={!expanded}
                                         layoutId="canvas-tools-sidebar-nav-pill"
-                                        className={expanded ? undefined : "!py-1"}
                                         onClick={(event) => go(href, event)}
                                     />
                                 );
@@ -260,44 +267,49 @@ export function CanvasToolsSidebar(props: { className?: string }) {
 
                 <div
                     className={cn(
-                        "border-sidebar-border flex w-full gap-1 border-t py-2.5",
-                        expanded ? "items-center justify-between px-2" : "flex-col items-center px-1.5",
+                        "border-sidebar-border flex w-full border-t",
+                        expanded ? "items-center justify-between gap-1 px-2 py-2.5" : "flex-col items-center gap-1 px-1 py-2",
                     )}
                 >
-                    <TooltipProvider delay={280}>
-                        <Tooltip>
-                            <TooltipTrigger
-                                render={
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        data-tour="config-settings-button"
-                                        className="text-sidebar-foreground/55 hover:text-sidebar-foreground size-8 rounded-lg border border-transparent hover:border-stone-200/80 hover:bg-stone-100/80 dark:hover:border-stone-700/80 dark:hover:bg-stone-800/70"
-                                        onClick={() => openConfigDialog(false)}
-                                        aria-label={t("navigation.config")}
-                                    />
-                                }
-                            >
-                                <Settings2 className="size-4 stroke-[2]" />
-                            </TooltipTrigger>
-                            <TooltipContent side={expanded ? "top" : "right"} sideOffset={8}>
-                                {t("navigation.config")}
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
+                    <span data-tour="config-settings-button" className="inline-flex">
+                        <TooltipProvider delay={280}>
+                            <Tooltip>
+                                <TooltipTrigger
+                                    render={
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            className={cn(
+                                                "text-sidebar-foreground/55 hover:text-sidebar-foreground rounded-lg border border-transparent hover:bg-stone-100/80 dark:hover:bg-white/[0.06]",
+                                                expanded ? "size-8" : "size-7",
+                                            )}
+                                            onClick={() => openConfigDialog(false)}
+                                            aria-label={t("navigation.config")}
+                                        />
+                                    }
+                                >
+                                    <Settings2 className={cn(expanded ? "size-4" : "size-3.5", "stroke-[1.75]")} />
+                                </TooltipTrigger>
+                                <TooltipContent side={expanded ? "top" : "right"} sideOffset={8}>
+                                    {t("navigation.config")}
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </span>
                     <AnimatedThemeToggler
                         theme={theme}
                         onThemeChange={setTheme}
-                        className="text-sidebar-foreground/55 hover:text-sidebar-foreground inline-flex size-8 items-center justify-center rounded-lg border border-transparent transition-colors hover:border-stone-200/80 hover:bg-stone-100/80 dark:hover:border-stone-700/80 dark:hover:bg-stone-800/70"
+                        className={cn(
+                            "text-sidebar-foreground/55 hover:text-sidebar-foreground inline-flex items-center justify-center rounded-lg border border-transparent transition-colors hover:bg-stone-100/80 dark:hover:bg-white/[0.06]",
+                            expanded ? "size-8" : "size-7",
+                        )}
                         aria-label={t(theme === "dark" ? "topNav.lightTheme" : "topNav.darkTheme")}
                         title={t(theme === "dark" ? "topNav.lightTheme" : "topNav.darkTheme")}
                     />
                     {expanded ? (
                         <VersionReleaseModal className="text-sidebar-foreground/45 hover:text-sidebar-foreground min-w-0 flex-1 truncate px-1 text-right text-[11px] font-medium tracking-tight" />
-                    ) : (
-                        <VersionReleaseModal className="text-sidebar-foreground/45 hover:text-sidebar-foreground max-w-full truncate px-0.5 text-center text-[10px] font-medium tracking-tight" />
-                    )}
+                    ) : null}
                 </div>
 
                 {!collapsed ? (

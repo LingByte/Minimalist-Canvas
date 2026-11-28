@@ -6,7 +6,7 @@ import { localForageStorage } from "@canvas/lib/localforage-storage";
 export const TOOLS_SIDEBAR_WIDTH_MIN = 168;
 export const TOOLS_SIDEBAR_WIDTH_MAX = 320;
 export const TOOLS_SIDEBAR_WIDTH_DEFAULT = 200;
-export const TOOLS_SIDEBAR_COLLAPSED_WIDTH = 72;
+export const TOOLS_SIDEBAR_COLLAPSED_WIDTH = 56;
 
 type ToolsSidebarStore = {
     collapsed: boolean;

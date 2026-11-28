@@ -98,8 +98,8 @@ export function SidebarNavItem({
         {!horizontal ? pill : null}
         <Icon
           className={cn(
-            'relative z-10 stroke-[2]',
-            horizontal ? 'size-4' : 'size-[1.15rem]',
+            'relative z-10 stroke-[1.75]',
+            horizontal ? 'size-4' : 'size-4',
           )}
           aria-hidden
         />
