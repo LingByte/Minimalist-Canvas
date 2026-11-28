@@ -6,6 +6,7 @@ import UserLayout from "@canvas/layouts/user-layout";
 import AssetsPage from "@canvas/pages/assets";
 import CanvasPage from "@canvas/pages/canvas";
 import CanvasProjectPage from "@canvas/pages/canvas/project";
+import ChangelogPage from "@canvas/pages/changelog";
 import ConfigPage from "@canvas/pages/config";
 import GenerationLogsPage from "@canvas/pages/generation-logs";
 import HomePage from "@canvas/pages/home";
@@ -24,6 +25,7 @@ import { CANVAS_BASENAME } from "./integration/constants";
 const appPages: RouteObject[] = [
     { index: true, element: <HomePage /> },
     { path: "home", element: <HomePage /> },
+    { path: "changelog", element: <ChangelogPage /> },
     { path: "image", element: <ImagePage /> },
     { path: "video", element: <VideoPage /> },
     { path: "assets", element: <AssetsPage /> },

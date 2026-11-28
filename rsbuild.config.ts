@@ -9,17 +9,16 @@ import { pluginTailwindcss } from '@rsbuild/plugin-tailwindcss'
 import { parseChangelog } from './src/features/infinite-canvas/lib/release'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const canvasVersion = readFileSync(
-  path.resolve(__dirname, './src/features/infinite-canvas/VERSION'),
-  'utf8'
-).trim()
-const canvasChangelog = readFileSync(
-  path.resolve(__dirname, './src/features/infinite-canvas/CHANGELOG.md'),
-  'utf8'
+const versionPath = path.resolve(__dirname, './src/features/infinite-canvas/VERSION')
+const changelogPath = path.resolve(
+  __dirname,
+  './src/features/infinite-canvas/CHANGELOG.md'
 )
 
 export default defineConfig(({ envMode }) => {
   const env = loadEnv({ mode: envMode, prefixes: ['VITE_'] })
+  const canvasVersion = readFileSync(versionPath, 'utf8').trim()
+  const canvasChangelog = readFileSync(changelogPath, 'utf8')
 
   return {
     plugins: [pluginReact(), pluginTailwindcss({ optimize: false })],
@@ -32,6 +31,10 @@ export default defineConfig(({ envMode }) => {
         __APP_VERSION__: JSON.stringify(canvasVersion || 'dev'),
         __APP_RELEASES__: JSON.stringify(parseChangelog(canvasChangelog)),
       },
+    },
+    server: {
+      // Re-evaluate define when changelog/version notes change in dev.
+      watchFiles: [{ paths: [changelogPath, versionPath], type: 'reload' }],
     },
     resolve: {
       alias: {

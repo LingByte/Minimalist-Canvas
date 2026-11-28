@@ -5,6 +5,7 @@
 + [新增] 可对外安装的 `minimalist-canvas-media`：npm CLI + Cursor/Claude skill，复用本机画布渠道生图/生视频。
 + [新增] 「外部接入」页：下载标准 Agent Skills 包，预览 SKILL.md / 脚本，并列出 Cursor / Claude / 通用安装路径。
 + [新增] 桌面端本机媒体 API（`127.0.0.1:17373`）：外部 skill / CLI 走运行中的画布渠道，不再读固定 Application Support 路径。
++ [优化] 首页重构为全幅主视觉叙事（新氛围素材），品牌优先；更新日志卡通树干竖轴滚动（无侧枝）。
 
 ## v0.1.15 - 2026-11-28
 
@@ -35,5 +36,3 @@
 + [调整] 画布品牌菜单只保留「我的画布」，移除重复的「主页」入口。
 + [调整] 移除独立 ops-runner 创作者运营服务及相关前端入口。
 + [修复] 旧节点仅有 `audioVoice` 时正确迁移到 `ttsVoiceId`，避免误用全局音色。
-+ [修复] 腾讯云默认 VoiceType 与目录对齐为 `101001`。
-+ [说明] 讯飞当前走 voice_clone WebSocket，目录里的在线音色可能不完全适用，后续再拆在线 TTS。

@@ -10,9 +10,9 @@ import { useMediaApiBridge } from "@canvas/hooks/use-media-api-bridge";
 import { scheduleAutoUpdateCheck } from "@canvas/services/app-updater";
 import { cn } from "@/lib/utils";
 
-/** Marketing / landing — no chrome; brand lives in the page itself. */
+/** Marketing / story pages — no chrome; brand lives in the page itself. */
 function isLandingPath(pathname: string) {
-    return pathname === "/";
+    return pathname === "/" || pathname === "/changelog";
 }
 
 /** Fullscreen canvas project editor. */
