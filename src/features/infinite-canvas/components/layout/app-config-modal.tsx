@@ -9,6 +9,7 @@ import { ConfigLocalStorage } from "@canvas/components/layout/config-local-stora
 import { ConfigObjectStorage } from "@canvas/components/layout/config-object-storage";
 import { ConfigPromptSources } from "@canvas/components/layout/config-prompt-sources";
 import { ConfigTtsEngines } from "@canvas/components/layout/config-tts-engines";
+import { WorkbenchWatermarkPanel } from "@canvas/components/workbench/workbench-watermark-panel";
 import { exportAppConfig, importAppConfig } from "@canvas/services/config-file";
 import { audioFormatOptions, normalizeAudioSpeedValue } from "@canvas/lib/audio-generation";
 import { hasReadyTtsChannel, listTtsVoices, resolveTtsVoice } from "@canvas/lib/tts-voices";
@@ -176,16 +177,17 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                                     </Button>
                                 </div>
                                 <div className="space-y-2">
-                                    {config.channels.map((channel) => (
+                                    {config.channels.map((channel, channelIndex) => (
                                         <div
                                             key={channel.id}
+                                            data-tour={channelIndex === 0 ? "config-channel-item" : undefined}
                                             className="flex items-center justify-between gap-3 rounded-lg border border-stone-200 px-4 py-3 dark:border-stone-800"
                                         >
                                             <div className="min-w-0">
-                                                <div className="truncate text-sm font-medium text-stone-900 dark:text-stone-100">
+                                                <div className="truncate text-sm font-medium leading-snug text-stone-900 dark:text-stone-100">
                                                     {channel.name.trim() || t("config.channels.unnamed")}
                                                 </div>
-                                                <div className="mt-0.5 truncate text-xs text-stone-500">
+                                                <div className="mt-1 truncate text-xs leading-relaxed text-stone-500">
                                                     {channel.baseUrl.trim() || t("config.channels.missingUrl")}
                                                     {" · "}
                                                     {t(channel.apiKey?.trim() ? "config.channels.apiKeyReady" : "config.channels.apiKeyMissing")}
@@ -289,6 +291,15 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                                     <Input.TextArea rows={4} value={config.systemPrompt} placeholder={t("config.preferences.systemPromptPlaceholder")} onChange={(event) => updateConfig("systemPrompt", event.target.value)} />
                                 </Form.Item>
                             </Form>
+                            </div>
+                        ),
+                    },
+                    {
+                        key: "watermark",
+                        label: <span data-tour="config-tab-watermark">{t("config.tabs.watermark")}</span>,
+                        children: (
+                            <div data-tour="config-watermark-panel">
+                                <WorkbenchWatermarkPanel />
                             </div>
                         ),
                     },

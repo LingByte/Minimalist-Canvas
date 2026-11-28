@@ -1,6 +1,6 @@
 import { ArrowLeft, ArrowRight, BookOpen, CheckSquare, ClipboardPaste, Download, FolderPlus, History, LoaderCircle, Music2, Plus, SlidersHorizontal, Sparkles, Trash2, Upload, VideoIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import { App, Button, Checkbox, Drawer, Empty, Modal, Tag, Typography } from "antd";
+import { App, Button, Checkbox, Drawer, Dropdown, Empty, Modal, Tag, Typography } from "antd";
 import { nanoid } from "nanoid";
 import { useTranslation } from "react-i18next";
 import { toIntlLocale } from "@/i18n/languages";
@@ -31,6 +31,8 @@ import { buildImageReferencePromptText, imageReferenceLabel } from "@canvas/lib/
 import { formatBytes, formatDuration } from "@canvas/lib/image-utils";
 import { deleteStoredMedia, uploadMediaFile } from "@canvas/services/file-storage";
 import { saveBlobAs } from "@canvas/lib/save-file";
+import { isTauri } from "@canvas/services/fs-store";
+import { isWatermarkReady, useWatermarkStore } from "@canvas/stores/use-watermark-store";
 import { onCloudMediaUrl } from "@canvas/services/cloud-upload-progress";
 import { isPubliclyReachableMediaUrl } from "@canvas/services/ensure-public-media";
 import { uploadImage } from "@canvas/services/image-storage";
@@ -611,8 +613,14 @@ export default function VideoPage() {
         requestGenerate();
     };
 
-    const downloadVideo = (video: GeneratedVideo) => {
-        void saveBlobAs(video.url, "video.mp4");
+    const downloadVideo = async (video: GeneratedVideo, _withWatermark = false) => {
+        // Video burn-in is not wired yet; both choices save the original file.
+        const path = await saveBlobAs(video.url, "video.mp4");
+        if (isTauri() && !path) {
+            message.info(t("common.downloadCanceled"));
+            return;
+        }
+        message.success(t("common.downloaded"));
     };
 
     const saveResultToAssets = (video: GeneratedVideo, index: number) => {
@@ -1180,8 +1188,9 @@ function GenerationSettings({
     );
 }
 
-function ResultVideoCard({ video, onDownload, onSaveAsset }: { video: GeneratedVideo; onDownload: (video: GeneratedVideo) => void; onSaveAsset: (video: GeneratedVideo) => void }) {
+function ResultVideoCard({ video, onDownload, onSaveAsset }: { video: GeneratedVideo; onDownload: (video: GeneratedVideo, withWatermark?: boolean) => void | Promise<void>; onSaveAsset: (video: GeneratedVideo) => void }) {
     const { t } = useTranslation();
+    const watermarkReady = useWatermarkStore(isWatermarkReady);
     return (
         <div className="overflow-hidden rounded-lg border border-stone-200 bg-background dark:border-stone-800">
             <video src={video.url} controls className="aspect-video w-full bg-black object-contain" />
@@ -1197,9 +1206,34 @@ function ResultVideoCard({ video, onDownload, onSaveAsset }: { video: GeneratedV
                     <Button size="small" icon={<FolderPlus className="size-3.5" />} onClick={() => onSaveAsset(video)}>
                         {t("common.addToAssets")}
                     </Button>
-                    <Button size="small" icon={<Download className="size-3.5" />} onClick={() => onDownload(video)}>
-                        {t("common.download")}
-                    </Button>
+                    {watermarkReady ? (
+                        <Dropdown
+                            trigger={["hover"]}
+                            menu={{
+                                items: [
+                                    {
+                                        key: "without",
+                                        label: t("watermark.download.without"),
+                                        onClick: () => void onDownload(video, false),
+                                    },
+                                    {
+                                        key: "with",
+                                        label: t("watermark.download.with"),
+                                        title: t("watermark.download.videoHint"),
+                                        onClick: () => void onDownload(video, true),
+                                    },
+                                ],
+                            }}
+                        >
+                            <Button size="small" icon={<Download className="size-3.5" />}>
+                                {t("common.download")}
+                            </Button>
+                        </Dropdown>
+                    ) : (
+                        <Button size="small" icon={<Download className="size-3.5" />} onClick={() => void onDownload(video, false)}>
+                            {t("common.download")}
+                        </Button>
+                    )}
                 </div>
             </div>
         </div>

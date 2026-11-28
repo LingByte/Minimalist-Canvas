@@ -105,7 +105,7 @@ export type WebdavSyncConfig = {
     directory: string;
     lastSyncedAt: string;
 };
-export type ConfigTabKey = "channels" | "preferences" | "tts" | "prompt-sources" | "local-storage" | "object-storage" | "webdav";
+export type ConfigTabKey = "channels" | "preferences" | "watermark" | "tts" | "prompt-sources" | "local-storage" | "object-storage" | "webdav";
 
 const CHANNEL_MODEL_SEPARATOR = "::";
 const CONFIG_STORE_KEY = "minimalist-canvas:ai_config_store";

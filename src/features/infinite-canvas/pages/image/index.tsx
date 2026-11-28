@@ -1,6 +1,6 @@
 import { ArrowLeft, ArrowRight, BookOpen, CheckSquare, ClipboardPaste, Download, FolderPlus, History, ImagePlus, LoaderCircle, PenLine, Plus, SlidersHorizontal, Sparkles, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { App, Button, Checkbox, Drawer, Empty, Input, Modal, Tag, Tooltip, Typography } from "antd";
+import { App, Button, Checkbox, Drawer, Dropdown, Empty, Input, Modal, Tag, Tooltip, Typography } from "antd";
 import { useTranslation } from "react-i18next";
 import { toIntlLocale } from "@/i18n/languages";
 import { cn } from "@/lib/utils";
@@ -32,8 +32,10 @@ import { useConfigStore, useEffectiveConfig, type AiConfig } from "@canvas/store
 import { useConfirmGenerationQuota } from "@canvas/lib/use-confirm-generation-quota";
 import { useModelUnitPrice } from "@canvas/lib/use-model-unit-price";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
+import { buildWatermarkApplyInput, isWatermarkReady, useWatermarkStore } from "@canvas/stores/use-watermark-store";
 import { nanoid } from "nanoid";
 import { formatBytes, formatDuration } from "@canvas/lib/image-utils";
+import { applyImageWatermark } from "@canvas/lib/watermark/apply-image-watermark";
 import { deleteGenerationAssetsByClientIds, listGenerationAssets, type GenerationAsset } from "@canvas/services/api/generation-assets";
 import { onCloudMediaUrl } from "@canvas/services/cloud-upload-progress";
 import { isPubliclyReachableMediaUrl } from "@canvas/services/ensure-public-media";
@@ -454,14 +456,24 @@ export default function ImagePage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [autoRunToken]);
 
-    const downloadImage = async (image: GeneratedImage, index: number) => {
+    const downloadImage = async (image: GeneratedImage, index: number, withWatermark = false) => {
         const url = (await resolveImageUrl(image.storageKey, image.dataUrl)) || image.dataUrl;
-        const path = await saveBlobAs(url, `image-${index + 1}.png`);
+        const watermark = useWatermarkStore.getState();
+        let payload: string | Blob = url;
+        if (withWatermark && isWatermarkReady(watermark)) {
+            try {
+                payload = await applyImageWatermark(url, buildWatermarkApplyInput(watermark));
+            } catch (error) {
+                message.error(error instanceof Error ? error.message : t("watermark.applyFailed"));
+                return;
+            }
+        }
+        const path = await saveBlobAs(payload, `image-${index + 1}.png`);
         if (isTauri() && !path) {
             message.info(t("common.downloadCanceled"));
             return;
         }
-        message.success(t("common.downloaded"));
+        message.success(withWatermark ? t("watermark.downloaded") : t("common.downloaded"));
     };
 
     const addResultToReferences = async (image: GeneratedImage, index: number) => {
@@ -1015,10 +1027,11 @@ function ResultImageCard({
     image: GeneratedImage;
     index: number;
     onEdit: (image: GeneratedImage, index: number) => void | Promise<void>;
-    onDownload: (image: GeneratedImage, index: number) => void | Promise<void>;
+    onDownload: (image: GeneratedImage, index: number, withWatermark?: boolean) => void | Promise<void>;
     onSaveAsset: (image: GeneratedImage, index: number) => void | Promise<void>;
 }) {
     const { t } = useTranslation();
+    const watermarkReady = useWatermarkStore(isWatermarkReady);
     const [src, setSrc] = useState(image.dataUrl);
     const [previewOpen, setPreviewOpen] = useState(false);
     const [busyAction, setBusyAction] = useState<"save" | "reference" | "download" | null>(null);
@@ -1112,18 +1125,48 @@ function ResultImageCard({
                             {t("imageWorkbench.resultAddReference")}
                         </Button>
                     </Tooltip>
-                    <Tooltip title={t("common.download")}>
-                        <Button
-                            className={RESULT_ACTION_BUTTON_CLASS}
-                            size="small"
-                            loading={busyAction === "download"}
-                            disabled={Boolean(busyAction) && busyAction !== "download"}
-                            icon={<Download className="size-3.5" />}
-                            onClick={() => void runAction("download", () => onDownload(image, index))}
+                    {watermarkReady ? (
+                        <Dropdown
+                            trigger={["hover"]}
+                            menu={{
+                                items: [
+                                    {
+                                        key: "without",
+                                        label: t("watermark.download.without"),
+                                        onClick: () => void runAction("download", () => onDownload(image, index, false)),
+                                    },
+                                    {
+                                        key: "with",
+                                        label: t("watermark.download.with"),
+                                        onClick: () => void runAction("download", () => onDownload(image, index, true)),
+                                    },
+                                ],
+                            }}
                         >
-                            {t("common.download")}
-                        </Button>
-                    </Tooltip>
+                            <Button
+                                className={RESULT_ACTION_BUTTON_CLASS}
+                                size="small"
+                                loading={busyAction === "download"}
+                                disabled={Boolean(busyAction) && busyAction !== "download"}
+                                icon={<Download className="size-3.5" />}
+                            >
+                                {t("common.download")}
+                            </Button>
+                        </Dropdown>
+                    ) : (
+                        <Tooltip title={t("common.download")}>
+                            <Button
+                                className={RESULT_ACTION_BUTTON_CLASS}
+                                size="small"
+                                loading={busyAction === "download"}
+                                disabled={Boolean(busyAction) && busyAction !== "download"}
+                                icon={<Download className="size-3.5" />}
+                                onClick={() => void runAction("download", () => onDownload(image, index, false))}
+                            >
+                                {t("common.download")}
+                            </Button>
+                        </Tooltip>
+                    )}
                 </div>
             </div>
         </div>
