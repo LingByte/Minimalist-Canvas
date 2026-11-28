@@ -1,0 +1,45 @@
+{
+  "name": "minimalist-canvas-media",
+  "version": "0.1.0",
+  "description": "Generate images/videos via Minimalist Canvas desktop AI channels. Installable Cursor/Claude skill + CLI.",
+  "type": "module",
+  "bin": {
+    "canvas-media": "bin/canvas-media.js",
+    "minimalist-canvas-media": "bin/canvas-media.js"
+  },
+  "files": [
+    "bin",
+    "skills",
+    "README.md"
+  ],
+  "scripts": {
+    "start": "node ./bin/canvas-media.js",
+    "config": "node ./bin/canvas-media.js config",
+    "models": "node ./bin/canvas-media.js models"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "cursor",
+    "skill",
+    "agent-skills",
+    "minimalist-canvas",
+    "image-generation",
+    "video-generation",
+    "openai-compatible"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LingByte/Minimalist-Canvas.git",
+    "directory": "skills/cursor-media"
+  },
+  "bugs": {
+    "url": "https://github.com/LingByte/Minimalist-Canvas/issues"
+  },
+  "homepage": "https://github.com/LingByte/Minimalist-Canvas/tree/main/skills/cursor-media",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

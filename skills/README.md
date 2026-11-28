@@ -25,15 +25,31 @@ bun run skills:sync    # rebuild bundled/ from existing _vendor
 
 Attribution: `skills/bundled/ATTRIBUTION.md`.
 
-## Cursor personal skill (cross-project media)
+## Publishable media skill (external projects)
 
-`skills/cursor-media/` is a Cursor Agent Skill that reuses Minimalist Canvas desktop
-channels to generate images/videos from **any** local project.
+`minimalist-canvas-media` lets **other repos / other people** reuse Minimalist Canvas desktop
+channels to generate images and videos.
 
-Copy it into your Cursor **user Agent Store** `skills/` as `minimalist-canvas-media`
-(or keep the vendored folder and point agents at `skills/cursor-media/SKILL.md`).
+| Path | Role |
+| --- | --- |
+| `skills/minimalist-canvas-media/` | Agent skill (for `npx skills add`) |
+| `skills/cursor-media/` | npm package (`minimalist-canvas-media`) + CLI bin |
 
-Then in another repo ask Cursor to use `minimalist-canvas-media` / 用画布渠道生图.
+### Install elsewhere
+
+```bash
+# CLI (no skill files required)
+npx minimalist-canvas-media image --prompt "海报" --out ./out.png
+
+# Cursor / Claude skill from this GitHub repo
+npx skills add LingByte/Minimalist-Canvas --skill minimalist-canvas-media -g -a cursor -y
+
+# Or npm + sync
+npm i -D minimalist-canvas-media skills
+npx skills experimental_sync -a cursor -y
+```
+
+Details: [`skills/cursor-media/README.md`](./cursor-media/README.md).
 
 ## Optional user installs
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
++ [新增] 可对外安装的 `minimalist-canvas-media`：npm CLI + Cursor/Claude skill，复用本机画布渠道生图/生视频。
+
 ## v0.1.15 - 2026-11-28
 
 + [新增] 默认提示词源补充 Toolcentral / YouArt / NeXra / Reviral / ImgEdify Nano Banana / AIGC Hackers；解析兼容 prompts/items 包装与常见字段别名。
