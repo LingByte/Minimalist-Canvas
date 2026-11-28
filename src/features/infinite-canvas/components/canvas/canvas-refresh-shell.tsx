@@ -50,7 +50,7 @@ export function CanvasRefreshShell({ title, description }: CanvasRefreshShellPro
                     {LOAD_NODES.map((node, index) => (
                         <article key={node.id} className={cn("canvas-load-node", node.className)} style={{ "--i": index } as CSSProperties}>
                             <div className="canvas-load-node-media">
-                                <img src={node.src} alt="" decoding="async" />
+                                <img src={node.src} alt="" width={400} height={300} decoding="async" fetchPriority={index === 1 ? "high" : "low"} />
                                 <span className="canvas-load-node-sheen" />
                             </div>
                             <div className="canvas-load-node-meta">
@@ -64,7 +64,7 @@ export function CanvasRefreshShell({ title, description }: CanvasRefreshShellPro
                         <div className="canvas-load-strip-track">
                             {STRIP_FRAMES.map((src, index) => (
                                 <span key={`${src}-${index}`} className="canvas-load-strip-frame">
-                                    <img src={src} alt="" decoding="async" />
+                                    <img src={src} alt="" width={400} height={300} decoding="async" loading="lazy" />
                                 </span>
                             ))}
                         </div>
