@@ -3,11 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { Button, Segmented, Switch } from "antd";
 import { Blocks, BookOpen, CircleDot, Clapperboard, FolderOpen, Grid2x2, Group, Hand, History, Image as ImageIcon, Info, ListVideo, Moon, MousePointer2, Music2, Palette, Puzzle, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Video, Wrench } from "lucide-react";
 
-import { useTheme } from "@/context/theme-provider";
-
 import { canvasThemes, type CanvasBackgroundMode, type CanvasColorTheme, type CanvasTheme } from "@canvas/lib/canvas-theme";
 import { getNodePluginId, listNodeDefinitions, useNodeRegistryVersion } from "@canvas/lib/canvas/node-registry";
-import { useCanvasHost } from "@canvas/integration/canvas-host-context";
 import { useGenerationLogsBadgeStore } from "@canvas/stores/use-generation-logs-badge-store";
 import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { AnimatedThemeToggler } from "@canvas/components/ui/animated-theme-toggler";
@@ -74,8 +71,6 @@ export function CanvasToolbar({
     const wrapRef = useRef<HTMLDivElement>(null);
     const { t } = useTranslation();
     const rootRef = useRef<HTMLDivElement>(null);
-    const { embedded } = useCanvasHost();
-    const hostTheme = useTheme();
     const colorTheme = useThemeStore((state) => state.theme);
     const pendingCount = useGenerationLogsBadgeStore((state) => state.pendingCount);
     const unreadCount = useGenerationLogsBadgeStore((state) => state.unreadCount);
@@ -85,11 +80,7 @@ export function CanvasToolbar({
             : unreadCount > 0
               ? { count: unreadCount, tone: "new" as const }
               : null;
-    const setCanvasTheme = useThemeStore((state) => state.setTheme);
-    const setTheme = (next: CanvasColorTheme) => {
-        if (embedded) hostTheme.setTheme(next);
-        else setCanvasTheme(next);
-    };
+    const setTheme = useThemeStore((state) => state.setTheme);
     const theme = canvasThemes[colorTheme];
     const [hovered, setHovered] = useState<string | null>(null);
     const [tipX, setTipX] = useState(0);

@@ -1,7 +1,7 @@
-/** Optional site origin for opening external pages / legacy site helpers. */
+/** Optional remote origin for desktop absolute `/api/storage` URLs. */
 export const SITE_BASE_URL = (import.meta.env.VITE_REACT_APP_SERVER_URL || "").replace(/\/+$/, "");
 
-/** Origin accepted by optional remote site helpers. */
+/** Same as SITE_BASE_URL; kept for callers that need an Origin header value. */
 export const SITE_ORIGIN = SITE_BASE_URL;
 
 function isDesktop() {
@@ -30,18 +30,6 @@ function loadShell() {
     return shellModule;
 }
 
-/** Resolve the configured backend site base URL (no trailing slash). */
-export function siteBaseUrl(): string {
-    return SITE_BASE_URL;
-}
-
-/** Build an absolute URL on the configured site, e.g. siteUrl("/profile"). */
-export function siteUrl(path: string): string {
-    const base = siteBaseUrl();
-    if (!base) return path.startsWith("/") ? path : `/${path}`;
-    return `${base}${path.startsWith("/") ? path : `/${path}`}`;
-}
-
 /** Open a URL in the system browser under Tauri, or a new tab on web. */
 export async function openExternal(url: string): Promise<void> {
     if (isDesktop()) {
@@ -61,8 +49,4 @@ export async function openExternal(url: string): Promise<void> {
         }
     }
     window.open(url, "_blank", "noopener,noreferrer");
-}
-
-export async function openSitePage(path: string): Promise<void> {
-    await openExternal(siteUrl(path));
 }

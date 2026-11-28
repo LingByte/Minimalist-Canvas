@@ -20,21 +20,3 @@ import { api } from '@/lib/http-client'
 
 export { api }
 export type { ApiRequestConfig } from '@/lib/http-client'
-
-// ============================================================================
-// System APIs
-// ============================================================================
-
-export async function getStatus() {
-  const res = await api.get('/api/status')
-  return res.data?.data as Record<string, unknown>
-}
-
-export async function getNotice(): Promise<{
-  success: boolean
-  message?: string
-  data?: string
-}> {
-  const res = await api.get('/api/notice')
-  return res.data
-}

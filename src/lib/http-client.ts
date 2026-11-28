@@ -21,7 +21,6 @@ import { t } from 'i18next'
 import { toast } from 'sonner'
 
 import { createTauriAdapter } from '@/lib/tauri-http-adapter'
-import { getServerErrorMessageKey } from '@/lib/server-error-message'
 
 declare module 'axios' {
   export interface AxiosRequestConfig {
@@ -63,8 +62,6 @@ api.get = ((url: string, config: ApiRequestConfig = {}) => {
 }) as typeof api.get
 
 function resolveErrorMessage(payload: unknown, fallback?: string): string {
-  const messageKey = getServerErrorMessageKey(payload)
-  if (messageKey) return t(messageKey)
   const data =
     typeof payload === 'object' && payload !== null
       ? ((payload as { response?: { data?: unknown } }).response?.data ?? payload)

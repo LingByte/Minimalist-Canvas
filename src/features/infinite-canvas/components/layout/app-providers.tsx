@@ -44,8 +44,8 @@ function AppProvidersInner({ children, embedded = false, rootId }: AppProvidersP
     const theme = useThemeStore((state) => state.theme);
     const dark = theme === "dark";
     const locale = hostToCanvasLocale(i18n.resolvedLanguage || i18n.language) as AppLocale;
-    // Load system config (system name, logo) once at app root so auth pages show them.
-    useSystemConfig({ autoLoad: !embedded });
+    // Local branding (name / logo / favicon); no remote status fetch.
+    useSystemConfig();
 
     const antMessageConfig = useMemo(
         () => ({

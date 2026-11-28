@@ -22,39 +22,9 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 import { DEFAULT_SYSTEM_NAME, DEFAULT_LOGO } from '@/lib/constants'
 import { localForageStorage } from '@canvas/lib/localforage-storage'
 
-export type CurrencyDisplayType = 'USD' | 'CNY' | 'TOKENS' | 'CUSTOM'
-
-export interface CurrencyConfig {
-  /** Whether to render quota values as currency instead of raw units */
-  displayInCurrency: boolean
-  /** Currency presentation strategy configured by the admin */
-  quotaDisplayType: CurrencyDisplayType
-  /** Number of quota units that equal one USD */
-  quotaPerUnit: number
-  /** Exchange rate from USD to the configured local currency */
-  usdExchangeRate: number
-  /** Custom currency symbol configured by the admin (used when type === CUSTOM) */
-  customCurrencySymbol: string
-  /** Exchange rate from USD to the custom currency (used when type === CUSTOM) */
-  customCurrencyExchangeRate: number
-}
-
 export interface SystemConfig {
   systemName: string
   logo: string
-  footerHtml?: string
-  demoSiteEnabled?: boolean
-  displayTokenStatEnabled?: boolean
-  currency: CurrencyConfig
-}
-
-export const DEFAULT_CURRENCY_CONFIG: CurrencyConfig = {
-  displayInCurrency: true,
-  quotaDisplayType: 'USD',
-  quotaPerUnit: 500000,
-  usdExchangeRate: 1,
-  customCurrencySymbol: '¤',
-  customCurrencyExchangeRate: 1,
 }
 
 interface SystemConfigState {
@@ -67,8 +37,7 @@ interface SystemConfigState {
 }
 
 /**
- * System configuration store with automatic persistence
- * Manages system name, logo, footer HTML and loading states
+ * Local branding store (system name / logo). No remote admin backend.
  */
 export const useSystemConfigStore = create<SystemConfigState>()(
   persist(
@@ -76,19 +45,14 @@ export const useSystemConfigStore = create<SystemConfigState>()(
       config: {
         systemName: DEFAULT_SYSTEM_NAME,
         logo: DEFAULT_LOGO,
-        currency: { ...DEFAULT_CURRENCY_CONFIG },
       },
-      loading: true,
+      loading: false,
       loadedLogoUrl: DEFAULT_LOGO,
       setConfig: (newConfig) =>
         set((state) => ({
           config: {
             ...state.config,
             ...newConfig,
-            currency: {
-              ...state.config.currency,
-              ...(newConfig.currency ?? {}),
-            },
           },
         })),
       setLoadedLogoUrl: (url) => set({ loadedLogoUrl: url }),
@@ -98,15 +62,9 @@ export const useSystemConfigStore = create<SystemConfigState>()(
       name: 'system-config-storage',
       storage: createJSONStorage(() => localForageStorage),
       partialize: (state) => ({
-        // Branding only — currency rates must always come from /api/status,
-        // otherwise a stale local 7× CNY rate can stick after the admin
-        // changes USDExchangeRate (e.g. 7 → 1).
         config: {
           systemName: state.config.systemName,
           logo: state.config.logo,
-          footerHtml: state.config.footerHtml,
-          demoSiteEnabled: state.config.demoSiteEnabled,
-          displayTokenStatEnabled: state.config.displayTokenStatEnabled,
         },
         loadedLogoUrl: state.loadedLogoUrl,
       }),
@@ -121,8 +79,8 @@ export const useSystemConfigStore = create<SystemConfigState>()(
           ...saved,
           config: {
             ...current.config,
-            ...savedConfig,
-            currency: { ...current.config.currency },
+            systemName: savedConfig.systemName || current.config.systemName,
+            logo: savedConfig.logo || current.config.logo,
           },
         }
       },
@@ -130,11 +88,7 @@ export const useSystemConfigStore = create<SystemConfigState>()(
   )
 )
 
-// Selector helpers for convenience
 export const getSystemName = () =>
   useSystemConfigStore.getState().config.systemName
 
 export const getLogo = () => useSystemConfigStore.getState().config.logo
-
-export const getFooterHtml = () =>
-  useSystemConfigStore.getState().config.footerHtml

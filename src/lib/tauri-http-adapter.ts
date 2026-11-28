@@ -2,7 +2,7 @@ import type { AxiosAdapter, AxiosRequestConfig, AxiosResponse } from 'axios'
 
 import { SITE_BASE_URL, SITE_ORIGIN } from '@/lib/open-external'
 
-// Check if running inside Tauri (desktop app)
+/** True when running inside the Tauri desktop webview. */
 export const isTauriRuntime =
   typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
@@ -11,8 +11,7 @@ function buildFullURL(config: AxiosRequestConfig): string {
   if (/^https?:\/\//.test(url)) return url
   const path = `${(config.baseURL || '').replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`
   if (/^https?:\/\//.test(path)) return path
-  // Desktop build: relative API paths target the fixed backend site, not the
-  // webview origin — plugin-http rejects out-of-scope origins entirely.
+  // Relative paths (e.g. /api/storage) need an absolute origin for plugin-http.
   return `${SITE_BASE_URL}${path}`
 }
 
@@ -60,7 +59,7 @@ function flattenAxiosHeaders(configHeaders: AxiosRequestConfig['headers']): Reco
   return headers
 }
 
-// Custom axios adapter using Tauri HTTP plugin (bypasses CORS)
+/** Axios adapter using Tauri HTTP plugin (bypasses webview CORS). */
 export function createTauriAdapter(): AxiosAdapter | null {
   if (!isTauriRuntime) return null
   return async (config) => {
@@ -70,19 +69,13 @@ export function createTauriAdapter(): AxiosAdapter | null {
     if (query) url += `${url.includes('?') ? '&' : '?'}${query}`
     const method = (config.method || 'get').toUpperCase()
     const headers = flattenAxiosHeaders(config.headers)
-    // Backend auth endpoints enforce an Origin allowlist (its server_address).
-    // plugin-http sends no webview origin, so provide the accepted one or
-    // refresh/logout are rejected as AUTH_ORIGIN_FORBIDDEN.
-    if (url.startsWith(SITE_BASE_URL)) {
+    if (SITE_BASE_URL && url.startsWith(SITE_BASE_URL)) {
       if (!headers.Origin) headers.Origin = SITE_ORIGIN
       if (!headers.Referer) headers.Referer = `${SITE_ORIGIN}/`
     }
     const init: RequestInit = {
       method,
       headers,
-      // Persist / send new_api_refresh so access-token expiry can be renewed.
-      // Without this, desktop looks "logged in" (user in memory) while APIs
-      // return auth.not_logged_in after the short-lived Bearer expires.
       credentials: 'include',
     }
     if (config.data && method !== 'GET' && method !== 'HEAD') {

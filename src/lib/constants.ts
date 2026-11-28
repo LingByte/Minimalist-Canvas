@@ -24,10 +24,3 @@ For commercial licensing, please contact support@quantumnous.com
 export const DEFAULT_SYSTEM_NAME = '至简未来AI'
 export const DEFAULT_SYSTEM_TAGLINE = 'SIMPLEST FUTURE AI'
 export const DEFAULT_LOGO = '/logo.png'
-
-// LocalStorage Keys
-export const STORAGE_KEYS = {
-  SYSTEM_NAME: 'system_name',
-  LOGO: 'logo',
-  FOOTER_HTML: 'footer_html',
-} as const
