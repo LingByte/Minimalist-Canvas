@@ -1,4 +1,5 @@
 mod mcp;
+mod media_api;
 mod tomato;
 
 use tauri::Manager;
@@ -19,6 +20,8 @@ pub fn run() {
                 .plugin(tauri_plugin_updater::Builder::new().build())?;
             let bridge = mcp::spawn_mcp_server(app.handle());
             app.manage(bridge);
+            let media = media_api::spawn_media_api(app.handle());
+            app.manage(media);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -27,6 +30,8 @@ pub fn run() {
             mcp::mcp_registered,
             mcp::register_codex_mcp,
             mcp::open_codex_terminal,
+            media_api::media_api_endpoint,
+            media_api::media_api_result,
             tomato::library_get_settings,
             tomato::library_set_settings,
             tomato::library_list_local,

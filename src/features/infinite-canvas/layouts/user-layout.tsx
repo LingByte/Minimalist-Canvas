@@ -6,6 +6,7 @@ import { AppTopNav } from "@canvas/components/layout/app-top-nav";
 import { CanvasToolsSidebar } from "@canvas/components/layout/canvas-tools-sidebar";
 import { navigationTools, navigationToolActive } from "@canvas/constant/navigation-tools";
 import { useMcpBridge } from "@canvas/hooks/use-mcp-bridge";
+import { useMediaApiBridge } from "@canvas/hooks/use-media-api-bridge";
 import { scheduleAutoUpdateCheck } from "@canvas/services/app-updater";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +31,7 @@ function isCanvasToolsPath(pathname: string) {
 
 export default function UserLayout({ children }: { children: ReactNode }) {
     useMcpBridge();
+    useMediaApiBridge();
     useEffect(() => {
         scheduleAutoUpdateCheck();
     }, []);
