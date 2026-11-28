@@ -310,12 +310,12 @@ function CategoryChip(props: { active: boolean; label: string; count: number; on
             className={cn(
                 "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition",
                 props.active
-                    ? "border-stone-900 bg-stone-900 text-white dark:border-stone-100 dark:bg-stone-100 dark:text-stone-900"
+                    ? "border-stone-900/15 bg-stone-900/[0.08] text-stone-950 dark:border-white/15 dark:bg-white/[0.12] dark:text-stone-50"
                     : "border-stone-200 bg-white text-stone-600 hover:border-stone-300 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300 dark:hover:border-stone-600",
             )}
         >
             <span>{props.label}</span>
-            <span className={cn("tabular-nums opacity-70", props.active && "opacity-80")}>{props.count}</span>
+            <span className={cn("tabular-nums opacity-60", props.active && "opacity-75")}>{props.count}</span>
         </button>
     );
 }

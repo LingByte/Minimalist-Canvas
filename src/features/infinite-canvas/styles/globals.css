@@ -201,9 +201,9 @@
 
     .prompt-filter-tag.ant-tag-checkable.is-active,
     .prompt-filter-tag.ant-tag-checkable-checked {
-        background: #111111;
-        border-color: #111111;
-        color: #ffffff;
+        background: rgba(28, 25, 23, 0.08);
+        border-color: rgba(28, 25, 23, 0.14);
+        color: #0c0a09;
         font-weight: 600;
     }
 
@@ -218,13 +218,11 @@
 
     .dark .prompt-filter-tag.ant-tag-checkable.is-active,
     .dark .prompt-filter-tag.ant-tag-checkable-checked {
-        background: rgba(250, 250, 249, 0.96);
-        border-color: rgba(255, 255, 255, 0.88);
-        box-shadow:
-            0 0 0 1px rgba(255, 255, 255, 0.18),
-            0 6px 18px rgba(0, 0, 0, 0.22);
-        color: #0c0a09 !important;
-        font-weight: 700;
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.16);
+        box-shadow: none;
+        color: #fafaf9 !important;
+        font-weight: 600;
     }
 
     .thin-scrollbar {
