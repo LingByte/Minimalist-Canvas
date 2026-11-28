@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 
 import { AppTopNav } from "@canvas/components/layout/app-top-nav";
@@ -9,6 +9,12 @@ import { useMcpBridge } from "@canvas/hooks/use-mcp-bridge";
 import { useMediaApiBridge } from "@canvas/hooks/use-media-api-bridge";
 import { scheduleAutoUpdateCheck } from "@canvas/services/app-updater";
 import { cn } from "@/lib/utils";
+
+const ConfigOnboardingTour = lazy(() =>
+    import("@canvas/components/layout/config-onboarding-tour").then((m) => ({
+        default: m.ConfigOnboardingTour,
+    })),
+);
 
 /** Marketing / story pages — no chrome; brand lives in the page itself. */
 function isLandingPath(pathname: string) {
@@ -55,6 +61,11 @@ export default function UserLayout({ children }: { children: ReactNode }) {
                 {!showCanvasToolsSidebar && !isLanding ? <AppTopNav /> : null}
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
             </div>
+            {!isLanding ? (
+                <Suspense fallback={null}>
+                    <ConfigOnboardingTour />
+                </Suspense>
+            ) : null}
         </div>
     );
 }

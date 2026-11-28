@@ -25,6 +25,10 @@ import {
     type ModelCapability,
     type ModelChannel,
 } from "@canvas/stores/use-config-store";
+import {
+    clearConfigOnboardingSeen,
+    useConfigOnboardingStore,
+} from "@canvas/stores/use-config-onboarding-store";
 type ModelGroup = {
     capability: ModelCapability;
     modelKey: "imageModel" | "videoModel" | "textModel" | "audioModel";
@@ -52,6 +56,8 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
     const shouldPromptContinue = useConfigStore((state) => state.shouldPromptContinue);
     const setConfigDialogOpen = useConfigStore((state) => state.setConfigDialogOpen);
     const clearPromptContinue = useConfigStore((state) => state.clearPromptContinue);
+    const forceTab = useConfigOnboardingStore((state) => state.forceTab);
+    const forceEditingChannelId = useConfigOnboardingStore((state) => state.forceEditingChannelId);
     const editingChannel =
         draftChannel && draftChannel.id === editingChannelId
             ? draftChannel
@@ -59,6 +65,20 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
     useEffect(() => {
         setActiveTab(initialTab === "webdav" ? "channels" : initialTab);
     }, [initialTab]);
+    useEffect(() => {
+        if (!forceTab) return;
+        setActiveTab(forceTab === "webdav" ? "channels" : forceTab);
+    }, [forceTab]);
+    useEffect(() => {
+        if (forceEditingChannelId === null) {
+            if (!draftChannel) setEditingChannelId("");
+            return;
+        }
+        if (forceEditingChannelId) {
+            setDraftChannel(null);
+            setEditingChannelId(forceEditingChannelId);
+        }
+    }, [forceEditingChannelId, draftChannel]);
 
     const saveConfig = (nextConfig: AiConfig) => {
         (Object.keys(nextConfig) as Array<keyof AiConfig>).forEach((key) => updateConfig(key, nextConfig[key]));
@@ -119,7 +139,17 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
 
     return (
         <>
-            <div className="flex flex-wrap items-center justify-end gap-3 border-b border-stone-200 pb-3 dark:border-stone-800">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 pb-3 dark:border-stone-800">
+                <button
+                    type="button"
+                    className="text-xs text-stone-500 underline-offset-2 transition hover:text-stone-800 hover:underline dark:text-stone-400 dark:hover:text-stone-200"
+                    onClick={() => {
+                        clearConfigOnboardingSeen();
+                        useConfigOnboardingStore.getState().start();
+                    }}
+                >
+                    {t("config.onboarding.replay")}
+                </button>
                 <div className="flex gap-2">
                     <Button icon={<Upload className="size-4" />} onClick={() => configInputRef.current?.click()}>
                         {t("config.import")}
