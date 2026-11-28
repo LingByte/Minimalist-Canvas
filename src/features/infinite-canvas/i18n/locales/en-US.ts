@@ -590,6 +590,11 @@ export default {
         usage: "Usage",
         storage: "Cloud storage",
         config: "Config",
+        groups: {
+            create: "Create",
+            library: "Library & skills",
+            system: "System",
+        },
     },
     integrate: {
         title: "External integrate",
@@ -994,6 +999,9 @@ export default {
         lightTheme: "Switch to light theme",
         darkTheme: "Switch to dark theme",
         moreActions: "More actions",
+        collapseSidebar: "Collapse sidebar",
+        expandSidebar: "Expand sidebar",
+        resizeSidebar: "Drag to resize sidebar",
     },
     home: {
         promptError: "Failed to load prompts",
@@ -1013,9 +1021,14 @@ export default {
         studioTitle: "Nodes that tell a story.",
         studioBody: "Wire prompts, assets, and generations on one infinite canvas—creation stops being a one-shot.",
         footerTag: "A local-first AI creative studio",
+        footerBlurb: "Canvas, image, video, and skills in one desktop app—your channels and data stay on this machine.",
         footerNav: "App navigation",
+        footerColCreate: "Create",
+        footerColLibrary: "Library & skills",
+        footerColSystem: "System",
         footerDocs: "Docs",
-        footerVersion: "Version {{version}}",
+        footerReleases: "GitHub Releases",
+        footerVersion: "{{version}}",
         footerLocal: "Data stays on this device",
     },
     version: {
@@ -1289,7 +1302,7 @@ export default {
                 },
                 settings: {
                     title: "Open Settings",
-                    body: "Use the gear icon in the top-right to open Settings & Preferences, or tap Next and the tour will open it for you.",
+                    body: "Use the gear icon at the bottom of the left sidebar to open Settings & Preferences, or tap Next and the tour will open it for you.",
                 },
                 channels: {
                     title: "Providers: where models connect",

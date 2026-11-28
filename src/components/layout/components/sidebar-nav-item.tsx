@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { motion, useReducedMotion } from 'motion/react'
 import type { LucideIcon } from 'lucide-react'
-import type { MouseEvent } from 'react'
+import type { MouseEvent, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 import {
@@ -31,6 +31,8 @@ import {
   sidebarNavIconChipClassName,
   sidebarNavItemClassName,
   sidebarNavLabelClassName,
+  sidebarNavPillClassName,
+  type SidebarNavOrientation,
 } from '@/components/layout/utils/sidebar-nav-styles'
 import { cn } from '@/lib/utils'
 
@@ -53,6 +55,9 @@ type SidebarNavItemProps = {
   className?: string
   tooltipSide?: 'top' | 'right' | 'bottom' | 'left'
   showLabel?: boolean
+  /** horizontal = icon + text in one row (desktop app sidebar). */
+  orientation?: SidebarNavOrientation
+  showTooltip?: boolean
 }
 
 export function SidebarNavItem({
@@ -65,8 +70,62 @@ export function SidebarNavItem({
   className,
   tooltipSide = 'right',
   showLabel = true,
+  orientation = 'vertical',
+  showTooltip,
 }: SidebarNavItemProps) {
   const shouldReduce = useReducedMotion()
+  const horizontal = orientation === 'horizontal'
+  const tooltipEnabled = showTooltip ?? !horizontal
+
+  const pill = active ? (
+    shouldReduce ? (
+      <span aria-hidden className={sidebarNavPillClassName(orientation)} />
+    ) : (
+      <motion.span
+        layoutId={layoutId}
+        aria-hidden
+        className={sidebarNavPillClassName(orientation)}
+        transition={pillTransition}
+        initial={false}
+      />
+    )
+  ) : null
+
+  const content: ReactNode = (
+    <>
+      {horizontal ? pill : null}
+      <span className={sidebarNavIconChipClassName(active, orientation)}>
+        {!horizontal ? pill : null}
+        <Icon
+          className={cn(
+            'relative z-10 stroke-[2]',
+            horizontal ? 'size-4' : 'size-[1.15rem]',
+          )}
+          aria-hidden
+        />
+      </span>
+      {showLabel ? (
+        <span className={sidebarNavLabelClassName(active, orientation)}>{title}</span>
+      ) : null}
+    </>
+  )
+
+  const linkClassName = cn(sidebarNavItemClassName(active, orientation), className)
+
+  if (!tooltipEnabled) {
+    return (
+      <Link
+        to={href}
+        onClick={onClick}
+        aria-current={active ? 'page' : undefined}
+        aria-label={title}
+        data-active={active ? 'true' : undefined}
+        className={linkClassName}
+      >
+        {content}
+      </Link>
+    )
+  }
 
   return (
     <TooltipProvider delay={280}>
@@ -79,34 +138,11 @@ export function SidebarNavItem({
               aria-current={active ? 'page' : undefined}
               aria-label={title}
               data-active={active ? 'true' : undefined}
-              className={cn(sidebarNavItemClassName(active), className)}
+              className={linkClassName}
             />
           }
         >
-          <span className={sidebarNavIconChipClassName(active)}>
-            {active && !shouldReduce ? (
-              <motion.span
-                layoutId={layoutId}
-                aria-hidden
-                className='pointer-events-none absolute inset-0 z-0 rounded-[0.7rem] bg-stone-900 shadow-sm dark:bg-stone-100'
-                transition={pillTransition}
-                initial={false}
-              />
-            ) : null}
-            {active && shouldReduce ? (
-              <span
-                aria-hidden
-                className='pointer-events-none absolute inset-0 z-0 rounded-[0.7rem] bg-stone-900 dark:bg-stone-100'
-              />
-            ) : null}
-            <Icon
-              className='relative z-10 size-[1.15rem] stroke-[2]'
-              aria-hidden
-            />
-          </span>
-          {showLabel ? (
-            <span className={sidebarNavLabelClassName(active)}>{title}</span>
-          ) : null}
+          {content}
         </TooltipTrigger>
         <TooltipContent side={tooltipSide} sideOffset={10}>
           {title}

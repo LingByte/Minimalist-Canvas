@@ -1,12 +1,22 @@
-import { Menu, Settings2 } from "lucide-react";
+import { Menu, PanelLeftClose, PanelLeftOpen, Settings2 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { startTransition, useCallback, useState, type MouseEvent } from "react";
+import {
+    startTransition,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type MouseEvent as ReactMouseEvent,
+    type PointerEvent as ReactPointerEvent,
+} from "react";
 
 import {
-    navigationTools,
+    groupedNavigationTools,
     navigationToolActive,
     navigationToolHref,
+    navigationTools,
     type NavigationToolSlug,
 } from "@canvas/constant/navigation-tools";
 import { AppConfigModal } from "@canvas/components/layout/app-config-modal";
@@ -25,6 +35,12 @@ import { SmartImage } from "@/components/smart-image";
 import { useCanvasHost } from "@canvas/integration/canvas-host-context";
 import { isObjectStorageConfigured } from "@canvas/lib/object-storage/types";
 import { isTauri } from "@canvas/services/fs-store";
+import {
+    TOOLS_SIDEBAR_COLLAPSED_WIDTH,
+    TOOLS_SIDEBAR_WIDTH_MAX,
+    TOOLS_SIDEBAR_WIDTH_MIN,
+    useToolsSidebarStore,
+} from "@canvas/stores/use-tools-sidebar-store";
 import { DEFAULT_LOGO, DEFAULT_SYSTEM_NAME } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useConfigStore } from "@canvas/stores/use-config-store";
@@ -36,37 +52,43 @@ function activeToolFromPath(pathname: string): NavigationToolSlug | undefined {
     return matched?.slug;
 }
 
-function isModifiedClick(event: MouseEvent) {
+function isModifiedClick(event: ReactMouseEvent) {
     return event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0;
 }
 
-/** Canvas workbench chrome: vertical tool rail. */
+/** Canvas workbench chrome: collapsible / resizable grouped tool rail. */
 export function CanvasToolsSidebar(props: { className?: string }) {
     const { t } = useTranslation();
     const { pathname } = useLocation();
     const navigate = useNavigate();
     const { embedded, homeHref, logo, brandName } = useCanvasHost();
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
+    const [resizing, setResizing] = useState(false);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const objectStorage = useConfigStore((state) => state.objectStorage);
     const theme = useThemeStore((state) => state.theme);
     const setTheme = useThemeStore((state) => state.setTheme);
-    // Storage manager needs cloud storage; hide the rail entry until configured.
-    // Novels require the desktop Tomato sidecar — hide on web preview.
+    const collapsed = useToolsSidebarStore((state) => state.collapsed);
+    const width = useToolsSidebarStore((state) => state.width);
+    const toggleCollapsed = useToolsSidebarStore((state) => state.toggleCollapsed);
+    const setWidth = useToolsSidebarStore((state) => state.setWidth);
+    const dragStartX = useRef(0);
+    const dragStartWidth = useRef(width);
     const storageReady = isObjectStorageConfigured(objectStorage);
     const desktop = isTauri();
-    const visibleTools = navigationTools.filter((tool) => {
-        if (tool.slug === "storage") return storageReady;
-        if (tool.slug === "novels") return desktop;
-        return true;
-    });
+    const sections = useMemo(
+        () => groupedNavigationTools({ storageReady, desktop }),
+        [storageReady, desktop],
+    );
 
     const activeToolSlug = activeToolFromPath(pathname);
-    const brand = brandName || DEFAULT_SYSTEM_NAME;
+    const brand = embedded ? brandName || DEFAULT_SYSTEM_NAME : t("home.productName");
     const logoUrl = logo || DEFAULT_LOGO;
+    const expanded = !collapsed;
+    const railWidth = collapsed ? TOOLS_SIDEBAR_COLLAPSED_WIDTH : width;
 
     const go = useCallback(
-        (href: string, event: MouseEvent) => {
+        (href: string, event: ReactMouseEvent) => {
             if (isModifiedClick(event)) return;
             event.preventDefault();
             startTransition(() => {
@@ -75,6 +97,41 @@ export function CanvasToolsSidebar(props: { className?: string }) {
         },
         [navigate],
     );
+
+    const onResizePointerDown = useCallback(
+        (event: ReactPointerEvent<HTMLDivElement>) => {
+            if (collapsed) return;
+            event.preventDefault();
+            dragStartX.current = event.clientX;
+            dragStartWidth.current = width;
+            setResizing(true);
+            event.currentTarget.setPointerCapture(event.pointerId);
+        },
+        [collapsed, width],
+    );
+
+    useEffect(() => {
+        if (!resizing) return;
+
+        const onMove = (event: PointerEvent) => {
+            const next = dragStartWidth.current + (event.clientX - dragStartX.current);
+            setWidth(Math.min(TOOLS_SIDEBAR_WIDTH_MAX, Math.max(TOOLS_SIDEBAR_WIDTH_MIN, next)));
+        };
+        const onUp = () => setResizing(false);
+
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onUp);
+        window.addEventListener("pointercancel", onUp);
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+        return () => {
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", onUp);
+            window.removeEventListener("pointercancel", onUp);
+            document.body.style.cursor = "";
+            document.body.style.userSelect = "";
+        };
+    }, [resizing, setWidth]);
 
     const logoImage = (
         <SmartImage
@@ -86,12 +143,28 @@ export function CanvasToolsSidebar(props: { className?: string }) {
     );
 
     const homeLink = embedded ? (
-        <a href={homeHref} className="flex items-center justify-center transition-opacity hover:opacity-90" aria-label={brand}>
+        <a
+            href={homeHref}
+            className={cn(
+                "flex min-w-0 items-center transition-opacity hover:opacity-90",
+                expanded ? "gap-2.5" : "justify-center",
+            )}
+            aria-label={brand}
+        >
             {logoImage}
+            {expanded ? <span className="truncate text-[13px] font-semibold tracking-tight">{brand}</span> : null}
         </a>
     ) : (
-        <Link to="/" className="flex items-center justify-center transition-opacity hover:opacity-90" aria-label={brand}>
+        <Link
+            to="/"
+            className={cn(
+                "flex min-w-0 items-center transition-opacity hover:opacity-90",
+                expanded ? "gap-2.5" : "justify-center",
+            )}
+            aria-label={brand}
+        >
             {logoImage}
+            {expanded ? <span className="truncate text-[13px] font-semibold tracking-tight">{brand}</span> : null}
         </Link>
     );
 
@@ -99,31 +172,98 @@ export function CanvasToolsSidebar(props: { className?: string }) {
         <>
             <aside
                 className={cn(
-                    "bg-sidebar text-sidebar-foreground border-sidebar-border hidden h-dvh w-[4.75rem] shrink-0 flex-col items-center border-r md:flex",
+                    "bg-sidebar text-sidebar-foreground border-sidebar-border relative hidden h-dvh shrink-0 flex-col border-r md:flex",
+                    resizing ? "transition-none" : "transition-[width] duration-200 ease-out",
                     props.className,
                 )}
+                style={{ width: railWidth }}
                 aria-label={t("topNav.navigation")}
+                data-collapsed={collapsed ? "true" : undefined}
             >
-                <div className="flex h-14 w-full items-center justify-center px-2">{homeLink}</div>
+                <div
+                    className={cn(
+                        "flex h-14 w-full items-center gap-1",
+                        expanded ? "justify-between px-3" : "flex-col justify-center gap-1 px-1.5 py-2",
+                    )}
+                >
+                    <div className={cn("min-w-0", expanded ? "flex-1" : "flex justify-center")}>{homeLink}</div>
+                    <TooltipProvider delay={280}>
+                        <Tooltip>
+                            <TooltipTrigger
+                                render={
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="text-sidebar-foreground/55 hover:text-sidebar-foreground size-8 shrink-0 rounded-lg border border-transparent hover:border-stone-200/80 hover:bg-stone-100/80 dark:hover:border-stone-700/80 dark:hover:bg-stone-800/70"
+                                        onClick={() => toggleCollapsed()}
+                                        aria-label={collapsed ? t("topNav.expandSidebar") : t("topNav.collapseSidebar")}
+                                        aria-pressed={collapsed}
+                                    />
+                                }
+                            >
+                                {collapsed ? (
+                                    <PanelLeftOpen className="size-4 stroke-[2]" />
+                                ) : (
+                                    <PanelLeftClose className="size-4 stroke-[2]" />
+                                )}
+                            </TooltipTrigger>
+                            <TooltipContent side={expanded ? "bottom" : "right"} sideOffset={8}>
+                                {collapsed ? t("topNav.expandSidebar") : t("topNav.collapseSidebar")}
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                </div>
 
-                <nav className="flex w-full flex-1 flex-col items-center gap-1 overflow-y-auto px-1.5 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    {visibleTools.map((tool) => {
-                        const href = navigationToolHref(tool.slug);
-                        return (
-                            <SidebarNavItem
-                                key={tool.slug}
-                                href={href}
-                                active={tool.slug === activeToolSlug}
-                                title={t(`navigation.${tool.slug}`)}
-                                icon={tool.icon}
-                                layoutId="canvas-tools-sidebar-nav-pill"
-                                onClick={(event) => go(href, event)}
-                            />
-                        );
-                    })}
+                <nav
+                    className={cn(
+                        "flex w-full flex-1 flex-col gap-1 overflow-y-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+                        expanded ? "px-2" : "items-center px-1.5",
+                    )}
+                >
+                    {sections.map((section, sectionIndex) => (
+                        <div
+                            key={section.id}
+                            className={cn(
+                                "flex w-full flex-col gap-px",
+                                expanded ? "" : "items-center",
+                                sectionIndex > 0 && "border-sidebar-border/80 border-t pt-1.5",
+                            )}
+                            aria-label={t(`navigation.groups.${section.id}`)}
+                        >
+                            {expanded ? (
+                                <div className="px-2 pb-0.5 pt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-400/90">
+                                    {t(`navigation.groups.${section.id}`)}
+                                </div>
+                            ) : null}
+                            {section.tools.map((tool) => {
+                                const href = navigationToolHref(tool.slug);
+                                return (
+                                    <SidebarNavItem
+                                        key={tool.slug}
+                                        href={href}
+                                        active={tool.slug === activeToolSlug}
+                                        title={t(`navigation.${tool.slug}`)}
+                                        icon={tool.icon}
+                                        showLabel={expanded}
+                                        orientation={expanded ? "horizontal" : "vertical"}
+                                        showTooltip={!expanded}
+                                        layoutId="canvas-tools-sidebar-nav-pill"
+                                        className={expanded ? undefined : "!py-1"}
+                                        onClick={(event) => go(href, event)}
+                                    />
+                                );
+                            })}
+                        </div>
+                    ))}
                 </nav>
 
-                <div className="border-sidebar-border flex w-full flex-col items-center gap-2 border-t px-1.5 py-3">
+                <div
+                    className={cn(
+                        "border-sidebar-border flex w-full gap-1 border-t py-2.5",
+                        expanded ? "items-center justify-between px-2" : "flex-col items-center px-1.5",
+                    )}
+                >
                     <TooltipProvider delay={280}>
                         <Tooltip>
                             <TooltipTrigger
@@ -133,15 +273,15 @@ export function CanvasToolsSidebar(props: { className?: string }) {
                                         variant="ghost"
                                         size="icon"
                                         data-tour="config-settings-button"
-                                        className="text-sidebar-foreground/55 hover:text-sidebar-foreground size-9 rounded-[0.7rem] border border-transparent hover:border-stone-200/80 hover:bg-stone-100/80 dark:hover:border-stone-700/80 dark:hover:bg-stone-800/70"
+                                        className="text-sidebar-foreground/55 hover:text-sidebar-foreground size-8 rounded-lg border border-transparent hover:border-stone-200/80 hover:bg-stone-100/80 dark:hover:border-stone-700/80 dark:hover:bg-stone-800/70"
                                         onClick={() => openConfigDialog(false)}
                                         aria-label={t("navigation.config")}
                                     />
                                 }
                             >
-                                <Settings2 className="size-[1.15rem] stroke-[2]" />
+                                <Settings2 className="size-4 stroke-[2]" />
                             </TooltipTrigger>
-                            <TooltipContent side="right" sideOffset={10}>
+                            <TooltipContent side={expanded ? "top" : "right"} sideOffset={8}>
                                 {t("navigation.config")}
                             </TooltipContent>
                         </Tooltip>
@@ -149,12 +289,45 @@ export function CanvasToolsSidebar(props: { className?: string }) {
                     <AnimatedThemeToggler
                         theme={theme}
                         onThemeChange={setTheme}
-                        className="text-sidebar-foreground/55 hover:text-sidebar-foreground inline-flex size-9 items-center justify-center rounded-[0.7rem] border border-transparent transition-colors hover:border-stone-200/80 hover:bg-stone-100/80 dark:hover:border-stone-700/80 dark:hover:bg-stone-800/70"
+                        className="text-sidebar-foreground/55 hover:text-sidebar-foreground inline-flex size-8 items-center justify-center rounded-lg border border-transparent transition-colors hover:border-stone-200/80 hover:bg-stone-100/80 dark:hover:border-stone-700/80 dark:hover:bg-stone-800/70"
                         aria-label={t(theme === "dark" ? "topNav.lightTheme" : "topNav.darkTheme")}
                         title={t(theme === "dark" ? "topNav.lightTheme" : "topNav.darkTheme")}
                     />
-                    <VersionReleaseModal className="text-sidebar-foreground/45 hover:text-sidebar-foreground max-w-[4.25rem] truncate px-1 text-center text-[10px] font-medium tracking-tight" />
+                    {expanded ? (
+                        <VersionReleaseModal className="text-sidebar-foreground/45 hover:text-sidebar-foreground min-w-0 flex-1 truncate px-1 text-right text-[11px] font-medium tracking-tight" />
+                    ) : (
+                        <VersionReleaseModal className="text-sidebar-foreground/45 hover:text-sidebar-foreground max-w-full truncate px-0.5 text-center text-[10px] font-medium tracking-tight" />
+                    )}
                 </div>
+
+                {!collapsed ? (
+                    <div
+                        role="separator"
+                        aria-orientation="vertical"
+                        aria-label={t("topNav.resizeSidebar")}
+                        aria-valuemin={TOOLS_SIDEBAR_WIDTH_MIN}
+                        aria-valuemax={TOOLS_SIDEBAR_WIDTH_MAX}
+                        aria-valuenow={width}
+                        tabIndex={0}
+                        onPointerDown={onResizePointerDown}
+                        onDoubleClick={() => setWidth(TOOLS_SIDEBAR_WIDTH_MIN + (TOOLS_SIDEBAR_WIDTH_MAX - TOOLS_SIDEBAR_WIDTH_MIN) / 2)}
+                        onKeyDown={(event) => {
+                            if (event.key === "ArrowLeft") {
+                                event.preventDefault();
+                                setWidth(width - 12);
+                            } else if (event.key === "ArrowRight") {
+                                event.preventDefault();
+                                setWidth(width + 12);
+                            }
+                        }}
+                        className={cn(
+                            "absolute inset-y-0 -right-1 z-20 w-2 cursor-col-resize touch-none",
+                            "after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-transparent after:transition-colors",
+                            "hover:after:bg-emerald-400/70 focus-visible:outline-none focus-visible:after:bg-emerald-400",
+                            resizing && "after:bg-emerald-400",
+                        )}
+                    />
+                ) : null}
             </aside>
 
             <div className="border-border bg-background flex h-12 w-full shrink-0 items-center justify-between gap-2 border-b px-2 md:hidden">

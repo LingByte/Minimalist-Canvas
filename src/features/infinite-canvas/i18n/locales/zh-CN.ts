@@ -592,6 +592,11 @@ export default {
         usage: "用量统计",
         storage: "云端存储",
         config: "配置",
+        groups: {
+            create: "创作",
+            library: "素材与技能",
+            system: "系统",
+        },
     },
     integrate: {
         title: "外部接入",
@@ -996,6 +1001,9 @@ export default {
         lightTheme: "切换到浅色主题",
         darkTheme: "切换到深色主题",
         moreActions: "更多操作",
+        collapseSidebar: "折叠侧栏",
+        expandSidebar: "展开侧栏",
+        resizeSidebar: "拖动调整侧栏宽度",
     },
     home: {
         promptError: "获取提示词失败",
@@ -1015,9 +1023,14 @@ export default {
         studioTitle: "节点连成故事。",
         studioBody: "把提示、素材与生成结果串在同一块无限画布上，创作不再是单次生成。",
         footerTag: "本地优先的 AI 创作工作室",
+        footerBlurb: "画布、生图、视频与技能装在同一桌面端里；渠道与数据都留在你这台机器上。",
         footerNav: "应用导航",
+        footerColCreate: "创作",
+        footerColLibrary: "素材与技能",
+        footerColSystem: "系统",
         footerDocs: "文档",
-        footerVersion: "版本 {{version}}",
+        footerReleases: "GitHub Releases",
+        footerVersion: "{{version}}",
         footerLocal: "数据保存在本机",
     },
     version: {
@@ -1291,7 +1304,7 @@ export default {
                 },
                 settings: {
                     title: "打开配置入口",
-                    body: "点击右上角齿轮图标，打开「配置与用户偏好」。也可以直接点「下一步」由引导帮你打开。",
+                    body: "点击左侧边栏底部的齿轮图标，打开「配置与用户偏好」。也可以直接点「下一步」由引导帮你打开。",
                 },
                 channels: {
                     title: "渠道：接模型的地方",

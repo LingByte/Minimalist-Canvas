@@ -1,33 +1,65 @@
 import { cn } from '@/lib/utils'
 
-/** Vertical icon-rail item: icon chip + caption. */
-export function sidebarNavItemClassName(active: boolean) {
+export type SidebarNavOrientation = 'vertical' | 'horizontal'
+
+/** Nav item shell — vertical icon rail or horizontal icon+label row. */
+export function sidebarNavItemClassName(
+  active: boolean,
+  orientation: SidebarNavOrientation = 'vertical',
+) {
   return cn(
-    'group/nav relative flex w-full flex-col items-center gap-1.5 rounded-2xl px-1 py-2 outline-none',
-    'transition-[color,transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
-    'focus-visible:ring-2 focus-visible:ring-sky-500/40',
-    'active:scale-[0.97]',
+    'group/nav relative flex w-full outline-none',
+    'transition-[color,transform,opacity,background-color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
+    'focus-visible:ring-2 focus-visible:ring-emerald-500/35',
+    'active:scale-[0.98]',
+    orientation === 'horizontal'
+      ? 'flex-row items-center gap-2 rounded-lg px-2 py-1'
+      : 'flex-col items-center gap-1 rounded-xl px-1 py-1.5',
     active
       ? 'text-stone-950 dark:text-stone-50'
-      : 'text-sidebar-foreground/55 hover:text-sidebar-foreground'
+      : 'text-sidebar-foreground/55 hover:text-sidebar-foreground',
   )
 }
 
 /** Soft resting chip around the icon. Active fill comes from the sliding layout pill. */
-export function sidebarNavIconChipClassName(active: boolean) {
+export function sidebarNavIconChipClassName(
+  active: boolean,
+  orientation: SidebarNavOrientation = 'vertical',
+) {
   return cn(
-    'relative z-10 grid size-9 place-items-center rounded-[0.7rem] border',
+    'relative z-10 grid place-items-center border',
     'transition-[background,border-color,color,box-shadow,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
+    orientation === 'horizontal'
+      ? 'size-7 shrink-0 rounded-lg'
+      : 'size-9 rounded-[0.7rem]',
     active
-      ? 'border-transparent bg-transparent text-white shadow-none dark:text-stone-950'
-      : 'border-transparent bg-transparent text-current group-hover/nav:border-stone-200/80 group-hover/nav:bg-stone-100/80 dark:group-hover/nav:border-stone-700/80 dark:group-hover/nav:bg-stone-800/70'
+      ? 'border-transparent bg-transparent text-current'
+      : orientation === 'horizontal'
+        ? 'border-transparent bg-transparent text-current'
+        : 'border-transparent bg-transparent text-current group-hover/nav:border-stone-200/80 group-hover/nav:bg-stone-100/80 dark:group-hover/nav:border-stone-700/80 dark:group-hover/nav:bg-stone-800/70',
   )
 }
 
-export function sidebarNavLabelClassName(active: boolean) {
+export function sidebarNavLabelClassName(
+  active: boolean,
+  orientation: SidebarNavOrientation = 'vertical',
+) {
   return cn(
-    'relative z-10 max-w-full truncate text-center text-[10px] leading-tight tracking-wide',
+    'relative z-10 min-w-0 tracking-wide text-current',
     'transition-[color,font-weight,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
-    active ? 'font-semibold' : 'font-medium'
+    orientation === 'horizontal'
+      ? 'flex-1 truncate text-left text-[12.5px] leading-none'
+      : 'max-w-full truncate text-center text-[10px] leading-tight',
+    active ? 'font-semibold' : 'font-medium',
+  )
+}
+
+/** Soft selected surface — readable in light/dark without forcing white-on-black. */
+export function sidebarNavPillClassName(orientation: SidebarNavOrientation = 'vertical') {
+  return cn(
+    'pointer-events-none absolute z-0 border border-stone-900/10 bg-stone-900/[0.08] shadow-none dark:border-white/10 dark:bg-white/[0.1]',
+    orientation === 'horizontal'
+      ? 'inset-0 rounded-lg'
+      : 'inset-0 rounded-xl',
   )
 }
