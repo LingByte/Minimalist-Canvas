@@ -4,6 +4,7 @@ import { App, Button, Checkbox, Drawer, Empty, Modal, Tag, Typography } from "an
 import { nanoid } from "nanoid";
 import { useTranslation } from "react-i18next";
 import { toIntlLocale } from "@/i18n/languages";
+import { cn } from "@/lib/utils";
 
 import { AssetPickerModal, type InsertAssetPayload } from "@canvas/components/canvas/asset-picker-modal";
 import { CanvasPromptChipInput } from "@canvas/components/canvas/canvas-prompt-chip-input";
@@ -824,7 +825,7 @@ export default function VideoPage() {
     return (
         <div className={workbenchPageClassName()}>
             <CloudUploadProgress variant="page" />
-            <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 lg:grid-cols-[280px_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[300px_minmax(0,1fr)]">
+            <main className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid-cols-[260px_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[280px_minmax(0,1fr)]">
                 <aside className={workbenchAsideClassName()}>
                     <LogPanel logs={logs} selectedLogIds={selectedLogIds} activeLogId={previewLog?.id} onSelectedLogIdsChange={setSelectedLogIds} onCreateSession={createSession} onDeleteSelected={() => setDeleteConfirmOpen(true)}
                         onDeleteLog={(id) => {
@@ -833,7 +834,7 @@ export default function VideoPage() {
                         }} onPreviewLog={previewGenerationLog} />
                 </aside>
 
-                <section className="grid gap-3 lg:min-h-0 lg:overflow-hidden xl:grid-cols-[min(440px,42%)_minmax(0,1fr)]">
+                <section className="grid min-h-0 bg-white/70 dark:bg-[#0f1116] lg:overflow-hidden xl:grid-cols-[minmax(360px,40%)_minmax(0,1fr)]">
                     <div className={workbenchComposerClassName()}>
                         <div className="flex items-start justify-between gap-3">
                             <WorkbenchModeTabs className="min-w-0 flex-1" />
@@ -843,8 +844,10 @@ export default function VideoPage() {
                             </div>
                         </div>
 
-                        <div className="mt-3 min-w-0">
-                            <span className="mb-1.5 block text-xs font-medium text-stone-500">{t("workbench.model")}</span>
+                        <div className="mt-4 min-w-0">
+                            <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.08em] text-stone-400">
+                                {t("workbench.model")}
+                            </span>
                             <ModelPicker
                                 config={effectiveConfig}
                                 value={model}
@@ -856,7 +859,7 @@ export default function VideoPage() {
                             />
                         </div>
 
-                        <div className="mt-4 space-y-4">
+                        <div className="mt-5 space-y-5">
                             <WorkbenchReferenceZone
                                 title={t("videoWorkbench.references")}
                                 countLabel={`${references.length}/${MAX_REFERENCE_IMAGES}`}
@@ -1001,7 +1004,7 @@ export default function VideoPage() {
                                         onChange={setPrompt}
                                         references={mentionReferences}
                                         placeholder={t("videoWorkbench.promptPlaceholder")}
-                                        className="thin-scrollbar min-h-[160px] w-full cursor-text bg-transparent px-3 pt-3 pb-12 text-sm leading-6 outline-none"
+                                        className="thin-scrollbar min-h-[200px] w-full cursor-text bg-transparent px-3.5 pt-3.5 pb-12 text-sm leading-6 outline-none"
                                     />
                                     <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-end gap-2 p-2">
                                         <button
@@ -1044,12 +1047,14 @@ export default function VideoPage() {
                     </div>
 
                     <div className={workbenchResultsClassName()}>
-                        <div className="mb-4 flex items-center justify-between gap-3">
-                            <h2 className="text-lg font-semibold tracking-tight">{t("workbench.results")}</h2>
+                        <div className="mb-5 flex items-center justify-between gap-3">
+                            <h2 className="text-base font-semibold tracking-tight text-stone-800 dark:text-stone-100">
+                                {t("workbench.results")}
+                            </h2>
                             {running ? <Tag className="m-0 px-2 py-1">{t("workbench.waiting", { time: formatDuration(elapsedMs) })}</Tag> : null}
                         </div>
                         {results.length ? (
-                            <div className="grid gap-4">
+                            <div className="grid gap-3">
                                 {results.map((result, index) =>
                                     result.status === "success" && result.video ? (
                                         <ResultVideoCard key={result.id} video={result.video} onDownload={downloadVideo} onSaveAsset={() => saveResultToAssets(result.video!, index)} />
@@ -1061,7 +1066,7 @@ export default function VideoPage() {
                                 )}
                             </div>
                         ) : (
-                            <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-stone-300 text-center dark:border-stone-700 lg:min-h-[560px]">
+                            <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-stone-200/90 bg-stone-50/40 text-center dark:border-stone-800 dark:bg-[#0c0e13]/60 lg:min-h-[560px]">
                                 <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("videoWorkbench.empty")} />
                             </div>
                         )}
@@ -1258,10 +1263,14 @@ function LogPanel({
     return (
         <>
             <div className="mb-3 flex items-center justify-between gap-3">
-                <h2 className="text-base font-semibold">{t("workbench.logs")}</h2>
-                <Tag className="m-0">{logs.length}</Tag>
+                <h2 className="text-sm font-semibold tracking-tight text-stone-800 dark:text-stone-100">
+                    {t("workbench.logs")}
+                </h2>
+                <span className="rounded-full bg-stone-200/80 px-2 py-0.5 text-[11px] font-medium tabular-nums text-stone-500 dark:bg-stone-800 dark:text-stone-400">
+                    {logs.length}
+                </span>
             </div>
-            <div className="mb-4 flex flex-wrap gap-2">
+            <div className="mb-3 flex flex-wrap gap-1.5">
                 <Button size="small" icon={<Plus className="size-3.5" />} onClick={onCreateSession}>
                     {t("workbench.new")}
                 </Button>
@@ -1272,7 +1281,7 @@ function LogPanel({
                     {t("common.delete")}
                 </Button>
             </div>
-            <div className="min-w-0 space-y-2 overflow-x-hidden">
+            <div className="min-w-0 space-y-1.5 overflow-x-hidden">
                 {logs.map((log) => (
                     <LogCard
                         key={log.id}
@@ -1284,7 +1293,11 @@ function LogPanel({
                         onDelete={onDeleteLog ? () => onDeleteLog(log.id) : undefined}
                     />
                 ))}
-                {!logs.length ? <div className="flex min-h-48 items-center justify-center rounded-lg border border-dashed border-stone-300 text-center text-sm text-stone-500 dark:border-stone-700">{t("workbench.noLogs")}</div> : null}
+                {!logs.length ? (
+                    <div className="flex min-h-48 items-center justify-center rounded-xl border border-dashed border-stone-300/80 text-center text-sm text-stone-500 dark:border-stone-700/80">
+                        {t("workbench.noLogs")}
+                    </div>
+                ) : null}
             </div>
         </>
     );
@@ -1309,11 +1322,16 @@ function LogCard({
     const failed = log.status === "failed";
     const pending = log.status === "pending";
     const statusLabel = pending ? t("workbench.generating") : failed ? t("workbench.failed") : t("workbench.success");
-    const statusColor = pending ? "processing" : failed ? "red" : "blue";
+    const statusColor = pending ? "processing" : failed ? "red" : "green";
 
     return (
         <div
-            className={`flex w-full min-w-0 max-w-full items-start gap-2 overflow-hidden rounded-lg border p-2 transition ${active ? "border-stone-900 bg-blue-50 dark:border-stone-100 dark:bg-blue-950/20" : "border-stone-200 bg-background hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-900"}`}
+            className={cn(
+                "flex w-full min-w-0 max-w-full items-start gap-2 overflow-hidden rounded-xl border p-2 transition",
+                active
+                    ? "border-emerald-400/50 bg-emerald-400/10 dark:border-emerald-400/40 dark:bg-emerald-400/10"
+                    : "border-transparent bg-white/70 hover:bg-white dark:bg-white/[0.03] dark:hover:bg-white/[0.06]",
+            )}
         >
             <Checkbox className="mt-0.5 shrink-0" checked={selected} onClick={(event) => event.stopPropagation()} onChange={(event) => onSelectedChange(event.target.checked)} />
             <button type="button" className="min-w-0 flex-1 overflow-hidden text-left" onClick={onClick}>

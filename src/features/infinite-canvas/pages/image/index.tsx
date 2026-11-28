@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { App, Button, Checkbox, Drawer, Empty, Input, Modal, Tag, Tooltip, Typography } from "antd";
 import { useTranslation } from "react-i18next";
 import { toIntlLocale } from "@/i18n/languages";
+import { cn } from "@/lib/utils";
 
 import { CanvasPromptChipInput } from "@canvas/components/canvas/canvas-prompt-chip-input";
 import { ImageSettingsPanel, imageQualityLabel, imageSizeLabel } from "@canvas/components/image-settings-panel";
@@ -752,7 +753,7 @@ export default function ImagePage() {
     return (
         <div className={workbenchPageClassName()}>
             <CloudUploadProgress variant="page" />
-            <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 lg:grid-cols-[280px_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[300px_minmax(0,1fr)]">
+            <main className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid-cols-[260px_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[280px_minmax(0,1fr)]">
                 <aside className={workbenchAsideClassName()}>
                     <LogPanel
                         logs={logs}
@@ -769,7 +770,7 @@ export default function ImagePage() {
                     />
                 </aside>
 
-                <section className="grid gap-3 lg:min-h-0 lg:overflow-hidden xl:grid-cols-[min(440px,42%)_minmax(0,1fr)]">
+                <section className="grid min-h-0 bg-white/70 dark:bg-[#0f1116] lg:overflow-hidden xl:grid-cols-[minmax(360px,40%)_minmax(0,1fr)]">
                     <div className={workbenchComposerClassName()}>
                         <div className="flex items-start justify-between gap-3">
                             <WorkbenchModeTabs className="min-w-0 flex-1" />
@@ -779,8 +780,10 @@ export default function ImagePage() {
                             </div>
                         </div>
 
-                        <div className="mt-3 min-w-0">
-                            <span className="mb-1.5 block text-xs font-medium text-stone-500">{t("workbench.model")}</span>
+                        <div className="mt-4 min-w-0">
+                            <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.08em] text-stone-400">
+                                {t("workbench.model")}
+                            </span>
                             <ModelPicker
                                 config={effectiveConfig}
                                 value={model}
@@ -792,7 +795,7 @@ export default function ImagePage() {
                             />
                         </div>
 
-                        <div className="mt-4 space-y-4">
+                        <div className="mt-5 space-y-5">
                             <WorkbenchReferenceZone
                                 title={t("imageWorkbench.references")}
                                 countLabel={`${references.length}/10`}
@@ -874,7 +877,7 @@ export default function ImagePage() {
                                         onChange={setPrompt}
                                         references={mentionReferences}
                                         placeholder={t("imageWorkbench.promptPlaceholder")}
-                                        className="thin-scrollbar min-h-[160px] w-full cursor-text bg-transparent px-3 pt-3 pb-12 text-sm leading-6 outline-none"
+                                        className="thin-scrollbar min-h-[200px] w-full cursor-text bg-transparent px-3.5 pt-3.5 pb-12 text-sm leading-6 outline-none"
                                     />
                                     <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 p-2">
                                         <Tooltip title={prompt.trim() ? t("canvas.promptPanel.optimizePrompt") : t("canvas.promptPanel.optimizeNeedsPrompt")}>
@@ -921,14 +924,14 @@ export default function ImagePage() {
                     </div>
 
                     <div className={workbenchResultsClassName()}>
-                        <div className="mb-4 flex items-center justify-between gap-3">
-                            <div>
-                                <h2 className="text-lg font-semibold tracking-tight">{t("workbench.results")}</h2>
-                            </div>
+                        <div className="mb-5 flex items-center justify-between gap-3">
+                            <h2 className="text-base font-semibold tracking-tight text-stone-800 dark:text-stone-100">
+                                {t("workbench.results")}
+                            </h2>
                             {running ? <Tag className="m-0 px-2 py-1">{t("workbench.waiting", { time: formatDuration(elapsedMs) })}</Tag> : null}
                         </div>
                         {results.length ? (
-                            <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
+                            <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
                                 {results.map((result, index) =>
                                     result.status === "success" && result.image ? (
                                         <ResultImageCard key={result.id} image={result.image} index={index} onEdit={addResultToReferences} onDownload={downloadImage} onSaveAsset={saveResultToAssets} />
@@ -940,7 +943,7 @@ export default function ImagePage() {
                                 )}
                             </div>
                         ) : (
-                            <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-stone-300 text-center dark:border-stone-700 lg:min-h-[560px]">
+                            <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-stone-200/90 bg-stone-50/40 text-center dark:border-stone-800 dark:bg-[#0c0e13]/60 lg:min-h-[560px]">
                                 <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("imageWorkbench.empty")} />
                             </div>
                         )}
@@ -1195,12 +1198,14 @@ function LogPanel({
     return (
         <>
             <div className="mb-3 flex items-center justify-between gap-3">
-                <div>
-                    <h2 className="text-base font-semibold">{t("workbench.logs")}</h2>
-                </div>
-                <Tag className="m-0">{logs.length}</Tag>
+                <h2 className="text-sm font-semibold tracking-tight text-stone-800 dark:text-stone-100">
+                    {t("workbench.logs")}
+                </h2>
+                <span className="rounded-full bg-stone-200/80 px-2 py-0.5 text-[11px] font-medium tabular-nums text-stone-500 dark:bg-stone-800 dark:text-stone-400">
+                    {logs.length}
+                </span>
             </div>
-            <div className="mb-4 flex flex-wrap gap-2">
+            <div className="mb-3 flex flex-wrap gap-1.5">
                 <Button size="small" icon={<Plus className="size-3.5" />} onClick={onCreateSession}>
                     {t("workbench.new")}
                 </Button>
@@ -1211,7 +1216,7 @@ function LogPanel({
                     {t("common.delete")}
                 </Button>
             </div>
-            <div className="min-w-0 space-y-2 overflow-x-hidden">
+            <div className="min-w-0 space-y-1.5 overflow-x-hidden">
                 {logs.map((log) => (
                     <LogCard
                         key={log.id}
@@ -1223,7 +1228,11 @@ function LogPanel({
                         onDelete={() => onDeleteLog(log.id)}
                     />
                 ))}
-                {!logs.length ? <div className="flex min-h-48 items-center justify-center rounded-lg border border-dashed border-stone-300 text-center text-sm text-stone-500 dark:border-stone-700">{t("workbench.noLogs")}</div> : null}
+                {!logs.length ? (
+                    <div className="flex min-h-48 items-center justify-center rounded-xl border border-dashed border-stone-300/80 text-center text-sm text-stone-500 dark:border-stone-700/80">
+                        {t("workbench.noLogs")}
+                    </div>
+                ) : null}
             </div>
         </>
     );
@@ -1249,7 +1258,7 @@ function LogCard({
     const failed = log.status === "failed" || ((log.failCount ?? 0) > 0 && (log.successCount ?? log.imageCount ?? 0) === 0);
     const pending = log.status === "pending";
     const statusLabel = pending ? t("workbench.generating") : failed ? t("workbench.failed") : t("workbench.success");
-    const statusColor = pending ? "processing" : failed ? "red" : "blue";
+    const statusColor = pending ? "processing" : failed ? "red" : "green";
 
     useEffect(() => {
         let activeResolve = true;
@@ -1268,45 +1277,51 @@ function LogCard({
 
     return (
         <div
-            className={`flex w-full min-w-0 max-w-full items-stretch gap-2 overflow-hidden rounded-lg border p-2 transition ${active ? "border-stone-900 bg-blue-50 dark:border-stone-100 dark:bg-blue-950/20" : "border-stone-200 bg-background hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-900"}`}
+            className={cn(
+                "flex w-full min-w-0 max-w-full items-stretch gap-2 overflow-hidden rounded-xl border p-2 transition",
+                active
+                    ? "border-emerald-400/50 bg-emerald-400/10 dark:border-emerald-400/40 dark:bg-emerald-400/10"
+                    : "border-transparent bg-white/70 hover:bg-white dark:bg-white/[0.03] dark:hover:bg-white/[0.06]",
+            )}
         >
             <Checkbox className="mt-0.5 shrink-0" checked={selected} onClick={(event) => event.stopPropagation()} onChange={(event) => onSelectedChange(event.target.checked)} />
-            <button type="button" className="flex min-w-0 flex-1 items-stretch gap-3 overflow-hidden text-left" onClick={onClick}>
+            <button type="button" className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden text-left" onClick={onClick}>
                 <div className="min-w-0 flex-1 overflow-hidden">
-                    <div className="flex min-w-0 items-start gap-2">
-                        <div className="min-w-0 flex-1 truncate text-sm font-semibold leading-5">{log.title}</div>
-                        <Tag className="m-0 h-6 shrink-0 rounded-md px-1.5 text-xs leading-6" color={statusColor}>
+                    <div className="flex min-w-0 items-center gap-1.5">
+                        <div className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-5" title={log.title}>
+                            {log.title}
+                        </div>
+                        <Tag className="m-0 h-5 shrink-0 rounded px-1.5 text-[11px] leading-5" color={statusColor}>
                             {statusLabel}
                         </Tag>
                     </div>
                     {failed && log.error ? (
-                        <div className="mt-1.5 line-clamp-2 text-[11px] leading-4 text-red-500 dark:text-red-400" title={log.error}>
+                        <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-red-500 dark:text-red-400" title={log.error}>
                             {log.error}
                         </div>
                     ) : null}
-                    <div className="mt-2 flex min-w-0 flex-wrap gap-1">
-                        {!failed ? <Tag className="m-0 h-6 rounded-md px-1.5 text-xs leading-6">{t("workbench.itemCount", { count: log.imageCount || log.successCount || 0 })}</Tag> : null}
-                        <Tag className="m-0 h-6 rounded-md px-1.5 text-xs leading-6" color="green">
+                    <div className="mt-1.5 flex min-w-0 flex-wrap gap-1">
+                        {!failed ? <Tag className="m-0 h-5 rounded px-1.5 text-[11px] leading-5">{t("workbench.itemCount", { count: log.imageCount || log.successCount || 0 })}</Tag> : null}
+                        <Tag className="m-0 h-5 rounded px-1.5 text-[11px] leading-5" color="green">
                             {formatDuration(log.durationMs)}
                         </Tag>
-                        <Tag className="m-0 h-6 max-w-full truncate rounded-md px-1.5 text-xs leading-6">{log.time}</Tag>
+                        <Tag className="m-0 h-5 max-w-full truncate rounded px-1.5 text-[11px] leading-5" title={log.time}>
+                            {log.time}
+                        </Tag>
                     </div>
                 </div>
                 {thumbnails.length ? (
-                    <div className="ml-auto flex shrink-0 items-center gap-1 self-center">
-                        {thumbnails.slice(0, 2).map((image, index) => (
-                            <SmartImage
-                                key={`${log.id}-${index}`}
-                                src={image}
-                                alt=""
-                                className="h-16 w-20 shrink-0 rounded-md object-cover ring-1 ring-black/5 dark:ring-white/10"
-                                fallbackIconClassName="size-4"
-                            />
-                        ))}
-                        {thumbnails.length > 2 ? (
-                            <div className="flex h-16 w-10 shrink-0 items-center justify-center rounded-md bg-stone-100 text-xs font-medium text-stone-500 dark:bg-stone-800 dark:text-stone-300">
-                                +{thumbnails.length - 2}
-                            </div>
+                    <div className="relative ml-auto shrink-0 self-center">
+                        <SmartImage
+                            src={thumbnails[0]}
+                            alt=""
+                            className="h-10 w-12 rounded-md object-cover ring-1 ring-black/5 dark:ring-white/10"
+                            fallbackIconClassName="size-3.5"
+                        />
+                        {thumbnails.length > 1 ? (
+                            <span className="absolute -bottom-1 -right-1 rounded bg-stone-900/85 px-1 text-[10px] font-medium leading-4 text-white">
+                                +{thumbnails.length - 1}
+                            </span>
                         ) : null}
                     </div>
                 ) : null}

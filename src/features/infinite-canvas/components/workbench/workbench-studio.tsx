@@ -72,10 +72,10 @@ export function WorkbenchReferenceZone(props: {
             </div>
             <div
                 className={cn(
-                    "hover-scrollbar hover-scrollbar-hint relative flex min-h-[8.5rem] w-full min-w-0 max-w-full gap-2.5 overflow-x-auto overflow-y-hidden rounded-2xl border border-dashed p-3.5 pb-4 overscroll-x-contain transition-colors",
+                    "hover-scrollbar hover-scrollbar-hint relative flex min-h-[7.5rem] w-full min-w-0 max-w-full gap-2.5 overflow-x-auto overflow-y-hidden rounded-2xl border border-dashed p-3 pb-3.5 overscroll-x-contain transition-colors",
                     props.dragActive
                         ? "border-emerald-400 bg-emerald-400/10 dark:border-emerald-400/70"
-                        : "border-stone-300/90 bg-stone-50/50 dark:border-stone-700 dark:bg-stone-950/40"
+                        : "border-stone-300/70 bg-white/50 dark:border-stone-700/80 dark:bg-[#0e1016]/80"
                 )}
                 onDragEnter={props.onDragEnter}
                 onDragOver={props.onDragOver}
@@ -104,7 +104,7 @@ export function WorkbenchAddTile(props: {
             type="button"
             onClick={props.onClick}
             className={cn(
-                "grid size-[5.5rem] shrink-0 place-items-center rounded-2xl border border-dashed border-stone-300/90 bg-stone-100/80 text-stone-400 transition hover:border-emerald-400 hover:bg-emerald-400/10 hover:text-emerald-600 dark:border-stone-700 dark:bg-stone-900/80 dark:hover:border-emerald-400/60 dark:hover:text-emerald-300",
+                "grid size-[5.5rem] shrink-0 place-items-center rounded-2xl border border-dashed border-stone-300/70 bg-white/60 text-stone-400 transition hover:border-emerald-400 hover:bg-emerald-400/10 hover:text-emerald-600 dark:border-stone-700/80 dark:bg-[#0e1016]/80 dark:hover:border-emerald-400/60 dark:hover:text-emerald-300",
                 props.className
             )}
             aria-label={props.label}
@@ -253,7 +253,7 @@ export function WorkbenchBottomBar(props: {
     return (
         <div
             className={cn(
-                "sticky bottom-0 z-10 -mx-4 mt-auto flex flex-col gap-1.5 border-t border-stone-200/70 bg-card/95 px-4 py-3 backdrop-blur-md dark:border-stone-800/80",
+                "sticky bottom-0 z-10 -mx-4 mt-auto flex flex-col gap-1.5 border-t border-stone-200/60 bg-stone-50/90 px-4 py-3 backdrop-blur-md dark:border-stone-800/70 dark:bg-[#0b0c0f]/92",
                 props.className
             )}
         >
@@ -263,7 +263,7 @@ export function WorkbenchBottomBar(props: {
                     type="button"
                     onClick={toggle}
                     aria-expanded={props.settings ? open : undefined}
-                    className="inline-flex min-w-0 max-w-[58%] items-center gap-2 rounded-full border border-stone-200/90 bg-stone-50 px-3.5 py-2.5 text-left text-xs font-medium text-stone-700 transition hover:border-emerald-400/40 hover:bg-emerald-400/5 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-200"
+                    className="inline-flex min-w-0 max-w-[58%] items-center gap-2 rounded-full border border-stone-200/80 bg-white px-3.5 py-2.5 text-left text-xs font-medium text-stone-700 transition hover:border-emerald-400/40 hover:bg-emerald-400/5 dark:border-stone-700 dark:bg-[#161821] dark:text-stone-200"
                 >
                     <span className="min-w-0 flex-1 truncate">{props.summary}</span>
                     <ChevronDown className={cn("size-3.5 shrink-0 opacity-50 transition-transform", open && props.settings && "rotate-180")} />
@@ -274,7 +274,7 @@ export function WorkbenchBottomBar(props: {
                     loading={props.generating}
                     disabled={props.disabled}
                     onClick={props.onGenerate}
-                    className="!ml-auto !h-11 !min-w-[8.5rem] !max-w-[14rem] !rounded-xl !border-0 !bg-[#00b0f0] !px-4 !font-semibold !text-white !shadow-none hover:!bg-[#33c3f5]"
+                    className="!ml-auto !h-11 !min-w-[8.5rem] !max-w-[14rem] !rounded-xl !border-0 !bg-emerald-500 !px-4 !font-semibold !text-white !shadow-none hover:!bg-emerald-400 dark:!bg-emerald-500 dark:hover:!bg-emerald-400"
                     icon={<Sparkles className="size-4" />}
                 >
                     <span className="inline-flex max-w-full flex-col items-start gap-0 leading-tight">
@@ -294,21 +294,21 @@ export function WorkbenchBottomBar(props: {
 }
 
 export function workbenchPageClassName() {
-    return "flex h-full flex-col overflow-hidden bg-stone-100 text-stone-900 dark:bg-[#0c0d10] dark:text-stone-100";
+    return "flex h-full flex-col overflow-hidden bg-stone-50 text-stone-900 dark:bg-[#0b0c0f] dark:text-stone-100";
 }
 
 export function workbenchComposerClassName() {
-    return "thin-scrollbar relative flex flex-col rounded-2xl border border-stone-200/80 bg-card p-4 shadow-sm dark:border-stone-800 dark:bg-[#14151a] lg:min-h-0 lg:overflow-y-auto";
+    return "thin-scrollbar relative flex flex-col bg-transparent p-4 lg:min-h-0 lg:overflow-y-auto lg:border-r lg:border-stone-200/70 lg:pr-5 dark:lg:border-stone-800/80";
 }
 
 export function workbenchResultsClassName() {
-    return "thin-scrollbar rounded-2xl border border-stone-200/80 bg-card p-4 shadow-sm dark:border-stone-800 dark:bg-[#14151a] lg:min-h-0 lg:overflow-y-auto lg:p-5";
+    return "thin-scrollbar bg-transparent p-4 lg:min-h-0 lg:overflow-y-auto lg:p-5";
 }
 
 export function workbenchPromptShellClassName() {
-    return "relative rounded-2xl border border-stone-200/90 bg-stone-50/60 focus-within:border-emerald-400/40 dark:border-stone-800 dark:bg-stone-950/60 dark:focus-within:border-emerald-400/30";
+    return "relative rounded-2xl border border-stone-200/80 bg-white/80 focus-within:border-emerald-400/45 dark:border-stone-800 dark:bg-[#12141a] dark:focus-within:border-emerald-400/35";
 }
 
 export function workbenchAsideClassName() {
-    return "thin-scrollbar hidden min-h-0 overflow-x-hidden overflow-y-auto rounded-2xl border border-stone-200/80 bg-card p-4 shadow-sm dark:border-stone-800 dark:bg-[#14151a] lg:block";
+    return "thin-scrollbar hidden min-h-0 overflow-x-hidden overflow-y-auto border-r border-stone-200/70 bg-stone-100/70 p-4 dark:border-stone-800/80 dark:bg-[#101218] lg:block";
 }
