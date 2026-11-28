@@ -11,8 +11,6 @@ export type ConfigOnboardingStepId =
     | "baseUrl"
     | "apiKey"
     | "preferences"
-    | "retention"
-    | "generationLogs"
     | "done";
 
 export const CONFIG_ONBOARDING_STEPS: ConfigOnboardingStepId[] = [
@@ -22,8 +20,6 @@ export const CONFIG_ONBOARDING_STEPS: ConfigOnboardingStepId[] = [
     "baseUrl",
     "apiKey",
     "preferences",
-    "retention",
-    "generationLogs",
     "done",
 ];
 

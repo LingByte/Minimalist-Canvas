@@ -39,7 +39,14 @@ const STEP_TARGET: Partial<Record<ConfigOnboardingStepId, readonly string[]>> = 
     baseUrl: ['[data-tour="config-channel-base-url"]'],
     apiKey: ['[data-tour="config-channel-api-key"]'],
     preferences: ['[data-tour="config-preferences-panel"]', '[data-tour="config-tab-preferences"]'],
-    generationLogs: ['[data-tour="canvas-logs-guide"]'],
+};
+
+/** Modal / drawer form rows: keep the tip under the field, not off to the side. */
+const STEP_CARD_BIAS: Partial<Record<ConfigOnboardingStepId, "below">> = {
+    channels: "below",
+    baseUrl: "below",
+    apiKey: "below",
+    preferences: "below",
 };
 
 const CARD_WIDTH = 340;
@@ -76,7 +83,13 @@ function readTargetRect(selectors: readonly string[] | undefined): SpotlightRect
     return null;
 }
 
-function placeCard(rect: SpotlightRect | null, cardHeight: number, vw: number, vh: number): CardPlacement {
+function placeCard(
+    rect: SpotlightRect | null,
+    cardHeight: number,
+    vw: number,
+    vh: number,
+    bias?: "below",
+): CardPlacement {
     const width = Math.min(CARD_WIDTH, vw - 24);
     if (!rect) {
         return {
@@ -93,21 +106,34 @@ function placeCard(rect: SpotlightRect | null, cardHeight: number, vw: number, v
     const spaceLeft = rect.left - 12;
     const need = cardHeight + CARD_GAP;
     const wideTarget = rect.width >= 220;
+    const preferBelow = bias === "below" || wideTarget;
 
-    // Wide rows (channel cards, panels): prefer right side, then below — avoid floating far above.
-    if (wideTarget && spaceRight >= width + CARD_GAP) {
-        const top = Math.min(Math.max(12, rect.top), vh - cardHeight - 12);
-        return { top, left: rect.left + rect.width + CARD_GAP, width, arrow: "left" };
+    const alignLeft = () => Math.min(Math.max(12, rect.left), vw - width - 12);
+    const alignCenter = () => Math.min(Math.max(12, rect.left + rect.width / 2 - width / 2), vw - width - 12);
+
+    // Wide modal rows / explicit bias: stay under (or above) the target — never the dimmed side gutter.
+    if (preferBelow) {
+        if (spaceBelow >= need || spaceBelow >= spaceAbove) {
+            return {
+                top: Math.max(12, Math.min(rect.top + rect.height + CARD_GAP, vh - cardHeight - 12)),
+                left: wideTarget ? alignLeft() : alignCenter(),
+                width,
+                arrow: "top",
+            };
+        }
+        return {
+            top: Math.max(12, rect.top - CARD_GAP - cardHeight),
+            left: wideTarget ? alignLeft() : alignCenter(),
+            width,
+            arrow: "bottom",
+        };
     }
+
     if (spaceBelow >= need) {
-        const left = wideTarget
-            ? Math.min(Math.max(12, rect.left), vw - width - 12)
-            : Math.min(Math.max(12, rect.left + rect.width / 2 - width / 2), vw - width - 12);
-        return { top: rect.top + rect.height + CARD_GAP, left, width, arrow: "top" };
+        return { top: rect.top + rect.height + CARD_GAP, left: alignCenter(), width, arrow: "top" };
     }
-    if (!wideTarget && spaceAbove >= need && spaceAbove >= spaceBelow) {
-        const left = Math.min(Math.max(12, rect.left + rect.width / 2 - width / 2), vw - width - 12);
-        return { top: rect.top - CARD_GAP - cardHeight, left, width, arrow: "bottom" };
+    if (spaceAbove >= need && spaceAbove >= spaceBelow) {
+        return { top: rect.top - CARD_GAP - cardHeight, left: alignCenter(), width, arrow: "bottom" };
     }
     if (spaceRight >= width + CARD_GAP) {
         const top = Math.min(Math.max(12, rect.top + rect.height / 2 - cardHeight / 2), vh - cardHeight - 12);
@@ -117,14 +143,10 @@ function placeCard(rect: SpotlightRect | null, cardHeight: number, vw: number, v
         const top = Math.min(Math.max(12, rect.top + rect.height / 2 - cardHeight / 2), vh - cardHeight - 12);
         return { top, left: rect.left - CARD_GAP - width, width, arrow: "right" };
     }
-    if (spaceAbove >= need) {
-        const left = Math.min(Math.max(12, rect.left), vw - width - 12);
-        return { top: rect.top - CARD_GAP - cardHeight, left, width, arrow: "bottom" };
-    }
 
     return {
         top: Math.max(12, Math.min(rect.top + rect.height + CARD_GAP, vh - cardHeight - 12)),
-        left: Math.min(Math.max(12, rect.left), vw - width - 12),
+        left: alignLeft(),
         width,
         arrow: spaceBelow > 24 ? "top" : null,
     };
@@ -180,7 +202,7 @@ export function ConfigOnboardingTour() {
     useEffect(() => {
         if (!active) return;
 
-        if (stepId === "welcome" || stepId === "settings" || stepId === "retention" || stepId === "generationLogs") {
+        if (stepId === "welcome" || stepId === "settings") {
             setForceTab(null);
             setForceEditingChannelId(null);
             setConfigDialogOpen(false);
@@ -258,10 +280,10 @@ export function ConfigOnboardingTour() {
         setReady(false);
         const delay =
             stepId === "baseUrl" || stepId === "apiKey"
-                ? 360
+                ? 420
                 : stepId === "channels" || stepId === "preferences"
-                  ? 260
-                  : stepId === "settings" || stepId === "generationLogs"
+                  ? 280
+                  : stepId === "settings"
                     ? 40
                     : 80;
         const startTimer = window.setTimeout(measure, delay);
@@ -301,8 +323,8 @@ export function ConfigOnboardingTour() {
     const placement = useMemo(() => {
         const vw = typeof window === "undefined" ? 1200 : window.innerWidth;
         const vh = typeof window === "undefined" ? 800 : window.innerHeight;
-        return placeCard(rect, cardHeight, vw, vh);
-    }, [rect, cardHeight]);
+        return placeCard(rect, cardHeight, vw, vh, STEP_CARD_BIAS[stepId]);
+    }, [rect, cardHeight, stepId]);
 
     const finish = () => {
         setConfigDialogOpen(false);

@@ -1407,14 +1407,6 @@ export default {
                     title: "Preferences: defaults & generation",
                     body: "Pick default image / video / text / audio models, canvas image count, system prompt, and more. Individual nodes can still override these.",
                 },
-                retention: {
-                    title: "2-day media retention",
-                    body: "Canvas media images on our cloud storage are kept for 2 days only. If you need them longer, download a local backup. You’ll also see this tip at the bottom of the left sidebar.",
-                },
-                generationLogs: {
-                    title: "Local Generation History",
-                    body: "The Generation History tab in the left sidebar stores image and video results on this device from the canvas and workbenches. Pending or newly finished jobs also show a badge on the tab.",
-                },
                 done: {
                     title: "You’re ready",
                     body: "With providers and preferences set, return to the canvas and add nodes to generate. Replay this guide anytime from the Settings dialog.",
