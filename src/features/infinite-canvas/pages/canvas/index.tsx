@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { App, Button, Input, Modal } from "antd";
 import { AudioLines, FileUp, Image as ImageIcon, Layers3, Plus, Video } from "lucide-react";
@@ -14,8 +14,20 @@ import type { CanvasExportFile } from "@canvas/types/canvas-export";
 import { useCanvasStore } from "@canvas/stores/canvas/use-canvas-store";
 import { useCanvasUiStore } from "@canvas/stores/canvas/use-canvas-ui-store";
 import { exportCanvasProjects } from "@canvas/lib/canvas/canvas-export";
+import { cn } from "@canvas/lib/utils";
 
 import "./canvas-home.css";
+
+function isFileDrag(event: DragEvent) {
+    return Array.from(event.dataTransfer?.types || []).includes("Files");
+}
+
+function zipFilesFromList(list: FileList | File[] | null | undefined) {
+    return Array.from(list || []).filter((file) => {
+        const name = file.name.toLowerCase();
+        return name.endsWith(".zip") || file.type === "application/zip" || file.type === "application/x-zip-compressed";
+    });
+}
 
 export default function CanvasPage() {
     const { message } = App.useApp();
@@ -24,6 +36,8 @@ export default function CanvasPage() {
     const [searchParams] = useSearchParams();
     const inputRef = useRef<HTMLInputElement>(null);
     const autoOpenRef = useRef(false);
+    const dragDepthRef = useRef(0);
+    const importingRef = useRef(false);
     const hydrated = useCanvasStore((state) => state.hydrated);
     const cloudSynced = useCanvasStore((state) => state.cloudSynced);
     const projectsReady = hydrated && cloudSynced;
@@ -35,6 +49,7 @@ export default function CanvasPage() {
     const [createOpen, setCreateOpen] = useState(false);
     const [createTitle, setCreateTitle] = useState("");
     const [creating, setCreating] = useState(false);
+    const [dropActive, setDropActive] = useState(false);
 
     const mode = searchParams.get("mode");
     const agentMode = mode === "new" || mode === "recent" || mode === "choose";
@@ -74,30 +89,81 @@ export default function CanvasPage() {
         { id: "audio", label: t("canvas.homeCapabilities.audio"), icon: AudioLines, action: () => openCreateDialog() },
     ] as const;
 
-    const importCanvas = async (file?: File) => {
-        if (!file) return;
-        try {
-            const zip = await readZip(file);
-            const projectFile = zip.get("projects.json");
-            if (!projectFile) throw new Error("missing projects.json");
-            const data = JSON.parse(await projectFile.text()) as CanvasExportFile;
-            await Promise.all(
-                data.projects.flatMap((project) =>
-                    project.files.map(async (item) => {
-                        const blob = zip.get(item.path);
-                        if (!blob) return;
-                        const typedBlob = blob.type ? blob : blob.slice(0, blob.size, item.mimeType);
-                        await (item.storageKey.startsWith("image:") ? setImageBlob(item.storageKey, typedBlob) : setMediaBlob(item.storageKey, typedBlob));
-                    }),
-                ),
-            );
-            data.projects.forEach((item) => importProject(item.project));
-            message.success(t("canvas.imported", { count: data.projects.length }));
-        } catch {
+    const importCanvasFiles = useCallback(
+        async (files: File[]) => {
+            const zips = zipFilesFromList(files);
+            if (!zips.length || importingRef.current) return;
+            importingRef.current = true;
+            let importedCount = 0;
+            let failed = 0;
+            try {
+                for (const file of zips) {
+                    try {
+                        const zip = await readZip(file);
+                        const projectFile = zip.get("projects.json");
+                        if (!projectFile) throw new Error("missing projects.json");
+                        const data = JSON.parse(await projectFile.text()) as CanvasExportFile;
+                        await Promise.all(
+                            data.projects.flatMap((project) =>
+                                project.files.map(async (item) => {
+                                    const blob = zip.get(item.path);
+                                    if (!blob) return;
+                                    const typedBlob = blob.type ? blob : blob.slice(0, blob.size, item.mimeType);
+                                    await (item.storageKey.startsWith("image:") ? setImageBlob(item.storageKey, typedBlob) : setMediaBlob(item.storageKey, typedBlob));
+                                }),
+                            ),
+                        );
+                        data.projects.forEach((item) => importProject(item.project));
+                        importedCount += data.projects.length;
+                    } catch {
+                        failed += 1;
+                    }
+                }
+                if (importedCount) message.success(t("canvas.imported", { count: importedCount }));
+                if (failed) message.error(t("canvas.importFailed"));
+            } finally {
+                importingRef.current = false;
+                if (inputRef.current) inputRef.current.value = "";
+            }
+        },
+        [importProject, message, t],
+    );
+
+    const clearDropState = () => {
+        dragDepthRef.current = 0;
+        setDropActive(false);
+    };
+
+    const onDragEnter = (event: DragEvent<HTMLElement>) => {
+        if (!isFileDrag(event)) return;
+        event.preventDefault();
+        dragDepthRef.current += 1;
+        setDropActive(true);
+    };
+
+    const onDragOver = (event: DragEvent<HTMLElement>) => {
+        if (!isFileDrag(event)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+    };
+
+    const onDragLeave = (event: DragEvent<HTMLElement>) => {
+        if (!isFileDrag(event)) return;
+        event.preventDefault();
+        dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+        if (dragDepthRef.current === 0) setDropActive(false);
+    };
+
+    const onDrop = (event: DragEvent<HTMLElement>) => {
+        if (!isFileDrag(event)) return;
+        event.preventDefault();
+        clearDropState();
+        const zips = zipFilesFromList(event.dataTransfer.files);
+        if (!zips.length) {
             message.error(t("canvas.importFailed"));
-        } finally {
-            if (inputRef.current) inputRef.current.value = "";
+            return;
         }
+        void importCanvasFiles(zips);
     };
 
     useEffect(() => {
@@ -119,7 +185,21 @@ export default function CanvasPage() {
     }
 
     return (
-        <main className="canvas-home" aria-label={t("canvas.title")}>
+        <main
+            className={cn("canvas-home", dropActive && "is-drop-active")}
+            aria-label={t("canvas.title")}
+            onDragEnter={onDragEnter}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+        >
+            {dropActive ? (
+                <div className="canvas-home-drop" role="status" aria-live="polite">
+                    <FileUp className="size-6" aria-hidden />
+                    <strong>{t("canvas.dropImport")}</strong>
+                    <span>{t("canvas.dropImportHint")}</span>
+                </div>
+            ) : null}
             <section className="canvas-home-hero" aria-label={t("canvas.create")}>
                 <span className="canvas-home-dot-base" aria-hidden />
                 <span className="canvas-home-dot-flow" aria-hidden />
@@ -213,7 +293,14 @@ export default function CanvasPage() {
                 )}
             </section>
 
-            <input ref={inputRef} type="file" accept="application/zip,.zip" className="hidden" onChange={(event) => void importCanvas(event.target.files?.[0])} />
+            <input
+                ref={inputRef}
+                type="file"
+                accept="application/zip,.zip"
+                className="hidden"
+                multiple
+                onChange={(event) => void importCanvasFiles(Array.from(event.target.files || []))}
+            />
             <CanvasDeleteProjectsDialog />
             <Modal
                 open={createOpen}

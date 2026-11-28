@@ -354,6 +354,8 @@ export default {
         deleteSelected: "Delete selected",
         deleteAll: "Delete all",
         import: "Import canvas",
+        dropImport: "Drop to import canvases",
+        dropImportHint: "Accepts exported .zip canvas packages",
         create: "New canvas",
         cancel: "Cancel",
         createTitleHint: "Name the canvas first, then open the editor.",

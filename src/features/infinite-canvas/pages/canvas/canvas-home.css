@@ -1,10 +1,39 @@
 .canvas-home {
+  position: relative;
   height: 100%;
   overflow: auto;
   color: var(--foreground);
   background: var(--background);
   padding: 28px 32px 48px;
   scrollbar-color: color-mix(in oklab, var(--foreground) 18%, transparent) transparent;
+}
+
+.canvas-home-drop {
+  position: absolute;
+  inset: 12px;
+  z-index: 40;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 6px;
+  padding: 28px 20px;
+  border: 1px dashed color-mix(in oklab, var(--foreground) 28%, transparent);
+  border-radius: 16px;
+  background: color-mix(in oklab, var(--background) 88%, transparent);
+  backdrop-filter: blur(6px);
+  text-align: center;
+  pointer-events: none;
+}
+
+.canvas-home-drop strong {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.canvas-home-drop span {
+  font-size: 12px;
+  color: color-mix(in oklab, var(--foreground) 58%, transparent);
 }
 
 .canvas-home-hero {

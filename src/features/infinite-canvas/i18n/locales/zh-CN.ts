@@ -354,6 +354,8 @@ export default {
         deleteSelected: "删除选中",
         deleteAll: "删除全部",
         import: "导入画布",
+        dropImport: "松开以导入画布",
+        dropImportHint: "支持导出的 .zip 画布包",
         create: "新建画布",
         cancel: "取消",
         createTitleHint: "先给画布起个名字，再打开编辑。",
