@@ -3,6 +3,8 @@
 ## Unreleased
 
 + [新增] 可对外安装的 `minimalist-canvas-media`：npm CLI + Cursor/Claude skill，复用本机画布渠道生图/生视频。
++ [新增] 「外部接入」页：下载标准 Agent Skills 包，预览 SKILL.md / 脚本，并列出 Cursor / Claude / 通用安装路径。
++ [新增] 桌面端本机媒体 API（`127.0.0.1:17373`）：外部 skill / CLI 走运行中的画布渠道，不再读固定 Application Support 路径。
 
 ## v0.1.15 - 2026-11-28
 
