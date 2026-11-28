@@ -163,7 +163,7 @@ export function shouldKeepVideoAssetPending(status?: string, error?: string) {
     msg.includes("请先配置") ||
     lower.includes("configure the api") ||
     lower.includes("timed out") ||
-    lower.includes("object storage is required") ||
+    lower.includes("cloud storage is required") ||
     lower.includes("network")
   );
 }

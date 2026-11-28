@@ -389,7 +389,7 @@ function buildUserContent(userText: string, attachments: AgentAttachment[]): str
     let text = userText.trim();
     if (files.length) {
         const lines = files.map((item) => `- ${item.name || "file"} (${item.type || "application/octet-stream"}): ${item.url}`).join("\n");
-        text = [text, text ? "" : null, "Attached files (object storage URLs):", lines].filter((item) => item !== null).join("\n");
+        text = [text, text ? "" : null, "Attached files (cloud storage URLs):", lines].filter((item) => item !== null).join("\n");
     }
     if (!images.length) return text || userText;
     const parts: BuiltinAgentContentPart[] = [

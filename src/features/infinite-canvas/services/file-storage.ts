@@ -104,7 +104,7 @@ export async function uploadMediaFile(
         return { ...base, url: uploaded.accessUrl, bytes: uploaded.bytes || base.bytes, mimeType: uploaded.mimeType || base.mimeType };
     }
     if (byoConfigured) {
-        throw new Error("Object storage upload returned no public URL");
+        throw new Error("Cloud storage upload returned no public URL");
     }
     return base;
 }

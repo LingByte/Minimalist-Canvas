@@ -18,7 +18,7 @@ export const QIHUO_MAX_IMAGE_UPLOAD_BYTES = 8 * 1024 * 1024
 export const MAX_CANVAS_UPLOAD_BYTES = 100 * 1024 * 1024
 /** Product-level video upload cap (all storage paths). */
 export const CANVAS_MAX_VIDEO_BYTES = 50 * 1024 * 1024
-/** Product-level audio upload cap (object storage path). */
+/** Product-level audio upload cap (cloud storage path). */
 export const CANVAS_MAX_AUDIO_BYTES = 20 * 1024 * 1024
 
 function bytesToMb(bytes: number) {
@@ -49,7 +49,7 @@ export function assertCanvasMediaUploadSize(
 ): void {
   const mime = canonicalizeContentType(mimeType, filename)
   if (mime.startsWith('image/')) {
-    // BYO object storage can take larger images; 七猴 fallback stays at 8MB.
+    // BYO cloud storage can take larger images; 七猴 fallback stays at 8MB.
     const limit =
       backendLimit > 0
         ? Math.min(backendLimit, MAX_CANVAS_UPLOAD_BYTES)
@@ -197,8 +197,8 @@ export type CanvasMediaUploadOptions = {
 }
 
 /**
- * Canvas user media goes through the backend object storage (七牛 presign/proxy).
- * The public 七猴图床 is only a fallback for when object storage is disabled;
+ * Canvas user media goes through the backend cloud storage (七牛 presign/proxy).
+ * The public 七猴图床 is only a fallback for when cloud storage is disabled;
  * it rejects audio, so audio never uses it.
  */
 export async function uploadCanvasMedia(
@@ -274,7 +274,7 @@ async function uploadCanvasMediaTracked(
   const stored = await uploadToObjectStorage(blob, options)
   if (stored) return stored
 
-  // Object storage disabled — fall back to the public 七猴 host (40MB video cap).
+  // Cloud storage disabled — fall back to the public 七猴 host (40MB video cap).
   if (mimeType.startsWith('video/')) {
     assertCanvasUploadSize(blob.size, QIHUO_MAX_UPLOAD_BYTES)
   }
@@ -325,7 +325,7 @@ export async function uploadToObjectStorage(
   const blob =
     input.type === mimeType ? input : new Blob([input], { type: mimeType })
 
-  // Prefer BYO object storage configured in Settings → Canvas object storage.
+  // Prefer BYO cloud storage configured in Settings → Canvas cloud storage.
   if (isObjectStorageConfigured(localConfig)) {
     assertCanvasMediaUploadSize(blob.size, mimeType, resolvedFilename, MAX_CANVAS_UPLOAD_BYTES)
     const uploaded = await uploadToConfiguredObjectStorage(localConfig, blob, {
@@ -403,7 +403,7 @@ export async function uploadToObjectStorage(
   }
 }
 
-/** Remirror an upstream media URL onto configured object storage. */
+/** Remirror an upstream media URL onto configured cloud storage. */
 export async function mirrorRemoteToObjectStorage(
   url: string,
   kind: 'video' | 'image' = 'video'

@@ -363,7 +363,7 @@ export async function storeGeneratedVideo(
             });
             if (uploaded?.accessUrl) return { ...stored, url: uploaded.accessUrl };
         } catch {
-            // Keep local blob URL when object storage is unavailable.
+            // Keep local blob URL when cloud storage is unavailable.
         }
         return stored;
     }

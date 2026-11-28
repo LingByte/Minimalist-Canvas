@@ -51,7 +51,7 @@ export function CanvasToolsSidebar(props: { className?: string }) {
     const objectStorage = useConfigStore((state) => state.objectStorage);
     const theme = useThemeStore((state) => state.theme);
     const setTheme = useThemeStore((state) => state.setTheme);
-    // Storage manager needs object storage; hide the rail entry until configured.
+    // Storage manager needs cloud storage; hide the rail entry until configured.
     // Novels require the desktop Tomato sidecar — hide on web preview.
     const storageReady = isObjectStorageConfigured(objectStorage);
     const desktop = isTauri();

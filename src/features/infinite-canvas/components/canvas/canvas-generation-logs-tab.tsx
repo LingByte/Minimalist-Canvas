@@ -169,7 +169,7 @@ export const CanvasGenerationLogsTab = memo(function CanvasGenerationLogsTab({ o
                 const file = files[0];
                 const url = String(file.url || "").trim();
                 if (!url) throw new Error("empty");
-                // Already on our object storage — insert without re-download / re-upload.
+                // Already on our cloud storage — insert without re-download / re-upload.
                 if (await isOwnObjectStorageUrl(url)) {
                     onInsert({
                         kind: "video",

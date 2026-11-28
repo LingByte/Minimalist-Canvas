@@ -88,7 +88,7 @@ export async function uploadImage(
         })
         .catch((error) => {
             if (isAbortError(error) || resolvedOptions?.signal?.aborted) throw error;
-            // BYO object storage is required for public reference URLs — don't hide failures.
+            // BYO cloud storage is required for public reference URLs — don't hide failures.
             if (byoConfigured && !resolvedOptions?.background) throw error;
             return null;
         });
@@ -104,7 +104,7 @@ export async function uploadImage(
     }
     if (uploaded?.accessUrl) return { ...local, url: uploaded.accessUrl };
     if (byoConfigured) {
-        throw new Error("Object storage upload returned no public URL");
+        throw new Error("Cloud storage upload returned no public URL");
     }
     return local;
 }
