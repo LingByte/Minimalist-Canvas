@@ -10,6 +10,7 @@ import ConfigPage from "@canvas/pages/config";
 import GenerationLogsPage from "@canvas/pages/generation-logs";
 import HomePage from "@canvas/pages/home";
 import ImagePage from "@canvas/pages/image";
+import IntegratePage from "@canvas/pages/integrate";
 import NotFound from "@canvas/pages/not-found";
 import PromptsPage from "@canvas/pages/prompts";
 import SkillsPage from "@canvas/pages/skills";
@@ -28,6 +29,7 @@ const appPages: RouteObject[] = [
     { path: "assets", element: <AssetsPage /> },
     { path: "prompts", element: <PromptsPage /> },
     { path: "skills", element: <SkillsPage /> },
+    { path: "integrate", element: <IntegratePage /> },
     { path: "novels", element: <NovelsPage /> },
     { path: "ops", element: <Navigate to="/canvas" replace /> },
     { path: "storage", element: <StoragePage /> },
