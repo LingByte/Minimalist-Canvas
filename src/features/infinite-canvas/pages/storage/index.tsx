@@ -503,7 +503,6 @@ export default function StoragePage() {
                 <main className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
                     <div className="mx-auto w-full max-w-[1400px]">
                         <h1 className="text-2xl font-semibold tracking-tight">{t("storageManager.title")}</h1>
-                        <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">{t("storageManager.subtitle")}</p>
                         <div className="mt-10 flex flex-col items-center gap-4 rounded-2xl border border-dashed border-stone-300/80 px-6 py-16 dark:border-stone-700">
                             <HardDrive className="size-10 text-stone-400" />
                             <div className="max-w-md text-center text-sm text-stone-500 dark:text-stone-400">
@@ -523,14 +522,50 @@ export default function StoragePage() {
         <div className="flex h-full flex-col overflow-hidden bg-background text-stone-800 dark:text-stone-100">
             <main className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
                 <div className="mx-auto w-full max-w-[1400px]">
-                    <div className="flex flex-wrap items-end justify-between gap-3">
-                        <div>
-                            <h1 className="text-2xl font-semibold tracking-tight">{t("storageManager.title")}</h1>
-                            <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">{t("storageManager.subtitle")}</p>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <h1 className="text-2xl font-semibold tracking-tight">{t("storageManager.title")}</h1>
+                        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:max-w-[min(100%,36rem)]">
+                            <Upload.Dragger
+                                multiple
+                                showUploadList={false}
+                                disabled={uploading}
+                                beforeUpload={(file, fileList) => {
+                                    const batch = fileList as File[];
+                                    if (file === batch[batch.length - 1]) void uploadFiles(batch);
+                                    return false;
+                                }}
+                                className="!m-0 min-w-0 flex-1 !rounded-xl [&_.ant-upload]:!m-0 [&_.ant-upload-drag]:!mb-0 [&_.ant-upload-drag]:!border-stone-300/80 [&_.ant-upload-drag]:!bg-transparent [&_.ant-upload-drag]:!px-3 [&_.ant-upload-drag]:!py-1.5 dark:[&_.ant-upload-drag]:!border-stone-700"
+                            >
+                                <div className="flex items-center gap-2 px-0.5 text-left">
+                                    <UploadIcon className="size-3.5 shrink-0 text-stone-500" />
+                                    <span className="truncate text-xs text-stone-600 dark:text-stone-300">
+                                        {uploading ? t("storageManager.uploading") : t("storageManager.dropFilesCompact")}
+                                    </span>
+                                </div>
+                            </Upload.Dragger>
+                            <Button
+                                type="primary"
+                                loading={uploading}
+                                icon={<UploadIcon className="size-3.5" />}
+                                onClick={() => fileRef.current?.click()}
+                            >
+                                {t("storageManager.upload")}
+                            </Button>
+                            <Button icon={<Settings2 className="size-3.5" />} onClick={() => openConfigDialog(false, "object-storage")}>
+                                {t("storageManager.openConfig")}
+                            </Button>
+                            <input
+                                ref={fileRef}
+                                hidden
+                                type="file"
+                                multiple
+                                onChange={(event) => {
+                                    const files = Array.from(event.target.files || []);
+                                    event.target.value = "";
+                                    if (files.length) void uploadFiles(files);
+                                }}
+                            />
                         </div>
-                        <Button icon={<Settings2 className="size-3.5" />} onClick={() => openConfigDialog(false, "object-storage")}>
-                            {t("storageManager.openConfig")}
-                        </Button>
                     </div>
 
                     <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -561,55 +596,7 @@ export default function StoragePage() {
                                 label: t("storageManager.tabFiles"),
                                 children: (
                                     <>
-                    <div className="mt-1">
-                        <Upload.Dragger
-                            multiple
-                            showUploadList={false}
-                            disabled={uploading}
-                            beforeUpload={(file, fileList) => {
-                                const batch = fileList as File[];
-                                if (file === batch[batch.length - 1]) void uploadFiles(batch);
-                                return false;
-                            }}
-                            className="!rounded-xl [&_.ant-upload-drag]:!border-stone-300/80 [&_.ant-upload-drag]:!bg-transparent [&_.ant-upload-drag]:!px-3 [&_.ant-upload-drag]:!py-2 dark:[&_.ant-upload-drag]:!border-stone-700"
-                        >
-                            <div className="flex items-center justify-between gap-3 px-1 py-0.5">
-                                <div className="flex min-w-0 items-center gap-2 text-left">
-                                    <UploadIcon className="size-4 shrink-0 text-stone-500" />
-                                    <div className="min-w-0">
-                                        <div className="truncate text-sm text-stone-700 dark:text-stone-200">
-                                            {uploading ? t("storageManager.uploading") : t("storageManager.dropFilesCompact")}
-                                        </div>
-                                    </div>
-                                </div>
-                                <Button
-                                    size="small"
-                                    type="primary"
-                                    loading={uploading}
-                                    icon={<UploadIcon className="size-3.5" />}
-                                    onClick={(event) => {
-                                        event.stopPropagation();
-                                        fileRef.current?.click();
-                                    }}
-                                >
-                                    {t("storageManager.upload")}
-                                </Button>
-                            </div>
-                        </Upload.Dragger>
-                        <input
-                            ref={fileRef}
-                            hidden
-                            type="file"
-                            multiple
-                            onChange={(event) => {
-                                const files = Array.from(event.target.files || []);
-                                event.target.value = "";
-                                if (files.length) void uploadFiles(files);
-                            }}
-                        />
-                    </div>
-
-                    <div className="mt-4 space-y-2">
+                    <div className="mt-1 space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
                             <nav className="flex min-w-0 flex-1 flex-wrap items-center gap-1 text-sm">
                                 <button
