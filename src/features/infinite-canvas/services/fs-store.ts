@@ -558,6 +558,14 @@ export async function canvasWorkspaceDir(projectId: string): Promise<string> {
     return dir;
 }
 
+/** Open the per-canvas workspace in the OS file manager (desktop only). */
+export async function openCanvasWorkspaceFolder(projectId: string): Promise<void> {
+    if (!isTauri()) return;
+    const dir = await canvasWorkspaceDir(projectId);
+    const { openPath } = await import("@tauri-apps/plugin-opener");
+    await openPath(dir);
+}
+
 /** Mirror the live canvas snapshot into the workspace dir so the folder has real content and agents can read it as cwd context. */
 export async function writeCanvasWorkspace(projectId: string, title: string, snapshot: unknown): Promise<void> {
     if (!isTauri()) return;

@@ -31,7 +31,7 @@ import { useThemeStore } from "@canvas/stores/use-theme-store";
 import { collectImageStorageKeys, getImageBlob } from "@canvas/services/image-storage";
 import { collectMediaStorageKeys, getMediaBlob } from "@canvas/services/file-storage";
 import { readClipboardImage, readClipboardText } from "@canvas/services/clipboard";
-import { canvasWorkspaceDir, isTauri, syncWorkspaceMedia, writeCanvasWorkspace } from "@canvas/services/fs-store";
+import { isTauri, openCanvasWorkspaceFolder, syncWorkspaceMedia, writeCanvasWorkspace } from "@canvas/services/fs-store";
 import { compressImageBlob } from "@canvas/lib/image-compress";
 import { cropDataUrl, rotateFlipDataUrl, splitDataUrl, upscaleDataUrl } from "@canvas/lib/canvas/canvas-image-data";
 import { fitNodeSize, imageNodeSizeFromUpload, layoutMultiFilePositions, nodeSizeFromRatio } from "@canvas/lib/canvas/canvas-node-size";
@@ -1329,11 +1329,8 @@ function InfiniteCanvasPage() {
     }, [cleanupAssetImages, message, navigate, projectId, t]);
 
     const openCanvasFolder = useCallback(async () => {
-        if (!isTauri()) return;
         try {
-            const dir = await canvasWorkspaceDir(projectId);
-            const { openPath } = await import("@tauri-apps/plugin-opener");
-            await openPath(dir);
+            await openCanvasWorkspaceFolder(projectId);
         } catch (error) {
             console.error(error);
             message.error(t("canvas.openFolderFailed"));

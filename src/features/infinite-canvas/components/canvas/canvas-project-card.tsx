@@ -1,6 +1,6 @@
-import { Check, Download, Pencil, Trash2, X } from "lucide-react";
+import { Check, Download, FolderOpen, Pencil, Trash2, X } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Button, Input } from "antd";
+import { App, Button, Input } from "antd";
 import { useTranslation } from "react-i18next";
 
 import { toIntlLocale } from "@/i18n/languages";
@@ -8,10 +8,12 @@ import { toIntlLocale } from "@/i18n/languages";
 import { CanvasProjectPreview } from "@canvas/components/canvas/canvas-project-preview";
 import { cn } from "@canvas/lib/utils";
 import { exportCanvasProjects } from "@canvas/lib/canvas/canvas-export";
+import { isTauri, openCanvasWorkspaceFolder } from "@canvas/services/fs-store";
 import { useCanvasStore, type CanvasProject } from "@canvas/stores/canvas/use-canvas-store";
 import { useCanvasUiStore } from "@canvas/stores/canvas/use-canvas-ui-store";
 
 export function CanvasProjectCard({ project }: { project: CanvasProject }) {
+    const { message } = App.useApp();
     const { i18n, t } = useTranslation();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
@@ -113,6 +115,21 @@ export function CanvasProjectCard({ project }: { project: CanvasProject }) {
                             </>
                         ) : (
                             <>
+                                {isTauri() ? (
+                                    <Button
+                                        type="text"
+                                        size="small"
+                                        shape="circle"
+                                        icon={<FolderOpen className="size-3.5" />}
+                                        aria-label={t("canvas.openFolder")}
+                                        onClick={() => {
+                                            void openCanvasWorkspaceFolder(project.id).catch((error) => {
+                                                console.error(error);
+                                                message.error(t("canvas.openFolderFailed"));
+                                            });
+                                        }}
+                                    />
+                                ) : null}
                                 <Button type="text" size="small" shape="circle" icon={<Download className="size-3.5" />} onClick={() => void exportCanvasProjects([project], project.title || t("canvas.title"))} aria-label={t("canvas.project.export")} />
                                 <Button type="text" size="small" shape="circle" icon={<Pencil className="size-3.5" />} onClick={() => startEditing(project.id, project.title)} aria-label={t("canvas.project.rename")} />
                                 <Button type="text" size="small" shape="circle" icon={<Trash2 className="size-3.5" />} onClick={() => setDeleteIds([project.id])} aria-label={t("canvas.project.delete")} />
