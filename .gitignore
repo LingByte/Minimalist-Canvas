@@ -40,3 +40,6 @@ skills/_vendor/
 
 # Local meme-wiki preview dumps
 tmp-memewiki-preview/
+
+# Local media API smoke outputs
+tmp-media-test/

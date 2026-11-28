@@ -1,86 +1,84 @@
 ---
 name: minimalist-canvas-media
 description: >-
-  Generate images and videos using the user's Minimalist Canvas desktop AI
-  channels (OpenAI-compatible base URL + API key already configured in the app).
-  Use when the user asks to 生图、出图、生成图片、生成视频、文生图、图生图、文生视频,
-  or wants media from the same CloudToken / AiCost / custom channels as
-  Minimalist Canvas without re-entering credentials.
+  Generate images and videos via the running Minimalist Canvas desktop app's
+  localhost media API (live channel config). Use when the user asks to 生图、出图、
+  生成图片、生成视频、文生图、图生图、文生视频, or wants media from the same
+  CloudToken / AiCost / custom channels as Minimalist Canvas without re-entering credentials.
 disable-model-invocation: false
 ---
 
 # Minimalist Canvas Media
 
-Reuse **至简画布 / Minimalist Canvas** desktop channel credentials from any local project.
-
-Prefer the published CLI when available; fall back to the bundled script.
+Talk to the **running** 至简画布 / Minimalist Canvas desktop app over localhost.
+The app owns channel credentials; this skill does **not** read Application Support files.
 
 ```bash
-# Preferred (after npm i -g / npx)
-npx --yes minimalist-canvas-media <command> ...
-# or
-canvas-media <command> ...
-
-# Fallback when this skill folder is installed locally
+# Preferred: call through the bundled script (auto-discovers the local API)
 node "{baseDir}/scripts/canvas-media.mjs" <command> ...
+
+# Or npm CLI when published
+npx --yes minimalist-canvas-media <command> ...
 ```
 
-Requires Node ≥ 18. Zero npm dependencies for the CLI itself.
+Requires Node ≥ 18 and **Minimalist Canvas running**.
+
+## Local API
+
+Default: `http://127.0.0.1:17373`
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/health` | App reachable? |
+| GET | `/v1/config` | Redacted live channels |
+| GET | `/v1/models?capability=image\|video` | Models |
+| POST | `/v1/images/generations` | Text → image |
+| POST | `/v1/images/edits` | Image edit |
+| POST | `/v1/videos` | Text → video (waits until done) |
+
+Override base URL with `MINIMALIST_CANVAS_API` or `--api`. If the preferred port is busy, the app writes the real endpoint to `$TMPDIR/minimalist-canvas-media-api.json`.
 
 ## Install (for humans)
 
+Standard Agent Skills folder:
+
+- `./skills/` · `.cursor/skills/` · `.claude/skills/`
+- or user global: `~/.cursor/skills/` · `~/.claude/skills/`
+
 ```bash
-# CLI only
-npm i -g minimalist-canvas-media
+unzip -o minimalist-canvas-media.zip
+cp -R minimalist-canvas-media .cursor/skills/   # or .claude/skills / skills
 
-# Cursor / agent skill from GitHub
-npx skills add LingByte/Minimalist-Canvas --skill minimalist-canvas-media -g -a cursor -y
+npx skills add LingByte/Minimalist-Canvas --skill minimalist-canvas-media -g -y
 ```
-
-## When to use
-
-- User wants an image or video and already uses Minimalist Canvas
-- User says “用画布的渠道 / CloudToken / aicost 出图/出视频”
-- Avoid inventing new API keys; prefer the app’s saved config
-
-## Config source
-
-Default macOS path:
-
-`~/Library/Application Support/com.lingbyte.minimalist-canvas/app_state/minimalist-canvas_ai_config_store.json`
-
-Override with `MINIMALIST_CANVAS_DATA_DIR` or `--data-dir`.
 
 ## Commands
 
 ```bash
-npx --yes minimalist-canvas-media config
-npx --yes minimalist-canvas-media models --capability image
-npx --yes minimalist-canvas-media models --capability video
+node "{baseDir}/scripts/canvas-media.mjs" health
+node "{baseDir}/scripts/canvas-media.mjs" config
+node "{baseDir}/scripts/canvas-media.mjs" models --capability image
 
-npx --yes minimalist-canvas-media image \
+node "{baseDir}/scripts/canvas-media.mjs" image \
   --prompt "你的提示词" \
   --size 16:9 \
   --out "./canvas-media/out.png"
 
-npx --yes minimalist-canvas-media edit \
+node "{baseDir}/scripts/canvas-media.mjs" edit \
   --prompt "改成夜晚" \
   --image "./ref.png" \
   --out "./canvas-media/edit.png"
 
-npx --yes minimalist-canvas-media video \
+node "{baseDir}/scripts/canvas-media.mjs" video \
   --prompt "镜头缓推，电影感" \
   --seconds 5 \
   --out "./canvas-media/out.mp4"
 ```
 
-Optional `--model "<channelId>::<modelName>"` from `models` output. Defaults to canvas `imageModel` / `videoModel`.
-
-Video `--image` must be a public `https://` URL.
-
 ## Agent rules
 
 1. Prefer this skill over ad-hoc curl when Minimalist Canvas is installed.
-2. Write outputs under the **current project**. Never write into the Canvas app data dir.
-3. Do not print full API keys (`config` already redacts).
-4. On auth errors, ask the user to fix channels in Minimalist Canvas → 配置中心.
+2. If `/health` fails, ask the user to start Minimalist Canvas — do not invent API keys.
+3. Write outputs under the **current project**.
+4. Do not print full API keys (`config` already redacts).
+5. On auth errors, ask the user to fix channels in Minimalist Canvas → 配置中心.

@@ -48,23 +48,32 @@ npx skills experimental_sync -a cursor -y
 
 ## 前置条件
 
-本机已安装并配置过 [Minimalist Canvas](https://github.com/LingByte/Minimalist-Canvas) 桌面端，渠道里有 `baseUrl` + `apiKey` 以及 image/video 模型。
+**保持 Minimalist Canvas 桌面端运行**，并已在配置中心配好渠道（`baseUrl` + `apiKey` + image/video 模型）。
 
-默认读取（macOS）：
+CLI / Skill 通过本机接口调用应用内的渠道，默认：
 
 ```text
-~/Library/Application Support/com.lingbyte.minimalist-canvas/app_state/minimalist-canvas_ai_config_store.json
+http://127.0.0.1:17373
 ```
 
 可用环境变量覆盖：
 
 ```bash
-export MINIMALIST_CANVAS_DATA_DIR="/path/to/com.lingbyte.minimalist-canvas"
+export MINIMALIST_CANVAS_API="http://127.0.0.1:17373"
+```
+
+先确认可达：
+
+```bash
+canvas-media health
+# 或
+curl -s http://127.0.0.1:17373/health
 ```
 
 ## CLI
 
 ```bash
+canvas-media health
 canvas-media config
 canvas-media models [--capability image|video|text|audio]
 canvas-media image --prompt "…" [--model id] [--size 16:9] [--out path]
