@@ -1,32 +1,127 @@
-# Minimalist Canvas
+<p align="center">
+  <img src="public/logo.png" alt="Minimalist Canvas" width="96" />
+</p>
 
-至简未来桌面端：无限画布 + 本地 Agent / Skills + 云端存储。
+<h1 align="center">Minimalist Canvas</h1>
+<p align="center"><strong>至简画布</strong></p>
 
-基于 **Tauri 2 + React 19 + TypeScript**，默认按本机优先设计；网页 `bun run dev` 可预览，完整能力请用桌面端。
+<p align="center">
+  <a href="./README.md">English</a> ·
+  <a href="./README.zh-CN.md">简体中文</a>
+</p>
 
-## Features
+<p align="center">
+  <strong>A local-first AI creative studio — infinite canvas, image / video / voice, and Skills in one desktop app.</strong>
+</p>
 
-- **无限画布**：节点、连线、分镜 Script、图/视频/音频生成与本地项目库
-- **Agent / Skills**：内置与本地技能、梗库检索、画布工具调用
-- **云端存储**：文件管理、CDN 趋势、本机数据目录可从配置页打开
-- **自动更新（桌面端）**：启动后检查 GitHub Releases，可在应用内下载安装
+<p align="center">
+  Wire prompts, references, and generations into a continuous storyboard.<br />
+  Bring your own model channels. Keep data on your machine. Export with optional burn-in watermarks.<br />
+  Built for creators who want flow without giving up control.
+</p>
 
-## Tech Stack
+<p align="center">
+  <a href="https://github.com/LingByte/Minimalist-Canvas/releases"><img alt="Release" src="https://img.shields.io/github/v/release/LingByte/Minimalist-Canvas?style=flat-square" /></a>
+  <a href="#license"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" /></a>
+  <img alt="Tauri" src="https://img.shields.io/badge/Tauri-2-orange?style=flat-square" />
+  <img alt="React" src="https://img.shields.io/badge/React-19-61dafb?style=flat-square" />
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178c6?style=flat-square" />
+</p>
 
-| Layer | Stack |
-| --- | --- |
-| Frontend | React 19, TypeScript, Rsbuild, Ant Design, Tailwind |
-| Desktop | Tauri 2 (Rust) |
-| State | Zustand, TanStack Query |
-| i18n | i18next（en / zh / zh-TW / fr / ja / ru / vi） |
+---
 
-## Prerequisites
+## Why Minimalist Canvas?
 
-- [Bun](https://bun.sh/)
-- [Rust](https://rustup.rs/) stable
-- macOS：Xcode Command Line Tools
+Most AI creative tools either lock you into a single cloud workflow, or scatter image, video, and voice across separate tabs with no shared context. Prompts get lost, references stay disconnected, and exports rarely feel like *your* product.
 
-## Getting Started
+**Minimalist Canvas** puts the full loop on one local-first desktop:
+
+- **One studio, not five apps**: Infinite canvas + image / video workbenches + voice synthesis + prompt / asset libraries.
+- **Your channels, your rules**: Configure OpenAI-compatible providers, TTS engines, and cloud storage yourself — keys stay on device.
+- **From idea to finished frames**: Nodes, references, Skills, and generation logs keep the creative trail intact.
+- **Lightweight desktop core**: Tauri 2 + React 19 — fast to launch, local-first by design, with optional cloud sync when you want it.
+
+---
+
+## Key Features
+
+### 1. Infinite Canvas Storyboard
+Compose prompts, images, video, and audio as nodes on an infinite canvas. Connect references, iterate in place, and keep a spatial memory of the whole piece — not just the last generation.
+
+### 2. Image & Video Workbenches
+Dedicated studios for generation and iteration: model picking, size / quality / duration controls, batch results, and one-click save to assets or references. Hover download when watermarking is enabled to choose **with / without watermark**.
+
+### 3. Voice Synthesis Engines
+Register speech vendors once, pick voices from a built-in library, and use them across the studio. Credentials and defaults live in Settings — no re-wiring per session.
+
+### 4. Agent, Skills & Prompt Library
+Ship with bundled Skills, load local ones, and reuse prompts that already worked. Agent tools can drive canvas and workbench actions so automation stays inside the same creative space.
+
+### 5. Assets, Logs & Usage
+Keep generated media in a local asset library, review generation history, and track usage — so good results are easy to find again and costs stay visible.
+
+### 6. Cloud Storage (Optional)
+Point the app at your own S3-compatible bucket for public media URLs when models need remote fetch. Local-first remains the default; cloud is opt-in.
+
+### 7. Export Watermark (Local)
+Configure text / logo watermarks in Settings with live preview — font, size, placement, opacity, rotation. Burn-in happens only on download, on this device.
+
+### 8. Auto-update Desktop Builds
+Desktop builds check GitHub Releases for updates and can download / relaunch in-app. See [docs/AUTO_UPDATE.md](./docs/AUTO_UPDATE.md) and [docs/RELEASE.md](./docs/RELEASE.md).
+
+---
+
+## Product Tour
+
+<p align="center">
+  <img src="public/images/home/product-stack-1.jpg" alt="Minimalist Canvas product shot 1" width="720" />
+</p>
+
+<p align="center">
+  <img src="public/images/home/product-stack-2.jpg" alt="Minimalist Canvas product shot 2" width="720" />
+</p>
+
+<p align="center">
+  <img src="public/images/home/product-stack-3.jpg" alt="Minimalist Canvas product shot 3" width="720" />
+</p>
+
+<p align="center">
+  <img src="public/images/home/intro-canvas.png" alt="Infinite canvas" width="720" />
+</p>
+
+---
+
+## Platform Overview
+
+| Dimension | Scattered AI web apps | Single cloud studio | Minimalist Canvas |
+| :--- | :--- | :--- | :--- |
+| **Workspace** | Separate tabs / tools | Fixed cloud layout | **Infinite canvas + image / video / voice studios** |
+| **Models** | Vendor lock-in | Closed catalog | **Bring your own channels & TTS engines** |
+| **Data** | Uploaded by default | Vendor-hosted | **Local-first; optional self-hosted cloud storage** |
+| **Export** | Generic downloads | Brand watermarks you cannot control | **Optional local burn-in watermark with preview** |
+| **Automation** | Copy-paste between tools | Closed workflows | **Agent + Skills inside the same studio** |
+| **Runtime** | Browser only | Account-bound web / app | **Tauri desktop (recommended) + web preview** |
+
+---
+
+## Quick Start
+
+### 1. Desktop App (Recommended)
+
+Download installers from [GitHub Releases](https://github.com/LingByte/Minimalist-Canvas/releases):
+
+- **macOS**: `.dmg` / `.app`
+- **Windows**: NSIS `.exe`
+
+> macOS builds may be ad-hoc signed. If Gatekeeper blocks first launch: **System Settings → Privacy & Security → Open Anyway**, or run:
+>
+> ```bash
+> xattr -d com.apple.quarantine "/Applications/Minimalist Canvas.app"
+> ```
+
+### 2. Local Development
+
+Prerequisites: [Bun](https://bun.sh/), [Rust](https://rustup.rs/) stable, and on macOS Xcode Command Line Tools.
 
 ```bash
 bun install
@@ -37,56 +132,48 @@ bun run dev
 # Desktop (recommended)
 bun run tauri:dev
 
-# Production desktop build (DMG / NSIS)
+# Production desktop build (DMG / NSIS + updater artifacts)
 bun run tauri:build
 ```
 
-当前版本见 `package.json` / `src-tauri/tauri.conf.json`。构建产物大致在：
+| Command | Purpose |
+| --- | --- |
+| `bun run dev` | Rsbuild web preview |
+| `bun run tauri:dev` | Tauri desktop hot reload |
+| `bun run tauri:build` | Production installers |
+| `bun run typecheck` | TypeScript check |
+| `bun run lint` | oxlint |
+
+Version source of truth: `package.json` / `src-tauri/tauri.conf.json`.
+
+Build artifacts typically land under:
 
 ```text
 src-tauri/target/release/bundle/dmg/
 src-tauri/target/release/bundle/nsis/
 ```
 
-## Auto-update
+---
 
-**有。** 桌面端已接入 `tauri-plugin-updater`：
+## Tech Stack
 
-| 能力 | 说明 |
+| Layer | Stack |
 | --- | --- |
-| 启动检查 | `UserLayout` → `scheduleAutoUpdateCheck()`，约 4s 后静默检查 |
-| 提示安装 | 发现新版本后 toast「立即更新」，下载完成后可 relaunch |
-| 更新源 | `https://github.com/LingByte/Minimalist-Canvas/releases/latest/download/latest.json` |
-| 签名 | `src-tauri/tauri.conf.json` → `plugins.updater.pubkey`；私钥仅存 CI / `.tauri/updater.key` |
+| Frontend | React 19, TypeScript, Rsbuild, Ant Design, Tailwind |
+| Desktop | Tauri 2 (Rust) |
+| State | Zustand, TanStack Query |
+| i18n | i18next (en / zh / zh-TW / fr / ja / ru / vi) |
 
-相关实现：
+---
 
-- `src/features/infinite-canvas/services/app-updater.ts`（启动 toast 流程，**当前在用**）
-- `src/features/infinite-canvas/hooks/use-version-check.ts` + `version-release-modal.tsx`（版本弹窗能力已写好，需挂到 UI 才可见手动「检查更新」）
+## Official Links
 
-发版与密钥细节见：
+- **Repository**: [github.com/LingByte/Minimalist-Canvas](https://github.com/LingByte/Minimalist-Canvas)
+- **Releases**: [github.com/LingByte/Minimalist-Canvas/releases](https://github.com/LingByte/Minimalist-Canvas/releases)
+- **Auto-update notes**: [docs/AUTO_UPDATE.md](./docs/AUTO_UPDATE.md)
+- **Release guide**: [docs/RELEASE.md](./docs/RELEASE.md)
 
-- [docs/AUTO_UPDATE.md](docs/AUTO_UPDATE.md)
-- [docs/RELEASE.md](docs/RELEASE.md)
-
-> 说明：`bun run tauri:dev` 开发态一般不会走完整安装更新；需正式 Release 包 + 对应平台产物在 `latest.json` 里。macOS 目前为 ad-hoc 签名，首次打开可能被 Gatekeeper 拦截。
-
-## macOS first launch
-
-若系统拦截未公证安装包：
-
-1. 系统设置 → 隐私与安全性 → 仍要打开  
-2. 或：`xattr -d com.apple.quarantine "/Applications/Minimalist Canvas.app"`
-
-## Scripts
-
-| Command | Purpose |
-| --- | --- |
-| `bun run dev` | Rsbuild web |
-| `bun run tauri:dev` | Tauri desktop |
-| `bun run tauri:build` | Signed updater artifacts + installers |
-| `bun run typecheck` | `tsc --noEmit` |
-| `bun run lint` | oxlint |
+---
 
 ## License
 
