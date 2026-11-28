@@ -50,9 +50,9 @@ function ReleaseItem({
     return (
         <motion.li
             className={cn("release-item", `tone-${tone}`)}
-            initial={reduceMotion ? false : { opacity: 0, y: 14 }}
-            animate={active || reduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
-            transition={{ duration: 0.42, delay: reduceMotion ? 0 : 0.06 + index * 0.045, ease: [0.16, 1, 0.3, 1] }}
+            initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+            animate={active || reduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: 6 }}
+            transition={{ duration: 0.32, delay: reduceMotion ? 0 : 0.04 + index * 0.03, ease: [0.16, 1, 0.3, 1] }}
         >
             <div className="release-item-mark" aria-hidden="true">
                 <TypeGlyph tone={tone} />
