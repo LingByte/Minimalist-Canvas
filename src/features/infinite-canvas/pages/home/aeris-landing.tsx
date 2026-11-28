@@ -27,9 +27,30 @@ import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 
 import { APP_VERSION, DOCS_URL } from "@canvas/constant/env";
+import { DEFAULT_LOGO } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
+const GITHUB_RELEASES_URL = "https://github.com/LingByte/Minimalist-Canvas/releases";
+
 const EXIT_NAV_MS = 380;
+const HOME_INTRO_SEEN_KEY = "minimalist-canvas:home-intro-seen-v1";
+
+function hasSeenHomeIntro() {
+    if (typeof window === "undefined") return true;
+    try {
+        return window.localStorage.getItem(HOME_INTRO_SEEN_KEY) === "1";
+    } catch {
+        return true;
+    }
+}
+
+function markHomeIntroSeen() {
+    try {
+        window.localStorage.setItem(HOME_INTRO_SEEN_KEY, "1");
+    } catch {
+        // ignore quota / private mode
+    }
+}
 
 const PRODUCT_SHOTS = [
     "/images/home/product-stack-1.jpg",
@@ -193,7 +214,7 @@ export function AerisLanding(props: AerisLandingProps) {
     const navigate = useNavigate();
     const reduceMotion = useReducedMotion();
     const [leaving, setLeaving] = useState(false);
-    const [introDone, setIntroDone] = useState(() => Boolean(reduceMotion));
+    const [introDone, setIntroDone] = useState(() => Boolean(reduceMotion) || hasSeenHomeIntro());
     const scrollerRef = useRef<HTMLElement>(null);
 
     const { scrollYProgress } = useScroll({ container: scrollerRef });
@@ -206,11 +227,15 @@ export function AerisLanding(props: AerisLandingProps) {
     const studioY = useTransform(smooth, [0.45, 0.95], reduceMotion ? [0, 0] : [50, -36]);
 
     useEffect(() => {
-        if (reduceMotion) {
+        if (reduceMotion || hasSeenHomeIntro()) {
             setIntroDone(true);
+            markHomeIntroSeen();
             return;
         }
-        const id = window.setTimeout(() => setIntroDone(true), 3100);
+        const id = window.setTimeout(() => {
+            markHomeIntroSeen();
+            setIntroDone(true);
+        }, 3100);
         return () => window.clearTimeout(id);
     }, [reduceMotion]);
 
@@ -257,9 +282,9 @@ export function AerisLanding(props: AerisLandingProps) {
 
                 <motion.div
                     className="aeris-hero-stage"
-                    initial={reduceMotion ? false : { opacity: 0, y: 18 }}
+                    initial={reduceMotion || introDone ? false : { opacity: 0, y: 18 }}
                     animate={introDone || reduceMotion ? { opacity: 1, y: 0 } : { opacity: 0.35, y: 10 }}
-                    transition={{ duration: 1.05, delay: reduceMotion ? 0 : 0.05, ease: [0.22, 1, 0.36, 1] }}
+                    transition={{ duration: introDone ? 0 : 1.05, delay: reduceMotion || introDone ? 0 : 0.05, ease: [0.22, 1, 0.36, 1] }}
                 >
                     <motion.div className="aeris-hero-stage-inner" style={{ opacity: heroFade }}>
                         <div className="aeris-hero-copy">
@@ -308,28 +333,70 @@ export function AerisLanding(props: AerisLandingProps) {
             </section>
 
             <footer className="aeris-footer">
-                <div className="aeris-footer-main">
-                    <div className="aeris-footer-brand">
-                        <p className="aeris-footer-name">{t("home.productName")}</p>
-                        <p className="aeris-footer-tag">{t("home.footerTag")}</p>
+                <div className="aeris-footer-shell">
+                    <div className="aeris-footer-top">
+                        <div className="aeris-footer-brand">
+                            <div className="aeris-footer-identity">
+                                <img
+                                    className="aeris-footer-mark"
+                                    src={DEFAULT_LOGO}
+                                    alt=""
+                                    width={36}
+                                    height={36}
+                                    decoding="async"
+                                />
+                                <div>
+                                    <p className="aeris-footer-name">{t("home.productName")}</p>
+                                    <p className="aeris-footer-tag">{t("home.footerTag")}</p>
+                                </div>
+                            </div>
+                            <p className="aeris-footer-blurb">{t("home.footerBlurb")}</p>
+                        </div>
+
+                        <div className="aeris-footer-columns" aria-label={t("home.footerNav")}>
+                            <nav className="aeris-footer-col">
+                                <h3>{t("home.footerColCreate")}</h3>
+                                <Link to="/canvas">{t("home.enterCanvas")}</Link>
+                                <Link to="/image">{t("navigation.image")}</Link>
+                                <Link to="/video">{t("navigation.video")}</Link>
+                                <Link to="/changelog">{t("home.viewChangelog")}</Link>
+                            </nav>
+                            <nav className="aeris-footer-col">
+                                <h3>{t("home.footerColLibrary")}</h3>
+                                <Link to="/prompts">{t("navigation.prompts")}</Link>
+                                <Link to="/assets">{t("navigation.assets")}</Link>
+                                <Link to="/skills">{t("navigation.skills")}</Link>
+                                <Link to="/integrate">{t("navigation.integrate")}</Link>
+                            </nav>
+                            <nav className="aeris-footer-col">
+                                <h3>{t("home.footerColSystem")}</h3>
+                                <Link to="/config">{t("navigation.config")}</Link>
+                                <Link to="/usage">{t("navigation.usage")}</Link>
+                                <Link to="/novels">{t("navigation.novels")}</Link>
+                                <a href={DOCS_URL} target="_blank" rel="noreferrer">
+                                    {t("home.footerDocs")}
+                                </a>
+                            </nav>
+                        </div>
                     </div>
-                    <nav className="aeris-footer-nav" aria-label={t("home.footerNav")}>
-                        <Link to="/canvas">{t("home.enterCanvas")}</Link>
-                        <Link to="/changelog">{t("home.viewChangelog")}</Link>
-                        <Link to="/integrate">{t("navigation.integrate")}</Link>
-                        <Link to="/usage">{t("navigation.usage")}</Link>
-                        <Link to="/config">{t("navigation.config")}</Link>
-                        <a href={DOCS_URL} target="_blank" rel="noreferrer">
-                            {t("home.footerDocs")}
-                        </a>
-                    </nav>
-                </div>
-                <div className="aeris-footer-meta">
-                    <span>
-                        {t("home.footerVersion", { version: APP_VERSION })}
-                    </span>
-                    <span>{t("home.footerLocal")}</span>
-                    <span>© {new Date().getFullYear()} {t("home.productName")}</span>
+
+                    <div className="aeris-footer-bar">
+                        <div className="aeris-footer-status">
+                            <span className="aeris-footer-chip aeris-footer-chip-version">
+                                {t("home.footerVersion", { version: APP_VERSION })}
+                            </span>
+                            <span className="aeris-footer-chip aeris-footer-chip-local">
+                                {t("home.footerLocal")}
+                            </span>
+                        </div>
+                        <div className="aeris-footer-legal">
+                            <a href={GITHUB_RELEASES_URL} target="_blank" rel="noreferrer">
+                                {t("home.footerReleases")}
+                            </a>
+                            <span className="aeris-footer-dot" aria-hidden="true" />
+                            <span>© {new Date().getFullYear()} {t("home.productName")}</span>
+                        </div>
+                    </div>
                 </div>
             </footer>
         </main>
