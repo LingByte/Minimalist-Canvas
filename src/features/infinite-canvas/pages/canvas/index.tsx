@@ -115,7 +115,7 @@ export default function CanvasPage() {
     }
 
     if (mode === "new" || mode === "recent") {
-        return <main className="text-muted-foreground flex h-full items-center justify-center bg-background text-sm">{t("canvas.opening")}</main>;
+        return <CanvasRefreshShell title={t("canvas.opening")} description={t("canvas.projectLoadingHint")} />;
     }
 
     return (
