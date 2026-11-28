@@ -45,7 +45,6 @@ type SourceCache = PromptSourceStatus & {
   signature: string;
 };
 
-const cacheTtlMs = 1000 * 60 * 60;
 const refreshFailure = "提示词来源更新失败，请检查来源地址后重试。";
 const promptCacheStore = kvStore("prompt_cache");
 const loadingSources = new Map<PromptSource, Promise<PromptSourceRefreshResult | null>>();
@@ -142,17 +141,18 @@ function getOrStartRefresh(source: PromptSource) {
   return loading;
 }
 
+/**
+ * Local-first: serve durable kv cache when present.
+ * Network fetch only when cache is missing (first open) or via explicit refresh*.
+ */
 async function getSourcePrompts(source: PromptSource): Promise<Prompt[]> {
-  const cached = await readSourceCache(source);
   if (!usePromptSourceStore.getState().sources.includes(source)) return [];
-  if (cached) {
-    const stale = Date.now() - cached.fetchedAt >= cacheTtlMs;
-    if (stale) void getOrStartRefresh(source).catch(() => undefined);
-    return withSourceMeta(source, cached.items);
-  }
+  const cached = await readSourceCache(source);
+  if (cached) return withSourceMeta(source, cached.items);
+
   const result = await getOrStartRefresh(source);
   if (!result) return [];
-  if (!result.success) throw new Error(result.lastError);
+  if (!result.success && !result.count) throw new Error(result.lastError);
   const latest = await readSourceCache(source);
   return usePromptSourceStore.getState().sources.includes(source) ? latest?.items ?? [] : [];
 }

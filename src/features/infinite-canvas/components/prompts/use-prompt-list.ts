@@ -37,11 +37,9 @@ export function usePromptList({
         ? pages.length + 1
         : undefined,
     enabled,
-    refetchInterval: (current) => {
-      if (!enabled || debouncedKeyword || tags.length || category !== ALL_PROMPTS_OPTION) return false;
-      const total = current.state.data?.pages[0]?.total ?? 0;
-      return total === 0 && current.state.fetchStatus !== "fetching" ? 3_000 : false;
-    },
+    // Local prompt cache is durable; do not auto-poll remotes.
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
   const firstPage = query.data?.pages[0];
   return {

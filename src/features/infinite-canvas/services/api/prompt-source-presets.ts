@@ -41,6 +41,42 @@ export const DEFAULT_PROMPT_SOURCES: PromptSource[] = [
     registrySource("awesome-gpt4o-image-prompts", "Awesome GPT-4o", "https://github.com/ImgEdify/Awesome-GPT4o-Image-Prompts"),
     registrySource("youmind-gpt-image-2", "YouMind GPT Image 2", "https://github.com/YouMind-OpenLab/awesome-gpt-image-2"),
     registrySource("youmind-nano-banana-pro", "YouMind Nano Banana Pro", "https://github.com/YouMind-OpenLab/awesome-nano-banana-pro-prompts"),
+    remoteSource(
+        "toolcentral-gpt-image-2-5",
+        "Toolcentral GPT Image 2.5",
+        "https://raw.githubusercontent.com/Toolcentral-ai/awesome-gpt-image-2-5-prompts/main/data/gpt-image-2-5-prompts.json",
+        "https://github.com/Toolcentral-ai/awesome-gpt-image-2-5-prompts",
+    ),
+    remoteSource(
+        "youart-gpt-image-2-5",
+        "YouArt GPT Image 2.5",
+        "https://raw.githubusercontent.com/youart-open-source/awesome-gpt-image-2-5-prompts/main/data/prompts.json",
+        "https://github.com/youart-open-source/awesome-gpt-image-2-5-prompts",
+    ),
+    remoteSource(
+        "nexra-ai-image-prompts",
+        "NeXra AI Image Prompts",
+        "https://raw.githubusercontent.com/NeXra-AI/awesome-ai-image-prompts/main/data/prompts.json",
+        "https://github.com/NeXra-AI/awesome-ai-image-prompts",
+    ),
+    remoteSource(
+        "reviral-gpt-image-prompts",
+        "Reviral GPT Image Prompts",
+        "https://raw.githubusercontent.com/Reviral-ai/gpt-image-prompts/main/data/prompts.json",
+        "https://github.com/Reviral-ai/gpt-image-prompts",
+    ),
+    remoteSource(
+        "imgedify-nano-banana-pro",
+        "ImgEdify Nano Banana Pro",
+        "https://raw.githubusercontent.com/ImgEdify/awesome-nano-banana-pro-prompts/main/data/prompts.json",
+        "https://github.com/ImgEdify/awesome-nano-banana-pro-prompts",
+    ),
+    remoteSource(
+        "aigc-hackers-claude-image-prompts",
+        "AIGC Hackers Image Prompts",
+        "https://raw.githubusercontent.com/AIGC-Hackers/awesome-ai-image-prompts-claude/main/data/prompts.json",
+        "https://github.com/AIGC-Hackers/awesome-ai-image-prompts-claude",
+    ),
 ];
 
 function registrySource(id: string, name: string, homepage: string): PromptSource {
@@ -48,6 +84,17 @@ function registrySource(id: string, name: string, homepage: string): PromptSourc
         id,
         name,
         url: `${PROMPT_REGISTRY_SOURCE_BASE}/${id}.json`,
+        homepage,
+        enabled: true,
+        builtIn: true,
+    };
+}
+
+function remoteSource(id: string, name: string, url: string, homepage: string): PromptSource {
+    return {
+        id,
+        name,
+        url,
         homepage,
         enabled: true,
         builtIn: true,
